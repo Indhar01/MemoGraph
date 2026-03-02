@@ -1,1 +1,35 @@
+# Core dependencies for mnemo-vault
+# For installation, prefer: pip install -e .
+# Or with all optional dependencies: pip install -e .[all]
+
+# Core requirements
 PyYAML>=6.0
+requests>=2.31.0
+
+# Optional LLM Provider Dependencies (install as needed)
+# For OpenAI: pip install -e .[openai]
+# openai>=1.0.0
+# tiktoken>=0.5.0
+
+# For Anthropic Claude: pip install -e .[anthropic]
+# anthropic>=0.39.0
+
+# For Ollama: pip install -e .[ollama]
+# ollama>=0.3.0
+
+# For Embeddings: pip install -e .[embeddings]
+# sentence-transformers>=2.2.0
+# numpy>=1.24.0
+
+# Development Dependencies
+# For development setup: pip install -e .[dev]
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+# pytest-asyncio>=0.21.0
+# ruff>=0.7.0
+# mypy>=1.7.0
+# pre-commit>=3.5.0
+# black>=23.11.0
+# isort>=5.12.0
+# types-PyYAML>=6.0
+# types-requests>=2.31.0

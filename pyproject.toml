@@ -9,21 +9,67 @@ version = "0.0.1"
 authors = [
   { name="Mnemo Contributors", email="author@example.com" },
 ]
-description = "A personal memory vault for LLMs"
+description = "A graph-based memory vault for LLMs with intelligent retrieval"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["llm", "memory", "knowledge-graph", "rag", "retrieval", "ai", "machine-learning"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+
 dependencies = [
     "PyYAML>=6.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
-openai = ["openai>=1.0.0"]
-anthropic = ["anthropic>=0.39.0"]
+openai = [
+    "openai>=1.0.0",
+    "tiktoken>=0.5.0",
+]
+anthropic = [
+    "anthropic>=0.39.0",
+]
+ollama = [
+    "ollama>=0.3.0",
+]
+embeddings = [
+    "sentence-transformers>=2.2.0",
+    "numpy>=1.24.0",
+]
+all = [
+    "mnemo-vault[openai,anthropic,ollama,embeddings]",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.7.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "types-PyYAML>=6.0",
+    "types-requests>=2.31.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Indhar01/Mnemo-Vault"
+Documentation = "https://github.com/Indhar01/Mnemo-Vault#readme"
+Repository = "https://github.com/Indhar01/Mnemo-Vault"
+Issues = "https://github.com/Indhar01/Mnemo-Vault/issues"
+Changelog = "https://github.com/Indhar01/Mnemo-Vault/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mnemo = "mnemo.cli:main"
@@ -32,3 +78,149 @@ mnemo = "mnemo.cli:main"
 where = ["."]
 include = ["mnemo*"]
 namespaces = false
+
+[tool.setuptools.package-data]
+mnemo = ["py.typed"]
+
+# Ruff configuration
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+respect-gitignore = true
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function call in argument defaults
+    "B905",  # zip strict argument
+    "UP007", # Use X | Y for type annotations
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "ARG",  # Unused function arguments
+    "S101", # Use of assert
+]
+"examples/**/*.py" = [
+    "T201", # print statements
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+# Mypy configuration
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# Pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=mnemo",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["mnemo"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "\\.\\.\\.",
+]
+show_missing = true
+precision = 2
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# Black configuration
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# isort configuration
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
