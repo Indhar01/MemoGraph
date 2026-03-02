@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Mnemo-Vault: Graph-Based Memory System for LLMs"
+abstract: "A graph-based memory vault for Large Language Models with intelligent retrieval capabilities using knowledge graphs, hybrid search, and semantic embeddings."
+authors:
+  - family-names: "Contributors"
+    given-names: "Mnemo"
+repository-code: "https://github.com/Indhar01/Mnemo-Vault"
+url: "https://github.com/Indhar01/Mnemo-Vault"
+keywords:
+  - llm
+  - memory
+  - knowledge-graph
+  - rag
+  - retrieval
+  - ai
+  - machine-learning
+  - python
+license: MIT
+version: 0.0.2
+date-released: 2026-03-02

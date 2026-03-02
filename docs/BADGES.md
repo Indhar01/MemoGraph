@@ -1,0 +1,81 @@
+# Badge Collection for README
+
+Here are additional badges you can add to your README.md for better visibility and credibility:
+
+## Build & Quality
+
+```markdown
+[![CI](https://github.com/Indhar01/Mnemo-Vault/actions/workflows/ci.yml/badge.svg)](https://github.com/Indhar01/Mnemo-Vault/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Indhar01/Mnemo-Vault/branch/main/graph/badge.svg)](https://codecov.io/gh/Indhar01/Mnemo-Vault)
+[![Code Quality](https://img.shields.io/codacy/grade/PROJECT_ID)](https://www.codacy.com/gh/Indhar01/Mnemo-Vault)
+```
+
+## Package Info
+
+```markdown
+[![PyPI version](https://img.shields.io/pypi/v/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
+[![Python Version](https://img.shields.io/pypi/pyversions/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
+[![Wheel](https://img.shields.io/pypi/wheel/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
+```
+
+## Repository Stats
+
+```markdown
+[![GitHub stars](https://img.shields.io/github/stars/Indhar01/Mnemo-Vault?style=social)](https://github.com/Indhar01/Mnemo-Vault/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Indhar01/Mnemo-Vault?style=social)](https://github.com/Indhar01/Mnemo-Vault/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/pulls)
+```
+
+## License & Documentation
+
+```markdown
+[![License](https://img.shields.io/github/license/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/blob/main/LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue)](https://github.com/Indhar01/Mnemo-Vault#readme)
+```
+
+## Code Style & Tools
+
+```markdown
+[![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+```
+
+## Maintenance & Activity
+
+```markdown
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/Indhar01/Mnemo-Vault/graphs/commit-activity)
+[![Last Commit](https://img.shields.io/github/last-commit/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/commits/main)
+[![Contributors](https://img.shields.io/github/contributors/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/graphs/contributors)
+```
+
+## Community
+
+```markdown
+[![Discord](https://img.shields.io/discord/YOUR_DISCORD_ID?label=discord&logo=discord)](https://discord.gg/YOUR_INVITE)
+[![Twitter Follow](https://img.shields.io/twitter/follow/YOUR_HANDLE?style=social)](https://twitter.com/YOUR_HANDLE)
+```
+
+## Integration Badges
+
+```markdown
+[![OpenAI](https://img.shields.io/badge/OpenAI-Compatible-412991?logo=openai)](https://openai.com/)
+[![Anthropic](https://img.shields.io/badge/Claude-Compatible-191919)](https://www.anthropic.com/)
+[![Ollama](https://img.shields.io/badge/Ollama-Compatible-000000)](https://ollama.ai/)
+```
+
+## How to Add Badges
+
+1. Copy the badge markdown from above
+2. Replace placeholders (PROJECT_ID, YOUR_DISCORD_ID, etc.) with your actual values
+3. Add to your README.md under the title
+4. Test that all badges display correctly
+
+## Notes
+
+- Some badges require setup (Codecov, Codacy, etc.)
+- Keep badges organized in logical groups
+- Don't overwhelm with too many badges
+- Update badges when services change

@@ -9,23 +9,54 @@ version = "0.0.2"
 authors = [
   { name="Mnemo Contributors", email="author@example.com" },
 ]
-description = "A graph-based memory vault for LLMs with intelligent retrieval"
+description = "A graph-based memory vault for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["llm", "memory", "knowledge-graph", "rag", "retrieval", "ai", "machine-learning"]
+keywords = [
+    "llm",
+    "memory",
+    "knowledge-graph",
+    "rag",
+    "retrieval",
+    "ai",
+    "machine-learning",
+    "graph-database",
+    "semantic-search",
+    "vector-embeddings",
+    "chatgpt",
+    "claude",
+    "ollama",
+    "langchain",
+    "llamaindex",
+    "markdown",
+    "note-taking",
+    "personal-knowledge-management",
+    "pkm",
+    "second-brain",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
+    "Intended Audience :: Information Technology",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Topic :: Database",
+    "Topic :: Office/Business",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
 ]
 
 dependencies = [
