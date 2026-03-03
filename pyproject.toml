@@ -3,13 +3,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mnemo-vault"
+name = "recallgraph"
 version = "0.0.2"
 
 authors = [
-  { name="Mnemo Contributors", email="author@example.com" },
+  { name="RecallGraph Contributors", email="author@example.com" },
 ]
-description = "A graph-based memory vault for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings"
+description = "A graph-based memory system for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -80,7 +80,7 @@ embeddings = [
     "numpy>=1.24.0",
 ]
 all = [
-    "mnemo-vault[openai,anthropic,ollama,embeddings]",
+    "recallgraph[openai,anthropic,ollama,embeddings]",
 ]
 dev = [
     "pytest>=7.4.0",
@@ -96,22 +96,22 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Indhar01/Mnemo-Vault"
-Documentation = "https://github.com/Indhar01/Mnemo-Vault#readme"
-Repository = "https://github.com/Indhar01/Mnemo-Vault"
-Issues = "https://github.com/Indhar01/Mnemo-Vault/issues"
-Changelog = "https://github.com/Indhar01/Mnemo-Vault/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Indhar01/RecallGraph"
+Documentation = "https://github.com/Indhar01/RecallGraph#readme"
+Repository = "https://github.com/Indhar01/RecallGraph"
+Issues = "https://github.com/Indhar01/RecallGraph/issues"
+Changelog = "https://github.com/Indhar01/RecallGraph/blob/main/CHANGELOG.md"
 
 [project.scripts]
-mnemo = "mnemo.cli:main"
+recallgraph = "recallgraph.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["mnemo*"]
+include = ["recallgraph*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-mnemo = ["py.typed"]
+recallgraph = ["py.typed"]
 
 # Ruff configuration
 [tool.ruff]
@@ -182,7 +182,7 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=mnemo",
+    "--cov=recallgraph",
     "--cov-report=term-missing:skip-covered",
     "--cov-report=html",
     "--cov-report=xml",
@@ -201,7 +201,7 @@ filterwarnings = [
 
 # Coverage configuration
 [tool.coverage.run]
-source = ["mnemo"]
+source = ["recallgraph"]
 branch = true
 omit = [
     "*/tests/*",
