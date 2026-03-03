@@ -53,5 +53,6 @@ def parse_file(path: Path, vault_root: Path) -> MemoryNode:
         salience=float(frontmatter.get("salience", 1.0)),
         created_at=created_at,
         modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+        source_path=str(path),
         frontmatter=frontmatter,
     )

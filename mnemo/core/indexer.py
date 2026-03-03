@@ -55,8 +55,8 @@ class VaultIndexer:
             # Reconstruct nodes from cached data
             for node_data in cache_data.get("nodes", []):
                 # Import here to avoid circular dependency
-                from .node import MemoryNode
                 from .enums import MemoryType
+                from .node import MemoryNode
 
                 node = MemoryNode(
                     id=node_data["id"],

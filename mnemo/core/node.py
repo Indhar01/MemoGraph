@@ -25,6 +25,9 @@ class MemoryNode:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     modified_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Source file path
+    source_path: str | None = None
+
     # Arbitrary YAML frontmatter passthrough
     frontmatter: dict[str, Any] = field(default_factory=dict)
 
