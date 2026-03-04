@@ -74,9 +74,9 @@ docs/.doctrees/
 .env.*.local
 
 # Project specific
-.recallgraph_cache.json
-.recallgraph_graph.json
-.recallgraph_embeddings.json
+.memograph_cache.json
+.memograph_graph.json
+.memograph_embeddings.json
 *.log
 
 # Distribution / packaging

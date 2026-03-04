@@ -5,9 +5,9 @@ from pathlib import Path
 from .graph import VaultGraph
 from .parser import parse_file
 
-CACHE_FILE = ".recallgraph_cache.json"
-GRAPH_CACHE_FILE = ".recallgraph_graph.json"
-EMBEDDINGS_CACHE_FILE = ".recallgraph_embeddings.json"
+CACHE_FILE = ".memograph_cache.json"
+GRAPH_CACHE_FILE = ".memograph_graph.json"
+EMBEDDINGS_CACHE_FILE = ".memograph_embeddings.json"
 
 
 class VaultIndexer:

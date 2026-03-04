@@ -1,6 +1,6 @@
 # Quick Start Guide for Developers
 
-This guide will get you up and running with Mnemo-Vault development in 5 minutes.
+This guide will get you up and running with MemoGraph development in 5 minutes.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ This guide will get you up and running with Mnemo-Vault development in 5 minutes
 
 ```bash
 # Clone the repository
-git clone https://github.com/Indhar01/Mnemo-Vault.git
-cd Mnemo-Vault
+git clone https://github.com/Indhar01/MemoGraph.git
+cd MemoGraph
 
 # Create virtual environment
 python -m venv .venv
@@ -43,7 +43,7 @@ pytest
 ruff check .
 
 # Type check
-mypy mnemo/
+mypy memograph/
 ```
 
 ### 4. Try the Examples (1 min)
@@ -53,7 +53,7 @@ mypy mnemo/
 python examples/basic_usage.py
 
 # Try CLI (set up a test vault first)
-mnemo --vault ~/test-vault doctor
+memograph --vault ~/test-vault doctor
 ```
 
 ## Quick Development Workflow
@@ -65,7 +65,7 @@ mnemo --vault ~/test-vault doctor
 git checkout -b feature/my-feature
 
 # Edit code
-# mnemo/core/kernel.py
+# memograph/core/kernel.py
 
 # Add tests
 # tests/test_my_feature.py
@@ -107,7 +107,7 @@ git push origin feature/my-feature
 pytest
 
 # Run with coverage
-pytest --cov=mnemo
+pytest --cov=memograph
 
 # Run specific test
 pytest tests/test_kernel.py::test_remember
@@ -128,7 +128,7 @@ ruff check .
 ruff check --fix .
 
 # Type check
-mypy mnemo/
+mypy memograph/
 
 # Run all pre-commit hooks
 pre-commit run --all-files
@@ -137,7 +137,7 @@ pre-commit run --all-files
 ## Project Structure Quick Reference
 
 ```
-mnemo/
+memograph/
 ├── core/           # Core functionality
 │   ├── kernel.py   # Main API (MemoryKernel)
 │   ├── graph.py    # Graph structure
@@ -162,7 +162,7 @@ mnemo/
 
 - 📖 Read [CONTRIBUTING.md](../CONTRIBUTING.md)
 - 🏗️ Check [ARCHITECTURE.md](ARCHITECTURE.md)
-- 🐛 Open an [issue](https://github.com/Indhar01/Mnemo-Vault/issues)
-- 💬 Start a [discussion](https://github.com/Indhar01/Mnemo-Vault/discussions)
+- 🐛 Open an [issue](https://github.com/Indhar01/MemoGraph/issues)
+- 💬 Start a [discussion](https://github.com/Indhar01/MemoGraph/discussions)
 
 Happy coding! 🚀

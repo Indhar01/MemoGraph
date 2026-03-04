@@ -28,7 +28,7 @@ repos:
       - id: mypy
         name: mypy
         entry: mypy
-        args: [--config-file=pyproject.toml, mnemo/]
+        args: [--config-file=pyproject.toml, memograph/]
         language: system
         types: [python]
         pass_filenames: false

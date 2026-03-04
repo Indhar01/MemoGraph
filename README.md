@@ -1,12 +1,12 @@
-# RecallGraph 🧠
+# MemoGraph 🧠
 
-[![PyPI version](https://img.shields.io/pypi/v/recallgraph)](https://pypi.org/project/recallgraph/)
-[![Python Version](https://img.shields.io/pypi/pyversions/recallgraph)](https://pypi.org/project/recallgraph/)
-[![License](https://img.shields.io/github/license/Indhar01/RecallGraph)](https://github.com/Indhar01/RecallGraph/blob/main/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/memograph)](https://pypi.org/project/memograph/)
+[![Python Version](https://img.shields.io/pypi/pyversions/memograph)](https://pypi.org/project/memograph/)
+[![License](https://img.shields.io/github/license/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/blob/main/LICENSE)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 
-A graph-based memory system for LLMs with intelligent retrieval. RecallGraph provides a powerful solution to the LLM memory problem by combining knowledge graphs, hybrid retrieval, and semantic search.
+A graph-based memory system for LLMs with intelligent retrieval. MemoGraph provides a powerful solution to the LLM memory problem by combining knowledge graphs, hybrid retrieval, and semantic search.
 
 ## ✨ Features
 
@@ -25,32 +25,32 @@ A graph-based memory system for LLMs with intelligent retrieval. RecallGraph pro
 ### Installation
 
 ```bash
-pip install recallgraph
+pip install memograph
 ```
 
 Install with optional dependencies:
 
 ```bash
 # For OpenAI support
-pip install recallgraph[openai]
+pip install memograph[openai]
 
 # For Anthropic Claude support
-pip install recallgraph[anthropic]
+pip install memograph[anthropic]
 
 # For Ollama support
-pip install recallgraph[ollama]
+pip install memograph[ollama]
 
 # For embedding support
-pip install recallgraph[embeddings]
+pip install memograph[embeddings]
 
 # Install everything
-pip install recallgraph[all]
+pip install memograph[all]
 ```
 
 ### Python Usage
 
 ```python
-from recallgraph import MemoryKernel, MemoryType
+from memograph import MemoryKernel, MemoryType
 
 # Initialize the kernel attached to your vault path
 kernel = MemoryKernel("~/my-vault")
@@ -80,20 +80,20 @@ print(context)
 
 ## 🎯 CLI Usage
 
-RecallGraph comes with a powerful CLI for managing your vault and chatting with it.
+MemoGraph comes with a powerful CLI for managing your vault and chatting with it.
 
 ### Ingest
 
 Index your markdown files into the graph database:
 
 ```bash
-recallgraph --vault ~/my-vault ingest
+memograph --vault ~/my-vault ingest
 ```
 
 Force re-indexing all files:
 
 ```bash
-recallgraph --vault ~/my-vault ingest --force
+memograph --vault ~/my-vault ingest --force
 ```
 
 ### Remember
@@ -101,7 +101,7 @@ recallgraph --vault ~/my-vault ingest --force
 Quickly add a memory from the command line:
 
 ```bash
-recallgraph --vault ~/my-vault remember \
+memograph --vault ~/my-vault remember \
     --title "Team Sync" \
     --content "Discussed Q3 goals." \
     --tags planning q3
@@ -112,7 +112,7 @@ recallgraph --vault ~/my-vault remember \
 Generate context for a query:
 
 ```bash
-recallgraph --vault ~/my-vault context \
+memograph --vault ~/my-vault context \
     --query "What did we decide about the database?" \
     --tags architecture \
     --depth 2 \
@@ -124,13 +124,13 @@ recallgraph --vault ~/my-vault context \
 Start an interactive chat session with your vault context:
 
 ```bash
-recallgraph --vault ~/my-vault ask --chat --provider ollama --model llama3
+memograph --vault ~/my-vault ask --chat --provider ollama --model llama3
 ```
 
 Or ask a single question:
 
 ```bash
-recallgraph --vault ~/my-vault ask \
+memograph --vault ~/my-vault ask \
     --query "Summarize our design decisions" \
     --provider claude \
     --model claude-3-5-sonnet-20240620
@@ -141,14 +141,14 @@ recallgraph --vault ~/my-vault ask \
 Check your environment and connection to LLM providers:
 
 ```bash
-recallgraph --vault ~/my-vault doctor
+memograph --vault ~/my-vault doctor
 ```
 
 ## 📖 Core Concepts
 
 ### Memory Types
 
-RecallGraph supports different types of memories inspired by cognitive science:
+MemoGraph supports different types of memories inspired by cognitive science:
 
 - **Episodic**: Personal experiences and events (e.g., meeting notes)
 - **Semantic**: Facts and general knowledge (e.g., documentation)
@@ -185,8 +185,8 @@ We decided to use PostgreSQL for better ACID guarantees...
 ## 🏗️ Project Structure
 
 ```
-RecallGraph/
-├── recallgraph/        # Main package
+MemoGraph/
+├── memograph/          # Main package
 │   ├── core/           # Core functionality
 │   │   ├── kernel.py   # Memory kernel
 │   │   ├── graph.py    # Graph implementation
@@ -211,8 +211,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Indhar01/RecallGraph.git
-   cd RecallGraph
+   git clone https://github.com/Indhar01/MemoGraph.git
+   cd MemoGraph
    ```
 
 2. Install in development mode:
@@ -255,8 +255,8 @@ Inspired by the need for better memory management in LLM applications. Built wit
 
 ## 📬 Contact & Support
 
-- **Issues**: [GitHub Issues](https://github.com/Indhar01/RecallGraph/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Indhar01/RecallGraph/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Indhar01/MemoGraph/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Indhar01/MemoGraph/discussions)
 
 ## 🚦 Status
 

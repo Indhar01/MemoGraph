@@ -1,6 +1,6 @@
-# Contributing to Mnemo-Vault
+# Contributing to MemoGraph
 
-Thank you for your interest in contributing to Mnemo-Vault! This guide will help you get started with developing and contributing to the project.
+Thank you for your interest in contributing to MemoGraph! This guide will help you get started with developing and contributing to the project.
 
 ## Table of Contents
 
@@ -31,8 +31,8 @@ By participating, you are expected to uphold this code.
 
 1. **Fork and clone the repository:**
    ```bash
-   git clone https://github.com/<your-username>/Mnemo-Vault.git
-   cd Mnemo-Vault
+   git clone https://github.com/<your-username>/MemoGraph.git
+   cd MemoGraph
    ```
 
 2. **Create a virtual environment:**
@@ -68,8 +68,8 @@ ruff format .
 ## Project Structure
 
 ```
-Mnemo-Vault/
-├── mnemo/              # Main package
+MemoGraph/
+├── memograph/          # Main package
 │   ├── core/           # Core functionality (kernel, graph, retriever, etc.)
 │   ├── adapters/       # Adapters for LLMs and embeddings
 │   ├── storage/        # Storage and caching
@@ -153,7 +153,7 @@ ruff check .
 ruff check --fix .
 
 # Type check
-mypy mnemo/
+mypy memograph/
 
 # Run all pre-commit hooks
 pre-commit run --all-files
@@ -168,7 +168,7 @@ pre-commit run --all-files
 pytest
 
 # Run with coverage
-pytest --cov=mnemo --cov-report=html
+pytest --cov=memograph --cov-report=html
 
 # Run specific test file
 pytest tests/test_kernel.py
@@ -346,7 +346,7 @@ for node in nodes:
 
 ## Getting Help
 
-- Check [existing issues](https://github.com/Indhar01/Mnemo-Vault/issues)
+- Check [existing issues](https://github.com/Indhar01/MemoGraph/issues)
 - Read the [README](README.md) and documentation
 - Open a new issue with detailed information
 
@@ -357,4 +357,4 @@ Contributors will be recognized in:
 - Release notes
 - The CHANGELOG
 
-Thank you for contributing to Mnemo-Vault! 🎉
+Thank you for contributing to MemoGraph! 🎉

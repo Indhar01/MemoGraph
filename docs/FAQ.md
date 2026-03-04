@@ -2,20 +2,20 @@
 
 ## General Questions
 
-### What is Mnemo-Vault?
+### What is MemoGraph?
 
-Mnemo-Vault is a graph-based memory system for Large Language Models (LLMs). It helps LLMs maintain long-term memory by storing information in a knowledge graph and retrieving relevant context when needed.
+MemoGraph is a graph-based memory system for Large Language Models (LLMs). It helps LLMs maintain long-term memory by storing information in a knowledge graph and retrieving relevant context when needed.
 
-### Why use Mnemo-Vault?
+### Why use MemoGraph?
 
-- **Long-term Memory**: LLMs have limited context windows. Mnemo-Vault provides unlimited memory storage.
+- **Long-term Memory**: LLMs have limited context windows. MemoGraph provides unlimited memory storage.
 - **Intelligent Retrieval**: Combines keyword search, graph traversal, and semantic embeddings for better context retrieval.
 - **Human-Readable**: All memories are stored as markdown files, making them easy to read and edit.
 - **Flexible Integration**: Works with multiple LLM providers and can be integrated into existing workflows.
 
 ### How is this different from vector databases?
 
-Mnemo-Vault combines multiple retrieval strategies:
+MemoGraph combines multiple retrieval strategies:
 - **Keyword Matching**: Fast, deterministic search
 - **Graph Traversal**: Follows relationships between concepts
 - **Vector Embeddings** (optional): Semantic similarity search
@@ -30,7 +30,7 @@ Python 3.10 or higher is required.
 
 ### Can I use this without internet connection?
 
-Yes! If you use Ollama for local LLM inference, Mnemo-Vault can run completely offline.
+Yes! If you use Ollama for local LLM inference, MemoGraph can run completely offline.
 
 ### Do I need to install all dependencies?
 
@@ -65,7 +65,7 @@ Your content here with [[wikilinks]] to other notes.
 
 ### How does graph traversal work?
 
-Mnemo-Vault uses BFS (Breadth-First Search) to explore your knowledge graph:
+MemoGraph uses BFS (Breadth-First Search) to explore your knowledge graph:
 
 1. Start with nodes matching your query
 2. Follow wikilinks to related notes
@@ -83,13 +83,13 @@ Salience (0.0 to 1.0) represents memory importance:
 
 ### Can I use this with LangChain or LlamaIndex?
 
-Yes! Mnemo-Vault provides adapters for both frameworks. See the `mnemo/adapters/frameworks/` directory for integration examples.
+Yes! MemoGraph provides adapters for both frameworks. See the `memograph/adapters/frameworks/` directory for integration examples.
 
 ## Performance
 
 ### How fast is indexing?
 
-Mnemo-Vault uses smart caching:
+MemoGraph uses smart caching:
 - First index: Processes all files
 - Subsequent indexes: Only processes changed files
 - Typical performance: 100-1000 files/second (depending on file size)
@@ -129,7 +129,7 @@ context = kernel.context_window(
 
 ### Links aren't being detected
 
-Mnemo-Vault supports:
+MemoGraph supports:
 - `[[WikiLinks]]`
 - `[[Link|Display Text]]`
 - Standard markdown links are also indexed
@@ -144,13 +144,13 @@ Try:
 - Broaden your search query
 - Remove restrictive tag filters
 - Increase `top_k` parameter
-- Check that files are properly indexed with `mnemo ingest`
+- Check that files are properly indexed with `memograph ingest`
 
 ## Integration
 
 ### Can I use this in production?
 
-Mnemo-Vault is in alpha (v0.0.x). The core functionality is stable, but the API may change before v1.0.0. Use in production with appropriate testing.
+MemoGraph is in alpha (v0.0.x). The core functionality is stable, but the API may change before v1.0.0. Use in production with appropriate testing.
 
 ### How do I back up my vault?
 
@@ -180,10 +180,10 @@ See our [Contributing Guide](../CONTRIBUTING.md) for details on:
 
 ### Where can I get help?
 
-- [GitHub Issues](https://github.com/Indhar01/Mnemo-Vault/issues) - Bug reports and feature requests
-- [GitHub Discussions](https://github.com/Indhar01/Mnemo-Vault/discussions) - Questions and community chat
+- [GitHub Issues](https://github.com/Indhar01/MemoGraph/issues) - Bug reports and feature requests
+- [GitHub Discussions](https://github.com/Indhar01/MemoGraph/discussions) - Questions and community chat
 - [Documentation](../README.md) - Official docs and guides
 
 ### Is there a roadmap?
 
-Check our [GitHub Issues](https://github.com/Indhar01/Mnemo-Vault/issues) and [Projects](https://github.com/Indhar01/Mnemo-Vault/projects) for planned features and development status.
+Check our [GitHub Issues](https://github.com/Indhar01/MemoGraph/issues) and [Projects](https://github.com/Indhar01/MemoGraph/projects) for planned features and development status.

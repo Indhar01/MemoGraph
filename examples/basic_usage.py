@@ -1,6 +1,6 @@
-"""Basic usage example for RecallGraph."""
+"""Basic usage example for MemoGraph."""
 
-from recallgraph import MemoryKernel, MemoryType
+from memograph import MemoryKernel, MemoryType
 
 # Initialize the kernel
 kernel = MemoryKernel("~/my-vault")

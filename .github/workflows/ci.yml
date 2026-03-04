@@ -30,7 +30,7 @@ jobs:
         run: ruff format --check .
       
       - name: Run mypy
-        run: mypy recallgraph/ --config-file=pyproject.toml
+        run: mypy memograph/ --config-file=pyproject.toml
         continue-on-error: true
 
   test:
@@ -56,7 +56,7 @@ jobs:
       
       - name: Run tests
         run: |
-          pytest --cov=recallgraph --cov-report=xml --cov-report=term
+          pytest --cov=memograph --cov-report=xml --cov-report=term
       
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'

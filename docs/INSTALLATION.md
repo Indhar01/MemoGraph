@@ -1,6 +1,6 @@
 # Installation Guide
 
-This guide covers different ways to install Mnemo-Vault and its dependencies.
+This guide covers different ways to install MemoGraph and its dependencies.
 
 ## Requirements
 
@@ -12,7 +12,7 @@ This guide covers different ways to install Mnemo-Vault and its dependencies.
 Install the core package from PyPI:
 
 ```bash
-pip install mnemo-vault
+pip install memograph
 ```
 
 This installs the basic functionality including:
@@ -28,7 +28,7 @@ This installs the basic functionality including:
 If you want to use OpenAI's GPT models or embeddings:
 
 ```bash
-pip install mnemo-vault[openai]
+pip install memograph[openai]
 ```
 
 This includes:
@@ -40,7 +40,7 @@ This includes:
 To use Claude models:
 
 ```bash
-pip install mnemo-vault[anthropic]
+pip install memograph[anthropic]
 ```
 
 ### For Ollama
@@ -48,7 +48,7 @@ pip install mnemo-vault[anthropic]
 For local LLM support with Ollama:
 
 ```bash
-pip install mnemo-vault[ollama]
+pip install memograph[ollama]
 ```
 
 ### For Embedding Support
@@ -56,7 +56,7 @@ pip install mnemo-vault[ollama]
 To enable semantic search with embeddings:
 
 ```bash
-pip install mnemo-vault[embeddings]
+pip install memograph[embeddings]
 ```
 
 This includes:
@@ -68,7 +68,7 @@ This includes:
 To install all optional dependencies:
 
 ```bash
-pip install mnemo-vault[all]
+pip install memograph[all]
 ```
 
 ## Development Installation
@@ -77,8 +77,8 @@ For contributors and developers:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Indhar01/Mnemo-Vault.git
-   cd Mnemo-Vault
+   git clone https://github.com/Indhar01/MemoGraph.git
+   cd MemoGraph
    ```
 
 2. Create a virtual environment (recommended):
@@ -102,37 +102,37 @@ For contributors and developers:
 Check that everything is installed correctly:
 
 ```bash
-mnemo --version
+memograph --version
 ```
 
 Or in Python:
 
 ```python
-import mnemo
-print(mnemo.__version__)
+import memograph
+print(memograph.__version__)
 ```
 
 ## Troubleshooting
 
-### ImportError: No module named 'mnemo'
+### ImportError: No module named 'memograph'
 
 Make sure you've installed the package:
 ```bash
-pip install mnemo-vault
+pip install memograph
 ```
 
-### Command 'mnemo' not found
+### Command 'memograph' not found
 
 The CLI might not be in your PATH. Try:
 ```bash
-python -m mnemo --version
+python -m memograph --version
 ```
 
 ### Permission Errors
 
 On Linux/Mac, you might need to use `--user`:
 ```bash
-pip install --user mnemo-vault
+pip install --user memograph
 ```
 
 Or use a virtual environment (recommended).
@@ -143,7 +143,7 @@ If you encounter dependency conflicts, try creating a fresh virtual environment:
 ```bash
 python -m venv fresh_env
 source fresh_env/bin/activate  # Windows: fresh_env\Scripts\activate
-pip install mnemo-vault[all]
+pip install memograph[all]
 ```
 
 ## Next Steps

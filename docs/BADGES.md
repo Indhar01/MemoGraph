@@ -5,34 +5,34 @@ Here are additional badges you can add to your README.md for better visibility a
 ## Build & Quality
 
 ```markdown
-[![CI](https://github.com/Indhar01/Mnemo-Vault/actions/workflows/ci.yml/badge.svg)](https://github.com/Indhar01/Mnemo-Vault/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/Indhar01/Mnemo-Vault/branch/main/graph/badge.svg)](https://codecov.io/gh/Indhar01/Mnemo-Vault)
-[![Code Quality](https://img.shields.io/codacy/grade/PROJECT_ID)](https://www.codacy.com/gh/Indhar01/Mnemo-Vault)
+[![CI](https://github.com/Indhar01/MemoGraph/actions/workflows/ci.yml/badge.svg)](https://github.com/Indhar01/MemoGraph/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Indhar01/MemoGraph/branch/main/graph/badge.svg)](https://codecov.io/gh/Indhar01/MemoGraph)
+[![Code Quality](https://img.shields.io/codacy/grade/PROJECT_ID)](https://www.codacy.com/gh/Indhar01/MemoGraph)
 ```
 
 ## Package Info
 
 ```markdown
-[![PyPI version](https://img.shields.io/pypi/v/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
-[![PyPI downloads](https://img.shields.io/pypi/dm/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
-[![Python Version](https://img.shields.io/pypi/pyversions/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
-[![Wheel](https://img.shields.io/pypi/wheel/mnemo-vault)](https://pypi.org/project/mnemo-vault/)
+[![PyPI version](https://img.shields.io/pypi/v/memograph)](https://pypi.org/project/memograph/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/memograph)](https://pypi.org/project/memograph/)
+[![Python Version](https://img.shields.io/pypi/pyversions/memograph)](https://pypi.org/project/memograph/)
+[![Wheel](https://img.shields.io/pypi/wheel/memograph)](https://pypi.org/project/memograph/)
 ```
 
 ## Repository Stats
 
 ```markdown
-[![GitHub stars](https://img.shields.io/github/stars/Indhar01/Mnemo-Vault?style=social)](https://github.com/Indhar01/Mnemo-Vault/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/Indhar01/Mnemo-Vault?style=social)](https://github.com/Indhar01/Mnemo-Vault/network/members)
-[![GitHub issues](https://img.shields.io/github/issues/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/pulls)
+[![GitHub stars](https://img.shields.io/github/stars/Indhar01/MemoGraph?style=social)](https://github.com/Indhar01/MemoGraph/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Indhar01/MemoGraph?style=social)](https://github.com/Indhar01/MemoGraph/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/pulls)
 ```
 
 ## License & Documentation
 
 ```markdown
-[![License](https://img.shields.io/github/license/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/blob/main/LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-latest-blue)](https://github.com/Indhar01/Mnemo-Vault#readme)
+[![License](https://img.shields.io/github/license/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/blob/main/LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue)](https://github.com/Indhar01/MemoGraph#readme)
 ```
 
 ## Code Style & Tools
@@ -46,9 +46,9 @@ Here are additional badges you can add to your README.md for better visibility a
 ## Maintenance & Activity
 
 ```markdown
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/Indhar01/Mnemo-Vault/graphs/commit-activity)
-[![Last Commit](https://img.shields.io/github/last-commit/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/commits/main)
-[![Contributors](https://img.shields.io/github/contributors/Indhar01/Mnemo-Vault)](https://github.com/Indhar01/Mnemo-Vault/graphs/contributors)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/Indhar01/MemoGraph/graphs/commit-activity)
+[![Last Commit](https://img.shields.io/github/last-commit/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/commits/main)
+[![Contributors](https://img.shields.io/github/contributors/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/graphs/contributors)
 ```
 
 ## Community

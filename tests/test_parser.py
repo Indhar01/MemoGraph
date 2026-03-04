@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from recallgraph.core.enums import MemoryType
-from recallgraph.core.parser import parse_file
+from memograph.core.enums import MemoryType
+from memograph.core.parser import parse_file
 
 
 class ParserTests(unittest.TestCase):

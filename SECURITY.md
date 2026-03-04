@@ -4,8 +4,8 @@
 
 To report vulnerabilities, you can privately report a potential security issue
 via the GitHub security vulnerabilities feature. This can be done here:
+https://github.com/Indhar01/MemoGraph/security/advisories
 
-https://github.com/Indhar01/Mnemo-Vault/security/advisories
 
 Please do **not** open a public issue about a potential security vulnerability.
 
@@ -16,7 +16,7 @@ https://docs.github.com/en/code-security/security-advisories/guidance-on-reporti
 
 ## Security Best Practices
 
-When using Mnemo-Vault, please consider the following security best practices:
+When using MemoGraph, please consider the following security best practices:
 
 ### API Keys and Credentials
 
@@ -33,7 +33,7 @@ When using Mnemo-Vault, please consider the following security best practices:
 
 ### Dependencies
 
-- Keep Mnemo-Vault and its dependencies up to date
+- Keep MemoGraph and its dependencies up to date
 - Review security advisories for dependencies
 - Use virtual environments to isolate dependencies
 

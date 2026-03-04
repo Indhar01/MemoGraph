@@ -3,11 +3,11 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "recallgraph"
+name = "memograph"
 version = "0.0.2"
 
 authors = [
-  { name="RecallGraph Contributors", email="author@example.com" },
+  { name="MemoGraph Contributors", email="author@example.com" },
 ]
 description = "A graph-based memory system for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings"
 readme = "README.md"
@@ -80,7 +80,7 @@ embeddings = [
     "numpy>=1.24.0",
 ]
 all = [
-    "recallgraph[openai,anthropic,ollama,embeddings]",
+    "memograph[openai,anthropic,ollama,embeddings]",
 ]
 dev = [
     "pytest>=7.4.0",
@@ -96,22 +96,22 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Indhar01/RecallGraph"
-Documentation = "https://github.com/Indhar01/RecallGraph#readme"
-Repository = "https://github.com/Indhar01/RecallGraph"
-Issues = "https://github.com/Indhar01/RecallGraph/issues"
-Changelog = "https://github.com/Indhar01/RecallGraph/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/Indhar01/MemoGraph"
+Documentation = "https://github.com/Indhar01/MemoGraph#readme"
+Repository = "https://github.com/Indhar01/MemoGraph"
+Issues = "https://github.com/Indhar01/MemoGraph/issues"
+Changelog = "https://github.com/Indhar01/MemoGraph/blob/main/CHANGELOG.md"
 
 [project.scripts]
-recallgraph = "recallgraph.cli:main"
+memograph = "memograph.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["recallgraph*"]
+include = ["memograph*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-recallgraph = ["py.typed"]
+memograph = ["py.typed"]
 
 # Ruff configuration
 [tool.ruff]
@@ -182,7 +182,7 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=recallgraph",
+    "--cov=memograph",
     "--cov-report=term-missing:skip-covered",
     "--cov-report=html",
     "--cov-report=xml",
@@ -201,7 +201,7 @@ filterwarnings = [
 
 # Coverage configuration
 [tool.coverage.run]
-source = ["recallgraph"]
+source = ["memograph"]
 branch = true
 omit = [
     "*/tests/*",

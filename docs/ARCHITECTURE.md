@@ -12,7 +12,7 @@ The central orchestrator that provides the main API:
 - `context_window()`: Retrieve and compress relevant context
 - `retrieve_nodes()`: Get raw memory nodes for a query
 
-#### 2. Graph (`mnemo/core/graph.py`)
+#### 2. Graph (`memograph/core/graph.py`)
 
 Maintains the knowledge graph structure:
 - **Nodes**: Individual memories (MemoryNode objects)
@@ -20,7 +20,7 @@ Maintains the knowledge graph structure:
 - **Backlinks**: Automatically computed reverse edges
 - **BFS Traversal**: Navigate relationships up to specified depth
 
-#### 3. Retriever (`mnemo/core/retriever.py`)
+#### 3. Retriever (`memograph/core/retriever.py`)
 
 Hybrid retrieval strategy combining:
 1. **Keyword Matching**: Simple word-based seed selection
@@ -28,14 +28,14 @@ Hybrid retrieval strategy combining:
 3. **Metadata Filtering**: Tag, type, and salience filters
 4. **Vector Similarity** (optional): Re-ranking with embeddings
 
-#### 4. Indexer (`mnemo/core/indexer.py`)
+#### 4. Indexer (`memograph/core/indexer.py`)
 
 Efficiently indexes markdown files:
 - **Caching**: Only re-index modified files (based on mtime)
 - **Incremental**: Fast subsequent ingestions
-- **Cache File**: `.mnemo_cache.json` stores modification times
+- **Cache File**: `.memograph_cache.json` stores modification times
 
-#### 5. Parser (`mnemo/core/parser.py`)
+#### 5. Parser (`memograph/core/parser.py`)
 
 Extracts structured data from markdown:
 - **YAML Frontmatter**: Metadata (title, type, salience, etc.)
@@ -130,13 +130,13 @@ class MemoryNode:
 
 ### Extension Points
 
-- **Embedding Adapters**: `mnemo/adapters/embeddings/`
+- **Embedding Adapters**: `memograph/adapters/embeddings/`
   - OpenAI, Ollama, custom implementations
-  
-- **LLM Adapters**: `mnemo/adapters/llm/`
+
+- **LLM Adapters**: `memograph/adapters/llm/`
   - Claude, Ollama, extensible interface
-  
-- **Framework Integrations**: `mnemo/adapters/frameworks/`
+
+- **Framework Integrations**: `memograph/adapters/frameworks/`
   - LangChain, LlamaIndex
 
 ### Design Decisions

@@ -1,4 +1,4 @@
-"""Pytest configuration and fixtures for Mnemo-Vault tests."""
+"""Pytest configuration and fixtures for MemoGraph tests."""
 
 import tempfile
 from collections.abc import Generator
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from recallgraph import MemoryKernel, MemoryType
+from memograph import MemoryKernel, MemoryType
 
 
 @pytest.fixture
