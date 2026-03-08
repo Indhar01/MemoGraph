@@ -1,7 +1,11 @@
+import asyncio
+import logging
+import os
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, Literal, Optional
 
 import yaml
 
@@ -13,28 +17,261 @@ from .indexer import VaultIndexer
 from .node import MemoryNode
 from .retriever import HybridRetriever
 
+# Initialize logger for MemoGraph
+logger = logging.getLogger("memograph")
+
+
+@dataclass
+class SearchOptions:
+    """
+    Advanced search configuration options.
+
+    This dataclass provides fine-grained control over search behavior,
+    including search strategies, result filtering, and scoring weights.
+
+    Attributes:
+        strategy: Search strategy to use. Options:
+            - "keyword": Pure keyword/BM25 search
+            - "semantic": Pure embedding-based semantic search
+            - "hybrid": Combined keyword + semantic (default)
+            - "graph": Graph traversal based on wikilinks
+        include_backlinks: Whether to include nodes that link to results.
+        min_salience: Minimum salience threshold (0.0-1.0).
+        max_results: Maximum number of results to return.
+        depth: Graph traversal depth for connected nodes.
+        boost_recent: Apply recency boost to scoring.
+        time_decay_factor: Exponential decay factor for recency boost.
+            Higher values = stronger recency preference.
+        weights: Scoring weights for different strategies.
+            Example: {"keyword": 0.3, "semantic": 0.7}
+
+    Example:
+        >>> opts = SearchOptions(
+        ...     strategy="hybrid",
+        ...     min_salience=0.7,
+        ...     boost_recent=True,
+        ...     weights={"keyword": 0.3, "semantic": 0.7}
+        ... )
+        >>> results = kernel.search("python tips", options=opts)
+    """
+
+    strategy: Literal["keyword", "semantic", "hybrid", "graph"] = "hybrid"
+    include_backlinks: bool = True
+    min_salience: float = 0.0
+    max_results: int = 10
+    depth: int = 2
+    boost_recent: bool = False
+    time_decay_factor: Optional[float] = None
+    weights: Optional[Dict[str, float]] = field(default_factory=lambda: {"keyword": 0.4, "semantic": 0.6})
+
+
+class MemoryQuery:
+    """
+    Fluent query builder for constructing complex memory searches.
+
+    This class implements the builder pattern to make complex queries more
+    readable and maintainable. Each method returns self for method chaining.
+
+    Example:
+        >>> kernel = MemoryKernel(vault_path="./vault")
+        >>> results = (
+        ...     kernel.query()
+        ...         .search("python tips")
+        ...         .with_tags(["programming", "ai"])
+        ...         .memory_type(MemoryType.SEMANTIC)
+        ...         .min_salience(0.7)
+        ...         .depth(3)
+        ...         .limit(10)
+        ...         .execute()
+        ... )
+    """
+
+    def __init__(self, kernel: "MemoryKernel"):
+        """Initialize the query builder with a reference to the kernel."""
+        self.kernel = kernel
+        self._query: Optional[str] = None
+        self._tags: Optional[list[str]] = None
+        self._memory_type: Optional[MemoryType] = None
+        self._min_salience: float = 0.0
+        self._depth: int = 2
+        self._top_k: int = 8
+
+    def search(self, query: str) -> "MemoryQuery":
+        """
+        Set the search query string.
+
+        Args:
+            query: Search query for keyword and semantic matching.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._query = query
+        return self
+
+    def with_tags(self, tags: list[str]) -> "MemoryQuery":
+        """
+        Filter results by tags.
+
+        Args:
+            tags: List of tags to filter by.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._tags = tags
+        return self
+
+    def memory_type(self, mem_type: MemoryType) -> "MemoryQuery":
+        """
+        Filter by memory type.
+
+        Args:
+            mem_type: MemoryType to filter by.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._memory_type = mem_type
+        return self
+
+    def min_salience(self, salience: float) -> "MemoryQuery":
+        """
+        Set minimum salience threshold.
+
+        Args:
+            salience: Minimum salience value (0.0-1.0).
+
+        Returns:
+            Self for method chaining.
+        """
+        self._min_salience = salience
+        return self
+
+    def depth(self, depth: int) -> "MemoryQuery":
+        """
+        Set graph traversal depth.
+
+        Args:
+            depth: Number of hops through wikilinks to explore.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._depth = depth
+        return self
+
+    def limit(self, top_k: int) -> "MemoryQuery":
+        """
+        Set maximum number of results.
+
+        Args:
+            top_k: Maximum number of nodes to return.
+
+        Returns:
+            Self for method chaining.
+        """
+        self._top_k = top_k
+        return self
+
+    def execute(self) -> list[MemoryNode]:
+        """
+        Execute the query and return results.
+
+        Returns:
+            List of MemoryNode objects matching the query criteria.
+
+        Raises:
+            ValueError: If no search query was provided.
+        """
+        if not self._query:
+            raise ValueError("Search query is required. Use .search('query string') first.")
+
+        # Retrieve nodes using the kernel
+        results = self.kernel.retrieve_nodes(
+            query=self._query,
+            tags=self._tags,
+            depth=self._depth,
+            top_k=self._top_k,
+        )
+
+        # Apply additional filters
+        if self._memory_type:
+            results = [n for n in results if n.memory_type == self._memory_type]
+
+        if self._min_salience > 0.0:
+            results = [n for n in results if n.salience >= self._min_salience]
+
+        logger.debug(
+            f"Query executed: {len(results)} results after filters "
+            f"(type={self._memory_type}, min_salience={self._min_salience})"
+        )
+
+        return results
+
+    async def execute_async(self) -> list[MemoryNode]:
+        """
+        Async version of execute() for FastAPI and async frameworks.
+
+        Returns:
+            List of MemoryNode objects matching the query criteria.
+        """
+        if not self._query:
+            raise ValueError("Search query is required. Use .search('query string') first.")
+
+        # Use async retrieve
+        results = await self.kernel.retrieve_nodes_async(
+            query=self._query,
+            tags=self._tags,
+            depth=self._depth,
+            top_k=self._top_k,
+        )
+
+        # Apply additional filters
+        if self._memory_type:
+            results = [n for n in results if n.memory_type == self._memory_type]
+
+        if self._min_salience > 0.0:
+            results = [n for n in results if n.salience >= self._min_salience]
+
+        return results
+
 
 class MemoryKernel:
     def __init__(
         self,
         vault_path: str,
-        embedding_adapter=None,
-        llm_client=None,
-        llm_config=None,
+        embedding_adapter: Optional[Any] = None,
+        llm_client: Optional[Any] = None,
+        llm_config: Optional[dict[str, Any]] = None,
         auto_extract: bool = False,
-    ):
+    ) -> None:
         """
         Initialize the memory kernel.
 
         Args:
-            vault_path: Path to the vault directory
-            embedding_adapter: Optional embedding adapter for semantic search
-            llm_client: Optional LLM client for auto-extraction
-            llm_config: Optional configuration for the LLM
-            auto_extract: Whether to automatically extract entities during ingestion
+            vault_path: Path to the vault directory. Will be created if it doesn't exist.
+            embedding_adapter: Optional embedding adapter for semantic search.
+                Must implement embed_query() and embed_documents() methods.
+            llm_client: Optional LLM client for auto-extraction of entities.
+            llm_config: Optional configuration dictionary for the LLM.
+            auto_extract: Whether to automatically extract entities during ingestion.
+                Requires llm_client to be provided.
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./memories")
+            >>> # With embeddings
+            >>> from memograph.adapters.embeddings import SentenceTransformersAdapter
+            >>> adapter = SentenceTransformersAdapter()
+            >>> kernel = MemoryKernel(
+            ...     vault_path="./memories",
+            ...     embedding_adapter=adapter
+            ... )
         """
         self.vault_path = Path(vault_path).expanduser()
         self.vault_path.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Initializing MemoGraph kernel at: {self.vault_path}")
 
         self.graph = VaultGraph()
         self.embedding_adapter = embedding_adapter
@@ -48,9 +285,158 @@ class MemoryKernel:
         self.organizer = None
         if auto_extract and llm_client:
             self.organizer = SmartAutoOrganizer(llm_client, llm_config)
+            logger.info("Auto-extraction enabled with LLM client")
+        
+        logger.info(f"MemoGraph kernel initialized successfully")
+
+    @classmethod
+    def from_config(cls, config_path: str) -> "MemoryKernel":
+        """
+        Create a MemoryKernel instance from a TOML configuration file.
+
+        This method reads configuration from a TOML file and initializes
+        the kernel with the specified settings.
+
+        Args:
+            config_path: Path to the TOML configuration file.
+
+        Returns:
+            Configured MemoryKernel instance.
+
+        Raises:
+            FileNotFoundError: If the config file doesn't exist.
+            ImportError: If TOML library is not available.
+            KeyError: If required configuration keys are missing.
+
+        Example:
+            >>> # Create memograph.toml:
+            >>> # [memograph]
+            >>> # vault_path = "./data/vault"
+            >>> # auto_extract = false
+            >>> #
+            >>> # [search]
+            >>> # default_depth = 3
+            >>> # default_top_k = 10
+            >>>
+            >>> kernel = MemoryKernel.from_config("memograph.toml")
+
+        Note:
+            Requires Python 3.11+ (tomllib) or install: pip install tomli
+        """
+        import sys
+
+        # Try to import TOML library
+        if sys.version_info >= (3, 11):
+            import tomllib
+        else:
+            try:
+                import tomli as tomllib
+            except ImportError:
+                raise ImportError(
+                    "TOML support requires Python 3.11+ or 'tomli' package. "
+                    "Install with: pip install tomli"
+                )
+
+        # Read config file
+        config_path = Path(config_path)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Configuration file not found: {config_path}")
+
+        with open(config_path, "rb") as f:
+            config = tomllib.load(f)
+
+        # Extract memograph section
+        memograph_config = config.get("memograph", {})
+
+        # Required parameter
+        vault_path = memograph_config.get("vault_path")
+        if not vault_path:
+            raise KeyError(
+                "Configuration must include 'vault_path' in [memograph] section"
+            )
+
+        # Optional parameters
+        auto_extract = memograph_config.get("auto_extract", False)
+        
+        logger.info(f"Loaded configuration from: {config_path}")
+        
+        # Create and return kernel
+        return cls(
+            vault_path=vault_path,
+            embedding_adapter=None,  # Would need to be configured separately
+            llm_client=None,  # Would need to be configured separately
+            llm_config=None,
+            auto_extract=auto_extract,
+        )
+
+    @classmethod
+    def from_env(
+        cls,
+        vault_path_env: str = "MEMOGRAPH_VAULT_PATH",
+        auto_extract_env: str = "MEMOGRAPH_AUTO_EXTRACT",
+        prefix: str = "MEMOGRAPH_",
+    ) -> "MemoryKernel":
+        """
+        Create a MemoryKernel instance from environment variables.
+
+        This method reads configuration from environment variables,
+        useful for containerized deployments and CI/CD pipelines.
+
+        Args:
+            vault_path_env: Environment variable name for vault_path.
+                Default: "MEMOGRAPH_VAULT_PATH"
+            auto_extract_env: Environment variable name for auto_extract.
+                Default: "MEMOGRAPH_AUTO_EXTRACT"
+            prefix: Common prefix for environment variables.
+                Default: "MEMOGRAPH_"
+
+        Returns:
+            Configured MemoryKernel instance.
+
+        Raises:
+            ValueError: If required environment variables are not set.
+
+        Example:
+            >>> # Set environment variables:
+            >>> # export MEMOGRAPH_VAULT_PATH="./data/vault"
+            >>> # export MEMOGRAPH_AUTO_EXTRACT="false"
+            >>>
+            >>> kernel = MemoryKernel.from_env()
+            >>>
+            >>> # Or with custom variable names:
+            >>> kernel = MemoryKernel.from_env(
+            ...     vault_path_env="MY_VAULT_PATH",
+            ...     auto_extract_env="MY_AUTO_EXTRACT"
+            ... )
+        """
+        # Get vault_path (required)
+        vault_path = os.getenv(vault_path_env)
+        if not vault_path:
+            raise ValueError(
+                f"Environment variable '{vault_path_env}' is required but not set. "
+                f"Set it with: export {vault_path_env}='./path/to/vault'"
+            )
+
+        # Get auto_extract (optional, default False)
+        auto_extract_str = os.getenv(auto_extract_env, "false").lower()
+        auto_extract = auto_extract_str in ("true", "1", "yes", "on")
+
+        logger.info(f"Loaded configuration from environment variables (prefix: {prefix})")
+        logger.info(f"  {vault_path_env}={vault_path}")
+        logger.info(f"  {auto_extract_env}={auto_extract}")
+
+        # Create and return kernel
+        return cls(
+            vault_path=vault_path,
+            embedding_adapter=None,
+            llm_client=None,
+            llm_config=None,
+            auto_extract=auto_extract,
+        )
 
     @staticmethod
-    def _normalize_tags(tags: list[str] | None) -> list[str]:
+    def _normalize_tags(tags: Optional[list[str]]) -> list[str]:
+        """Normalize tags by removing '#' prefix and trimming whitespace."""
         if not tags:
             return []
         normalized = []
@@ -62,32 +448,68 @@ class MemoryKernel:
 
     @staticmethod
     def _slugify(text: str) -> str:
+        """Convert text to a URL-safe slug."""
         slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.strip().lower()).strip("-")
         return slug or datetime.now(timezone.utc).strftime("memory-%Y%m%d-%H%M%S")
 
-    def ingest(self, force: bool = False, auto_extract: bool | None = None) -> dict[str, int]:
+    def ingest(self, force: bool = False, auto_extract: Optional[bool] = None) -> dict[str, int]:
         """
-        Ingests all memories from the vault.
+        Ingest all markdown memories from the vault directory into the knowledge graph.
+
+        This method scans the vault directory, parses markdown files with YAML frontmatter,
+        extracts wikilinks, builds the graph structure, and optionally extracts entities
+        using an LLM if auto-extraction is enabled.
 
         Args:
-            force: Force re-indexing even if files haven't changed
-            auto_extract: Override the default auto_extract setting for this ingestion
+            force: Force re-indexing of all files, even if they haven't changed since
+                the last ingestion. Useful for rebuilding the graph or updating
+                embeddings. Default: False
+            auto_extract: Override the default auto_extract setting for this specific
+                ingestion. If None, uses the kernel's auto_extract setting.
+                Default: None
 
         Returns:
-            Dictionary with indexing statistics and extraction counts
+            Dictionary with ingestion statistics:
+                - indexed (int): Number of files newly indexed or re-indexed
+                - skipped (int): Number of files skipped (unchanged since last ingest)
+                - total (int): Total number of memories in the graph
+                - entities_extracted (int): Number of entities extracted (if enabled)
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> # Initial ingestion
+            >>> stats = kernel.ingest()
+            >>> print(f"Indexed {stats['indexed']} memories")
+            >>>
+            >>> # Force re-index everything
+            >>> stats = kernel.ingest(force=True)
+            >>>
+            >>> # Enable extraction for this ingestion only
+            >>> stats = kernel.ingest(auto_extract=True)
+            >>> print(f"Extracted {stats['entities_extracted']} entities")
         """
+        logger.info(f"Starting ingestion from vault: {self.vault_path}")
+        
+        # Rebuild graph from scratch
         self.graph = VaultGraph()
         indexed, skipped = self.indexer.index(self.graph, force=force)
         self.retriever = HybridRetriever(self.graph, embedding_adapter=self.retriever.embeddings)
+
+        logger.info(f"Indexed {indexed} files, skipped {skipped} unchanged files")
 
         # Perform auto-extraction if enabled
         extract_enabled = auto_extract if auto_extract is not None else self.auto_extract
         entities_extracted = 0
 
         if extract_enabled and self.organizer:
+            logger.info("Starting entity extraction from memories")
             entities_extracted = self._extract_entities_from_memories()
+            logger.info(f"Extracted {entities_extracted} total entities")
 
         total = len(self.graph._nodes)
+        
+        logger.info(f"Ingestion complete: {total} total memories in graph")
+        
         return {
             "indexed": indexed,
             "skipped": skipped,
@@ -108,33 +530,64 @@ class MemoryKernel:
                 result = self.organizer.extract(memory)
                 self.graph.add_extraction_result(result)
                 total_entities += result.entity_count()
-                print(f"Extracted {result.entity_count()} entities from {memory.id}")
+                logger.debug(f"Extracted {result.entity_count()} entities from {memory.id}")
             except Exception as e:
-                print(f"Failed to extract from {memory.id}: {e}")
+                logger.warning(f"Failed to extract from {memory.id}: {e}")
 
         return total_entities
 
     def extract_from_memory(self, memory_id: str) -> dict[str, Any]:
         """
-        Manually extract entities from a specific memory.
+        Manually extract entities from a specific memory using LLM.
+
+        This method performs on-demand entity extraction from a single memory,
+        useful for extracting from newly created memories or re-extracting
+        after content updates.
 
         Args:
-            memory_id: ID of the memory to extract from
+            memory_id: ID (slug) of the memory to extract from.
 
         Returns:
-            Dictionary with extraction results
+            Dictionary with extraction results containing:
+                - memory_id (str): The memory ID processed
+                - entities_extracted (int): Total number of entities extracted
+                - topics (int): Number of topics found
+                - people (int): Number of people/entities mentioned
+                - action_items (int): Number of action items identified
+                - decisions (int): Number of decisions recorded
+                - questions (int): Number of questions raised
+                - risks (int): Number of risks identified
+
+        Raises:
+            RuntimeError: If auto-extraction is not enabled (no LLM client provided).
+            ValueError: If the memory_id is not found in the graph.
+
+        Example:
+            >>> kernel = MemoryKernel(
+            ...     vault_path="./vault",
+            ...     llm_client=my_llm,
+            ...     auto_extract=True
+            ... )
+            >>> kernel.ingest()
+            >>> result = kernel.extract_from_memory("meeting-notes-2024")
+            >>> print(f"Found {result['action_items']} action items")
         """
         if not self.organizer:
             raise RuntimeError(
-                "Auto-extraction not enabled. Initialize kernel with llm_client and auto_extract=True"
+                "Auto-extraction not enabled. "
+                "Initialize kernel with llm_client and auto_extract=True"
             )
 
         memory = self.graph.get(memory_id)
         if not memory:
-            raise ValueError(f"Memory {memory_id} not found")
+            raise ValueError(f"Memory '{memory_id}' not found in graph")
 
+        logger.info(f"Extracting entities from memory: {memory_id}")
+        
         result = self.organizer.extract(memory)
         self.graph.add_extraction_result(result)
+
+        logger.debug(f"Extracted {result.entity_count()} entities from {memory_id}")
 
         return {
             "memory_id": memory_id,
@@ -147,24 +600,52 @@ class MemoryKernel:
             "risks": len(result.risks),
         }
 
-    def get_entities(self, memory_id: str | None = None, entity_type=None):
+    def get_entities(
+        self,
+        memory_id: Optional[str] = None,
+        entity_type: Optional[Any] = None
+    ) -> list[Any]:
         """
         Get extracted entities, optionally filtered by memory or type.
 
         Args:
-            memory_id: Optional memory ID to filter by
-            entity_type: Optional EntityType to filter by
+            memory_id: Optional memory ID to filter entities by. If provided,
+                only returns entities extracted from that specific memory.
+            entity_type: Optional EntityType to filter by. If provided, only
+                returns entities of that specific type (e.g., TOPIC, PERSON,
+                ACTION_ITEM, etc.).
 
         Returns:
-            List of entities
+            List of entity objects matching the specified filters.
+
+        Example:
+            >>> kernel = MemoryKernel(
+            ...     vault_path="./vault",
+            ...     llm_client=my_llm,
+            ...     auto_extract=True
+            ... )
+            >>> kernel.ingest(auto_extract=True)
+            >>>
+            >>> # Get all entities
+            >>> all_entities = kernel.get_entities()
+            >>>
+            >>> # Get entities from specific memory
+            >>> entities = kernel.get_entities(memory_id="meeting-notes-2024")
+            >>>
+            >>> # Get entities of specific type
+            >>> from memograph.core.entity import EntityType
+            >>> action_items = kernel.get_entities(entity_type=EntityType.ACTION_ITEM)
         """
         if memory_id:
             entities = self.graph.get_entities_for_memory(memory_id)
+            logger.debug(f"Retrieved {len(entities)} entities from memory: {memory_id}")
         else:
             entities = self.graph.all_entities()
+            logger.debug(f"Retrieved {len(entities)} total entities")
 
         if entity_type:
             entities = [e for e in entities if e.entity_type == entity_type]
+            logger.debug(f"Filtered to {len(entities)} entities of type: {entity_type}")
 
         return entities
 
@@ -173,12 +654,103 @@ class MemoryKernel:
         title: str,
         content: str,
         memory_type: MemoryType = MemoryType.FACT,
-        tags: list[str] = None,
-    ):
+        tags: Optional[list[str]] = None,
+        salience: float = 0.5,
+        meta: Optional[dict[str, Any]] = None,
+    ) -> str:
         """
-        Creates a new memory.
+        Create and store a new memory in the knowledge graph.
+
+        This method creates a new memory as a markdown file with YAML frontmatter,
+        automatically handling filename collisions and wikilink parsing for
+        bidirectional connections.
+
+        Args:
+            title: Memory title. Must be non-empty.
+            content: Memory content. Supports [[wikilinks]] for automatic connections
+                to other memories. Must be non-empty.
+            memory_type: Type classification for the memory. Options:
+                - MemoryType.EPISODIC: Personal experiences and events
+                - MemoryType.SEMANTIC: Facts and general knowledge
+                - MemoryType.PROCEDURAL: How-to knowledge and procedures
+                - MemoryType.FACT: Atomic facts and statements
+                Default: MemoryType.FACT
+            tags: Optional list of tags for categorization. Tags can include '#' prefix
+                which will be automatically normalized.
+            salience: Importance score from 0.0 (least important) to 1.0 (most important).
+                Used for ranking and retrieval. Default: 0.5
+            meta: Optional arbitrary metadata dictionary to store with the memory.
+
+        Returns:
+            Path to the created memory file as a string.
+
+        Raises:
+            ValueError: If title or content is empty or if salience is out of range.
+            TypeError: If parameters have incorrect types.
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> # Basic memory
+            >>> path = kernel.remember(
+            ...     title="Python Tips",
+            ...     content="Always use list comprehensions when possible"
+            ... )
+            >>>
+            >>> # Memory with wikilinks and metadata
+            >>> path = kernel.remember(
+            ...     title="FastAPI Best Practices",
+            ...     content="Use [[dependency injection]] for [[database connections]]",
+            ...     memory_type=MemoryType.PROCEDURAL,
+            ...     tags=["programming", "python", "web"],
+            ...     salience=0.8,
+            ...     meta={"project": "api-backend", "author": "team"}
+            ... )
+            >>> print(f"Created: {path}")
+            Created: ./vault/fastapi-best-practices.md
         """
+        # Validate title
+        if not title or not isinstance(title, str):
+            raise TypeError(
+                f"title must be a non-empty string, got {type(title).__name__}"
+            )
+        
+        if not title.strip():
+            raise ValueError(
+                "title cannot be empty. Provide a non-empty string for the memory title."
+            )
+
+        # Validate content
+        if not content or not isinstance(content, str):
+            raise TypeError(
+                f"content must be a non-empty string, got {type(content).__name__}"
+            )
+        
+        if not content.strip():
+            raise ValueError(
+                "content cannot be empty. Provide memory content (supports [[wikilinks]])."
+            )
+
+        # Validate salience
+        if not isinstance(salience, (int, float)):
+            raise TypeError(
+                f"salience must be a number, got {type(salience).__name__}"
+            )
+        
+        if not 0.0 <= salience <= 1.0:
+            raise ValueError(
+                f"salience must be between 0.0 and 1.0, got {salience}"
+            )
+
+        # Validate memory_type
+        if not isinstance(memory_type, MemoryType):
+            raise TypeError(
+                f"memory_type must be a MemoryType enum, got {type(memory_type).__name__}"
+            )
+
+        # Process tags
         normalized_tags = self._normalize_tags(tags)
+        
+        # Generate slug and handle collisions
         slug = self._slugify(title)
         file_path = self.vault_path / f"{slug}.md"
 
@@ -187,6 +759,7 @@ class MemoryKernel:
             file_path = self.vault_path / f"{slug}-{counter}.md"
             counter += 1
 
+        # Create frontmatter
         created_at = datetime.now(timezone.utc).isoformat()
         tags_line = " ".join(f"#{tag}" for tag in normalized_tags)
 
@@ -194,44 +767,387 @@ class MemoryKernel:
             "title": title,
             "memory_type": memory_type.value,
             "created": created_at,
-            "salience": 1.0,
+            "salience": salience,
         }
+        
+        # Add meta to frontmatter if provided
+        if meta:
+            payload["meta"] = meta
+
         frontmatter = "---\n" + yaml.safe_dump(payload, sort_keys=False).strip() + "\n---\n\n"
 
+        # Create body with tags
         body = content.strip()
         if tags_line:
             body = f"{body}\n\n{tags_line}"
 
+        # Write file
         file_path.write_text(frontmatter + body + "\n", encoding="utf-8")
+        
+        logger.info(f"Created memory: {title} -> {file_path.name}")
+        logger.debug(f"Memory details: type={memory_type.value}, salience={salience}, tags={normalized_tags}")
+        
         return str(file_path)
+
+    def remember_many(
+        self,
+        memories: list[dict[str, Any]],
+        continue_on_error: bool = False,
+    ) -> tuple[list[str], list[tuple[dict[str, Any], Exception]]]:
+        """
+        Create multiple memories in a single batch operation.
+
+        This method efficiently creates multiple memories at once, useful for
+        bulk imports from other note-taking systems or batch data ingestion.
+
+        Args:
+            memories: List of memory data dictionaries. Each dictionary should contain:
+                - title (str, required): Memory title
+                - content (str, required): Memory content
+                - memory_type (MemoryType, optional): Memory type classification
+                - tags (list[str], optional): List of tags
+                - salience (float, optional): Importance score (0.0-1.0)
+                - meta (dict, optional): Additional metadata
+            continue_on_error: If True, continue processing remaining memories even
+                if some fail. If False, stop on first error. Default: False
+
+        Returns:
+            Tuple of (successful_paths, errors):
+                - successful_paths: List of file paths for successfully created memories
+                - errors: List of tuples (memory_data, exception) for failed memories
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> memories = [
+            ...     {
+            ...         "title": "Python Tip 1",
+            ...         "content": "Use list comprehensions",
+            ...         "tags": ["python", "tips"],
+            ...         "salience": 0.7
+            ...     },
+            ...     {
+            ...         "title": "Python Tip 2",
+            ...         "content": "Use f-strings for formatting",
+            ...         "tags": ["python", "tips"],
+            ...         "salience": 0.6
+            ...     }
+            ... ]
+            >>> paths, errors = kernel.remember_many(memories)
+            >>> print(f"Created {len(paths)} memories, {len(errors)} failed")
+            Created 2 memories, 0 failed
+        """
+        successful_paths = []
+        errors = []
+
+        logger.info(f"Starting batch creation of {len(memories)} memories")
+
+        for idx, memory_data in enumerate(memories):
+            try:
+                # Extract parameters from dictionary
+                title = memory_data.get("title")
+                content = memory_data.get("content")
+                memory_type = memory_data.get("memory_type", MemoryType.FACT)
+                tags = memory_data.get("tags")
+                salience = memory_data.get("salience", 0.5)
+                meta = memory_data.get("meta")
+
+                # Create memory
+                path = self.remember(
+                    title=title,
+                    content=content,
+                    memory_type=memory_type,
+                    tags=tags,
+                    salience=salience,
+                    meta=meta,
+                )
+                successful_paths.append(path)
+                logger.debug(f"Batch [{idx+1}/{len(memories)}]: Created {title}")
+
+            except Exception as e:
+                error_info = (memory_data, e)
+                errors.append(error_info)
+                logger.warning(
+                    f"Batch [{idx+1}/{len(memories)}]: Failed to create "
+                    f"'{memory_data.get('title', 'unknown')}': {e}"
+                )
+
+                if not continue_on_error:
+                    logger.error(
+                        f"Batch creation stopped after {len(successful_paths)} successes "
+                        f"and {len(errors)} failures"
+                    )
+                    break
+
+        logger.info(
+            f"Batch creation complete: {len(successful_paths)} created, "
+            f"{len(errors)} failed"
+        )
+
+        return successful_paths, errors
+
+    def update_many(
+        self,
+        updates: list[tuple[str, dict[str, Any]]],
+        continue_on_error: bool = True,
+    ) -> tuple[list[str], list[tuple[str, Exception]]]:
+        """
+        Update multiple memories in a single batch operation.
+
+        This method efficiently updates multiple existing memories, useful for
+        bulk metadata changes or content updates.
+
+        Args:
+            updates: List of tuples (memory_id, update_data). Each update_data
+                dictionary can contain:
+                - content (str, optional): New content (appends to existing)
+                - tags (list[str], optional): New tags (merges with existing)
+                - salience (float, optional): New salience value
+                - meta (dict, optional): Metadata to merge with existing
+            continue_on_error: If True, continue processing even if some fail.
+                Default: True
+
+        Returns:
+            Tuple of (successful_ids, errors):
+                - successful_ids: List of memory IDs successfully updated
+                - errors: List of tuples (memory_id, exception) for failed updates
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> kernel.ingest()
+            >>> updates = [
+            ...     ("python-tip-1", {"salience": 0.9, "tags": ["important"]}),
+            ...     ("python-tip-2", {"salience": 0.8})
+            ... ]
+            >>> updated, errors = kernel.update_many(updates)
+            >>> print(f"Updated {len(updated)} memories")
+            Updated 2 memories
+
+        Note:
+            This method reads the markdown file, updates the frontmatter,
+            and writes it back. Content updates are appended, tags are merged.
+        """
+        successful_ids = []
+        errors = []
+
+        logger.info(f"Starting batch update of {len(updates)} memories")
+
+        for idx, (memory_id, update_data) in enumerate(updates):
+            try:
+                # Find the memory file
+                memory_path = None
+                for md_file in self.vault_path.rglob("*.md"):
+                    if md_file.stem == memory_id or md_file.stem.startswith(f"{memory_id}-"):
+                        memory_path = md_file
+                        break
+
+                if not memory_path or not memory_path.exists():
+                    raise ValueError(f"Memory file not found for ID: {memory_id}")
+
+                # Read existing content
+                content = memory_path.read_text(encoding="utf-8")
+                
+                # Parse frontmatter and body
+                if content.startswith("---\n"):
+                    parts = content.split("---\n", 2)
+                    if len(parts) >= 3:
+                        frontmatter_str = parts[1]
+                        body = parts[2].strip()
+                        frontmatter = yaml.safe_load(frontmatter_str)
+                    else:
+                        raise ValueError(f"Invalid frontmatter format in {memory_id}")
+                else:
+                    raise ValueError(f"No frontmatter found in {memory_id}")
+
+                # Update frontmatter
+                if "salience" in update_data:
+                    frontmatter["salience"] = update_data["salience"]
+                
+                if "meta" in update_data:
+                    if "meta" not in frontmatter:
+                        frontmatter["meta"] = {}
+                    frontmatter["meta"].update(update_data["meta"])
+
+                # Update body if content provided (append)
+                if "content" in update_data:
+                    body = f"{body}\n\n{update_data['content'].strip()}"
+
+                # Merge tags if provided
+                if "tags" in update_data:
+                    new_tags = update_data["tags"]
+                    # Extract existing tags from body
+                    existing_tags = []
+                    tag_pattern = r"#(\w+)"
+                    existing_tags = re.findall(tag_pattern, body)
+                    
+                    # Merge tags (deduplicate)
+                    all_tags = list(set(existing_tags + new_tags))
+                    
+                    # Remove old tag line
+                    body = re.sub(r"\n\n#[\w\s#]+$", "", body).strip()
+                    
+                    # Add new tag line
+                    tags_line = " ".join(f"#{tag}" for tag in all_tags)
+                    if tags_line:
+                        body = f"{body}\n\n{tags_line}"
+
+                # Update modified timestamp
+                frontmatter["modified"] = datetime.now(timezone.utc).isoformat()
+
+                # Write back
+                new_frontmatter = "---\n" + yaml.safe_dump(frontmatter, sort_keys=False).strip() + "\n---\n\n"
+                memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")
+
+                successful_ids.append(memory_id)
+                logger.debug(f"Batch update [{idx+1}/{len(updates)}]: Updated {memory_id}")
+
+            except Exception as e:
+                error_info = (memory_id, e)
+                errors.append(error_info)
+                logger.warning(
+                    f"Batch update [{idx+1}/{len(updates)}]: Failed to update "
+                    f"'{memory_id}': {e}"
+                )
+
+                if not continue_on_error:
+                    logger.error(
+                        f"Batch update stopped after {len(successful_ids)} successes "
+                        f"and {len(errors)} failures"
+                    )
+                    break
+
+        logger.info(
+            f"Batch update complete: {len(successful_ids)} updated, "
+            f"{len(errors)} failed"
+        )
+
+        return successful_ids, errors
 
     def context_window(
         self,
         query: str,
-        tags: list[str] = None,
+        tags: Optional[list[str]] = None,
         depth: int = 2,
         top_k: int = 8,
         token_limit: int = 2048,
     ) -> str:
         """
-        Retrieves relevant context from the memory vault.
+        Retrieve relevant context from the memory vault as a compressed string.
+
+        This method combines retrieval and token compression to generate a context
+        window suitable for LLM prompts or RAG applications.
+
+        Args:
+            query: Search query string to find relevant memories.
+            tags: Optional list of tags to filter results. Only memories with
+                at least one matching tag will be included.
+            depth: Graph traversal depth for finding related memories through
+                wikilinks. Higher values explore more connections. Default: 2
+            top_k: Maximum number of memories to retrieve. Default: 8
+            token_limit: Maximum number of tokens in the compressed output.
+                The compressor will truncate content to fit within this limit.
+                Default: 2048
+
+        Returns:
+            Compressed string representation of the most relevant memories,
+            formatted and ready for use as LLM context.
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> kernel.ingest()
+            >>> context = kernel.context_window(
+            ...     query="python best practices",
+            ...     tags=["programming"],
+            ...     depth=2,
+            ...     top_k=5,
+            ...     token_limit=1024
+            ... )
+            >>> print(context[:100])
+            Memory: Python Tips
+            Content: Always use list comprehensions...
         """
         nodes = self.retrieve_nodes(query=query, tags=tags, depth=depth, top_k=top_k)
         compressor = TokenCompressor(token_limit=token_limit)
-        return compressor.compress(nodes)
+        compressed = compressor.compress(nodes)
+        
+        logger.debug(f"Generated context window: {len(nodes)} nodes, ~{len(compressed)} chars")
+        
+        return compressed
 
     def retrieve_nodes(
         self,
         query: str,
-        tags: list[str] = None,
+        tags: Optional[list[str]] = None,
         depth: int = 2,
         top_k: int = 8,
     ) -> list[MemoryNode]:
+        """
+        Retrieve relevant memory nodes using hybrid search (keyword + semantic + graph).
+
+        This method performs intelligent retrieval by:
+        1. Finding seed nodes via keyword matching
+        2. Using embeddings for semantic similarity (if adapter available)
+        3. Traversing the graph to find related memories via wikilinks
+        4. Ranking results by relevance, salience, and recency
+
+        Args:
+            query: Search query string. Will be tokenized for keyword matching
+                and embedded for semantic search (if embeddings enabled).
+            tags: Optional list of tags to filter results. Only memories with
+                at least one matching tag will be included.
+            depth: Graph traversal depth from seed nodes. Controls how many
+                hops through wikilinks to explore. Default: 2
+                - depth=0: Only direct matches
+                - depth=1: Direct matches + 1 hop neighbors
+                - depth=2: Includes neighbors of neighbors
+            top_k: Maximum number of nodes to return, ranked by relevance.
+                Default: 8
+
+        Returns:
+            List of MemoryNode objects ranked by relevance score (hybrid of
+            keyword match, semantic similarity, salience, and graph centrality).
+
+        Note:
+            If the graph is empty, this method will automatically call ingest()
+            to load memories from the vault directory.
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> # Simple search
+            >>> nodes = kernel.retrieve_nodes("machine learning")
+            >>> for node in nodes:
+            ...     print(f"{node.title}: {node.salience}")
+            >>>
+            >>> # Advanced search with filters
+            >>> nodes = kernel.retrieve_nodes(
+            ...     query="python optimization",
+            ...     tags=["programming", "performance"],
+            ...     depth=3,
+            ...     top_k=10
+            ... )
+        """
+        # Validate query
+        if not query or not isinstance(query, str):
+            raise TypeError(f"query must be a non-empty string, got {type(query).__name__}")
+        
+        if not query.strip():
+            raise ValueError("query cannot be empty")
+
+        # Validate depth
+        if not isinstance(depth, int) or depth < 0:
+            raise ValueError(f"depth must be a non-negative integer, got {depth}")
+
+        # Validate top_k
+        if not isinstance(top_k, int) or top_k <= 0:
+            raise ValueError(f"top_k must be a positive integer, got {top_k}")
+
         normalized_tags = self._normalize_tags(tags)
 
+        # Auto-ingest if graph is empty
         if not self.graph._nodes:
+            logger.info("Graph is empty, running auto-ingest")
             self.ingest()
 
+        # Keyword-based seed finding
         query_words = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
         seed_ids = []
         for node in self.graph._nodes.values():
@@ -239,10 +1155,368 @@ class MemoryKernel:
             if any(word in haystack for word in query_words):
                 seed_ids.append(node.id)
 
-        return self.retriever.retrieve(
+        logger.debug(f"Found {len(seed_ids)} seed nodes for query: '{query}'")
+
+        results = self.retriever.retrieve(
             query=query,
             seed_ids=seed_ids,
             tags=normalized_tags,
             depth=depth,
             top_k=top_k,
+        )
+
+        logger.info(f"Retrieved {len(results)} nodes for query: '{query}'")
+        
+        return results
+
+    def query(self) -> MemoryQuery:
+        """
+        Create a new query builder for constructing complex searches.
+
+        Returns:
+            MemoryQuery instance for building and executing queries.
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> # Simple query
+            >>> results = kernel.query().search("python").execute()
+            >>>
+            >>> # Complex query with multiple filters
+            >>> results = (
+            ...     kernel.query()
+            ...         .search("machine learning")
+            ...         .with_tags(["ai", "python"])
+            ...         .memory_type(MemoryType.SEMANTIC)
+            ...         .min_salience(0.7)
+            ...         .depth(3)
+            ...         .limit(10)
+            ...         .execute()
+            ... )
+            >>> for node in results:
+            ...     print(f"{node.title}: {node.salience}")
+        """
+        return MemoryQuery(self)
+
+    def search(
+        self,
+        query: str,
+        options: Optional[SearchOptions] = None,
+    ) -> list[MemoryNode]:
+        """
+        Advanced search with configurable options.
+
+        This method provides fine-grained control over search behavior through
+        the SearchOptions dataclass, allowing customization of strategies,
+        filters, and scoring weights.
+
+        Args:
+            query: Search query string.
+            options: Optional SearchOptions for advanced configuration.
+                If None, uses default hybrid search.
+
+        Returns:
+            List of MemoryNode objects matching the search criteria,
+            filtered and sorted according to the options.
+
+        Example:
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>> # Simple search with defaults
+            >>> results = kernel.search("python tips")
+            >>>
+            >>> # Advanced search with options
+            >>> opts = SearchOptions(
+            ...     strategy="hybrid",
+            ...     min_salience=0.7,
+            ...     boost_recent=True,
+            ...     max_results=5,
+            ...     weights={"keyword": 0.3, "semantic": 0.7}
+            ... )
+            >>> results = kernel.search("python tips", options=opts)
+            >>> for node in results:
+            ...     print(f"{node.title}: {node.salience}")
+        """
+        # Use default options if none provided
+        if options is None:
+            options = SearchOptions()
+
+        # Retrieve nodes using standard method
+        results = self.retrieve_nodes(
+            query=query,
+            tags=None,  # SearchOptions doesn't include tags (use query builder for that)
+            depth=options.depth,
+            top_k=options.max_results * 2,  # Get more initially for filtering
+        )
+
+        # Apply min_salience filter
+        if options.min_salience > 0.0:
+            results = [n for n in results if n.salience >= options.min_salience]
+            logger.debug(f"Filtered to {len(results)} nodes with salience >= {options.min_salience}")
+
+        # Apply recency boost if requested
+        if options.boost_recent and options.time_decay_factor:
+            import time
+            current_time = time.time()
+            
+            for node in results:
+                # Calculate time difference in days
+                node_time = node.created_at.timestamp()
+                days_old = (current_time - node_time) / (24 * 3600)
+                
+                # Apply exponential decay: score * exp(-decay_factor * days)
+                import math
+                recency_factor = math.exp(-options.time_decay_factor * days_old)
+                
+                # Boost salience by recency (store original if needed)
+                if not hasattr(node, '_original_salience'):
+                    node._original_salience = node.salience
+                node.salience = node.salience * (0.5 + 0.5 * recency_factor)
+            
+            # Re-sort by boosted salience
+            results.sort(key=lambda n: n.salience, reverse=True)
+            logger.debug(f"Applied recency boost with decay factor {options.time_decay_factor}")
+
+        # Include backlinks if requested
+        if options.include_backlinks:
+            # Add nodes that link to our results
+            backlink_ids = set()
+            for node in results[:options.max_results]:
+                backlink_ids.update(node.backlinks)
+            
+            for backlink_id in backlink_ids:
+                if backlink_node := self.graph.get(backlink_id):
+                    if backlink_node not in results:
+                        results.append(backlink_node)
+            
+            logger.debug(f"Included {len(backlink_ids)} backlink nodes")
+
+        # Limit to max_results
+        results = results[:options.max_results]
+
+        logger.info(
+            f"Search completed: {len(results)} results "
+            f"(strategy={options.strategy}, min_salience={options.min_salience})"
+        )
+
+        return results
+
+    async def search_async(
+        self,
+        query: str,
+        options: Optional[SearchOptions] = None,
+    ) -> list[MemoryNode]:
+        """
+        Async version of search() for FastAPI and async frameworks.
+
+        Args:
+            Same as search()
+
+        Returns:
+            List of MemoryNode objects matching the search criteria.
+
+        Example:
+            >>> async def advanced_search():
+            ...     opts = SearchOptions(boost_recent=True, min_salience=0.7)
+            ...     results = await kernel.search_async("python", options=opts)
+            ...     return results
+        """
+        return await asyncio.to_thread(self.search, query=query, options=options)
+
+    # ==================== Async Methods for FastAPI Integration ====================
+
+    async def remember_async(
+        self,
+        title: str,
+        content: str,
+        memory_type: MemoryType = MemoryType.FACT,
+        tags: Optional[list[str]] = None,
+        salience: float = 0.5,
+        meta: Optional[dict[str, Any]] = None,
+    ) -> str:
+        """
+        Async version of remember() for FastAPI and async frameworks.
+
+        Runs the synchronous remember() method in a thread pool to avoid
+        blocking the event loop.
+
+        Args:
+            Same as remember()
+
+        Returns:
+            Path to the created memory file as a string.
+
+        Example:
+            >>> import asyncio
+            >>> kernel = MemoryKernel(vault_path="./vault")
+            >>>
+            >>> async def create_memory():
+            ...     path = await kernel.remember_async(
+            ...         title="Async Note",
+            ...         content="Created asynchronously",
+            ...         salience=0.8
+            ...     )
+            ...     return path
+            >>>
+            >>> asyncio.run(create_memory())
+        """
+        return await asyncio.to_thread(
+            self.remember,
+            title=title,
+            content=content,
+            memory_type=memory_type,
+            tags=tags,
+            salience=salience,
+            meta=meta,
+        )
+
+    async def ingest_async(
+        self,
+        force: bool = False,
+        auto_extract: Optional[bool] = None
+    ) -> dict[str, int]:
+        """
+        Async version of ingest() for FastAPI and async frameworks.
+
+        Runs the synchronous ingest() method in a thread pool.
+
+        Args:
+            Same as ingest()
+
+        Returns:
+            Dictionary with ingestion statistics.
+
+        Example:
+            >>> async def load_vault():
+            ...     stats = await kernel.ingest_async()
+            ...     print(f"Loaded {stats['total']} memories")
+        """
+        return await asyncio.to_thread(self.ingest, force=force, auto_extract=auto_extract)
+
+    async def retrieve_nodes_async(
+        self,
+        query: str,
+        tags: Optional[list[str]] = None,
+        depth: int = 2,
+        top_k: int = 8,
+    ) -> list[MemoryNode]:
+        """
+        Async version of retrieve_nodes() for FastAPI and async frameworks.
+
+        Runs the synchronous retrieve_nodes() method in a thread pool.
+
+        Args:
+            Same as retrieve_nodes()
+
+        Returns:
+            List of MemoryNode objects ranked by relevance.
+
+        Example:
+            >>> async def search_memories():
+            ...     nodes = await kernel.retrieve_nodes_async("python tips")
+            ...     for node in nodes:
+            ...         print(node.title)
+        """
+        return await asyncio.to_thread(
+            self.retrieve_nodes,
+            query=query,
+            tags=tags,
+            depth=depth,
+            top_k=top_k,
+        )
+
+    async def context_window_async(
+        self,
+        query: str,
+        tags: Optional[list[str]] = None,
+        depth: int = 2,
+        top_k: int = 8,
+        token_limit: int = 2048,
+    ) -> str:
+        """
+        Async version of context_window() for FastAPI and async frameworks.
+
+        Runs the synchronous context_window() method in a thread pool.
+
+        Args:
+            Same as context_window()
+
+        Returns:
+            Compressed string representation of relevant memories.
+
+        Example:
+            >>> async def get_context():
+            ...     context = await kernel.context_window_async(
+            ...         query="machine learning",
+            ...         token_limit=1024
+            ...     )
+            ...     return context
+        """
+        return await asyncio.to_thread(
+            self.context_window,
+            query=query,
+            tags=tags,
+            depth=depth,
+            top_k=top_k,
+            token_limit=token_limit,
+        )
+
+    async def remember_many_async(
+        self,
+        memories: list[dict[str, Any]],
+        continue_on_error: bool = False,
+    ) -> tuple[list[str], list[tuple[dict[str, Any], Exception]]]:
+        """
+        Async version of remember_many() for FastAPI and async frameworks.
+
+        Runs the synchronous remember_many() method in a thread pool.
+
+        Args:
+            Same as remember_many()
+
+        Returns:
+            Tuple of (successful_paths, errors).
+
+        Example:
+            >>> async def bulk_create():
+            ...     memories = [
+            ...         {"title": "Note 1", "content": "Content 1"},
+            ...         {"title": "Note 2", "content": "Content 2"}
+            ...     ]
+            ...     paths, errors = await kernel.remember_many_async(memories)
+            ...     print(f"Created {len(paths)} memories")
+        """
+        return await asyncio.to_thread(
+            self.remember_many,
+            memories=memories,
+            continue_on_error=continue_on_error,
+        )
+
+    async def update_many_async(
+        self,
+        updates: list[tuple[str, dict[str, Any]]],
+        continue_on_error: bool = True,
+    ) -> tuple[list[str], list[tuple[str, Exception]]]:
+        """
+        Async version of update_many() for FastAPI and async frameworks.
+
+        Runs the synchronous update_many() method in a thread pool.
+
+        Args:
+            Same as update_many()
+
+        Returns:
+            Tuple of (successful_ids, errors).
+
+        Example:
+            >>> async def bulk_update():
+            ...     updates = [
+            ...         ("note-1", {"salience": 0.9}),
+            ...         ("note-2", {"tags": ["important"]})
+            ...     ]
+            ...     updated, errors = await kernel.update_many_async(updates)
+            ...     print(f"Updated {len(updated)} memories")
+        """
+        return await asyncio.to_thread(
+            self.update_many,
+            updates=updates,
+            continue_on_error=continue_on_error,
         )
