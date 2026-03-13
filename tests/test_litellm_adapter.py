@@ -5,14 +5,13 @@ These tests verify the LiteLLM adapter works correctly with multiple providers.
 Note: Some tests require API keys or running services (like Ollama).
 """
 
+# Check if litellm can be imported properly
+import importlib.util
 from unittest.mock import Mock, patch
 
 import pytest
 
 from memograph.adapters.llm.litellm_adapter import LiteLLMClient, LiteLLMConfig, create_client
-
-# Check if litellm can be imported properly
-import importlib.util
 
 LITELLM_AVAILABLE = importlib.util.find_spec("litellm") is not None
 

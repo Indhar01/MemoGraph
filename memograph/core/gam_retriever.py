@@ -98,7 +98,7 @@ class GAMRetriever(HybridRetriever):
         query: str,
         seed_ids: list[str] | None = None,
         tags: list[str] | None = None,
-        memory_type = None,
+        memory_type=None,
         depth: int = 2,
         top_k: int = 8,
         min_salience: float = 0.0,
