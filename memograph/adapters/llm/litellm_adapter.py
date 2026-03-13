@@ -22,7 +22,7 @@ Usage:
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -48,8 +48,8 @@ class LiteLLMConfig:
     model: str = field(default_factory=lambda: os.environ.get("LITELLM_MODEL", "gpt-3.5-turbo"))
     max_tokens: int = 1024
     temperature: float = 0.1
-    api_key: Optional[str] = None
-    api_base: Optional[str] = None
+    api_key: str | None = None
+    api_base: str | None = None
     timeout: int = 180
     drop_params: bool = True
 
@@ -75,7 +75,7 @@ class LiteLLMClient:
         >>> print(response)
     """
 
-    def __init__(self, config: Optional[LiteLLMConfig] = None):
+    def __init__(self, config: LiteLLMConfig | None = None):
         """
         Initialize LiteLLM client.
 
@@ -105,7 +105,7 @@ class LiteLLMClient:
 
         warnings.filterwarnings("ignore", category=UserWarning, module="litellm")
 
-    def generate(self, prompt: str, config: Optional[LiteLLMConfig] = None) -> str:
+    def generate(self, prompt: str, config: LiteLLMConfig | None = None) -> str:
         """
         Generate text from a prompt using the configured LLM provider.
 
@@ -163,7 +163,7 @@ class LiteLLMClient:
 
             raise RuntimeError(error_msg) from e
 
-    async def generate_async(self, prompt: str, config: Optional[LiteLLMConfig] = None) -> str:
+    async def generate_async(self, prompt: str, config: LiteLLMConfig | None = None) -> str:
         """
         Async version of generate() for better performance in async contexts.
 
@@ -208,7 +208,7 @@ class LiteLLMClient:
             raise RuntimeError(error_msg) from e
 
     def generate_with_fallback(
-        self, prompt: str, fallback_models: list[str], config: Optional[LiteLLMConfig] = None
+        self, prompt: str, fallback_models: list[str], config: LiteLLMConfig | None = None
     ) -> str:
         """
         Generate with automatic fallback to alternative models on failure.
@@ -252,7 +252,7 @@ class LiteLLMClient:
 
         raise RuntimeError(f"All models failed. Last error: {last_error}") from last_error
 
-    def stream_generate(self, prompt: str, config: Optional[LiteLLMConfig] = None):
+    def stream_generate(self, prompt: str, config: LiteLLMConfig | None = None):
         """
         Generate text with streaming response (yields chunks as they arrive).
 

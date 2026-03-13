@@ -7,7 +7,7 @@ name = "memograph"
 version = "0.0.2"
 
 authors = [
-  { name="MemoGraph Contributors", email="author@example.com" },
+  { name="Indirakumar", email="itsmeindirakumar@gmail.com" },
 ]
 description = "A graph-based memory system for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings"
 readme = "README.md"
@@ -66,7 +66,7 @@ dependencies = [
 
 [project.optional-dependencies]
 openai = [
-    "openai>=1.0.0",
+    "openai>=1.0.0,<2.0.0",
     "tiktoken>=0.5.0",
 ]
 anthropic = [
@@ -76,7 +76,7 @@ ollama = [
     "ollama>=0.3.0",
 ]
 litellm = [
-    "litellm>=1.0.0",
+    "litellm>=1.52.0,<2.0.0",
 ]
 embeddings = [
     "sentence-transformers>=2.2.0",
