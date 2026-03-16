@@ -196,10 +196,7 @@ class EnhancedMCPTools:
             if content:
                 # Remove old tags from body first
                 body = re.sub(r"\n\n#[\w\s#]+$", "", body).strip()
-                if append_content:
-                    body = f"{body}\n\n{content}"
-                else:
-                    body = content
+                body = f"{body}\n\n{content}" if append_content else content
 
             # Update tags
             if tags:
@@ -356,13 +353,13 @@ class EnhancedMCPTools:
             avg_salience = sum(salience_scores) / len(salience_scores)
 
             # Type distribution
-            type_counts = {}
+            type_counts: dict[str, int] = {}
             for node in nodes:
                 type_name = node.memory_type.value
                 type_counts[type_name] = type_counts.get(type_name, 0) + 1
 
             # Tag statistics
-            tag_counts = {}
+            tag_counts: dict[str, int] = {}
             for node in nodes:
                 for tag in node.tags:
                     tag_counts[tag] = tag_counts.get(tag, 0) + 1
@@ -414,12 +411,11 @@ class EnhancedMCPTools:
                 "error": str(e),
             }
 
-    async def get_memory_connections(self, memory_id: str, depth: int = 1) -> dict[str, Any]:
+    async def get_memory_connections(self, memory_id: str) -> dict[str, Any]:
         """Get connections for a specific memory.
 
         Args:
             memory_id: Memory ID
-            depth: Traversal depth for connections
 
         Returns:
             Dictionary with connection information

@@ -7,6 +7,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from urllib import error, request
 
 from .core.assistant import build_answer_prompt, retrieve_cited_context, run_answer
@@ -21,7 +22,7 @@ class Spinner:
         self.message = message
         self.spinner_chars = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         self.stop_spinner = False
-        self.spinner_thread = None
+        self.spinner_thread: Optional[threading.Thread] = None
 
     def _spin(self):
         """Run the spinner animation in a separate thread."""

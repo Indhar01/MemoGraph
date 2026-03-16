@@ -268,7 +268,7 @@ class MemoGraphMCPServer:
             all_nodes = self.kernel.graph.all_nodes()
 
             # Count by type
-            type_counts = {}
+            type_counts: dict[str, int] = {}
             for node in all_nodes:
                 type_name = node.memory_type.value
                 type_counts[type_name] = type_counts.get(type_name, 0) + 1

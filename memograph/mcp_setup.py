@@ -262,7 +262,7 @@ class MCPSetup:
 
         # Prepare configuration based on client type
         if "Claude Desktop" in client.name:
-            mcp_config = {
+            mcp_config: dict[str, Any] = {
                 "mcpServers": {
                     "memograph": {
                         "command": "python",
@@ -276,13 +276,13 @@ class MCPSetup:
             }
 
             if model:
-                mcp_config["mcpServers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = model
+                mcp_config["mcpServers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = model  # type: ignore[index]
 
             self._write_config(client.config_path, mcp_config, merge=True)
 
         elif "Cline" in client.name:
             # Cline uses similar format but different structure
-            mcp_config = {
+            mcp_config: dict[str, Any] = {
                 "mcp": {
                     "servers": {
                         "memograph": {
@@ -298,13 +298,13 @@ class MCPSetup:
             }
 
             if model:
-                mcp_config["mcp"]["servers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = model
+                mcp_config["mcp"]["servers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = model  # type: ignore[index]
 
             self._write_config(client.config_path, mcp_config, merge=False)
 
         elif "VS Code" in client.name:
             # VS Code settings.json integration
-            vscode_setting = {
+            vscode_setting: dict[str, Any] = {
                 "cline.mcpServers": {
                     "memograph": {
                         "command": "python",
@@ -318,7 +318,7 @@ class MCPSetup:
             }
 
             if model:
-                vscode_setting["cline.mcpServers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = model
+                vscode_setting["cline.mcpServers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = model  # type: ignore[index]
 
             self._write_config(client.config_path, vscode_setting, merge=True)
 

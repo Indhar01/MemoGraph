@@ -3,6 +3,7 @@
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -137,7 +138,7 @@ class DocumentImporter:
             }
 
         # Process each file
-        results = {"success": 0, "failed": 0, "skipped": 0, "errors": []}
+        results: dict[str, Any] = {"success": 0, "failed": 0, "skipped": 0, "errors": []}
 
         for file in supported_files:
             success, message = self.import_file(str(file), memory_type, salience, tags, overwrite)
