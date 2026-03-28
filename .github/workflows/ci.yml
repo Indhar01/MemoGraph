@@ -56,7 +56,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest --cov=memograph --cov-report=xml --cov-report=term --cov-report=html --ignore=tests/stress/
+          pytest -m "not stress" --cov=memograph --cov-report=xml --cov-report=term --cov-report=html
 
       - name: Check coverage threshold
         run: |

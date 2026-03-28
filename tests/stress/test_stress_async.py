@@ -22,7 +22,6 @@ logger = logging.getLogger("memograph.stress")
 
 
 @pytest.mark.stress
-@pytest.mark.slow
 class TestLargeVaultPerformance:
     """Test performance with large vaults (1000+ memories)."""
 
@@ -117,9 +116,9 @@ class TestLargeVaultPerformance:
         concurrent_time = time.time() - start_time
 
         assert len(results) == len(queries)
-        assert concurrent_time < sequential_time * 0.7, (
-            f"Concurrent ({concurrent_time:.2f}s) not faster than sequential ({sequential_time:.2f}s)"
-        )
+        assert (
+            concurrent_time < sequential_time * 0.7
+        ), f"Concurrent ({concurrent_time:.2f}s) not faster than sequential ({sequential_time:.2f}s)"
 
         logger.info(f"Concurrent queries (5): {concurrent_time:.2f}s")
         logger.info(f"Speedup: {sequential_time / concurrent_time:.2f}x")
@@ -311,6 +310,6 @@ class TestMemoryUsage:
         logger.info(f"Memory increase: {memory_increase:.2f}MB")
 
         # Should not use more than 300MB for 500 memories
-        assert memory_increase < 300, (
-            f"Memory increased by {memory_increase:.2f}MB, expected <300MB"
-        )
+        assert (
+            memory_increase < 300
+        ), f"Memory increased by {memory_increase:.2f}MB, expected <300MB"
