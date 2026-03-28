@@ -6,7 +6,7 @@
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
   }
-  
+
   * {
     @apply border-gray-200;
   }
@@ -16,31 +16,31 @@
   .btn {
     @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
   }
-  
+
   .btn-primary {
     @apply bg-primary-600 text-white hover:bg-primary-700;
   }
-  
+
   .btn-secondary {
     @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
   }
-  
+
   .card {
     @apply bg-white rounded-lg shadow-sm border p-6;
   }
-  
+
   .input {
     @apply w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500;
   }
-  
+
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
-  
+
   .badge-primary {
     @apply bg-primary-100 text-primary-800;
   }
-  
+
   .badge-secondary {
     @apply bg-gray-100 text-gray-800;
   }

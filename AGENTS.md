@@ -122,7 +122,7 @@ pre-commit run --all-files
 - **Type Hints**: Required for all public functions and methods
 - **Docstrings**: Google-style docstrings with Args, Returns, Raises, Example sections
 - **Imports**: Organized by ruff/isort (stdlib, third-party, local)
-- **Naming**: 
+- **Naming**:
   - Classes: PascalCase
   - Functions/methods: snake_case
   - Constants: UPPER_SNAKE_CASE
@@ -451,14 +451,14 @@ The most common issue with MCP setup is Python path resolution. The MCP client m
    # Run the setup script
    python scripts/setup_mcp.py --client bob --vault ~/my-vault
    ```
-   
+
    This creates a wrapper script that ensures the correct Python environment is used.
 
 3. **Find Your Python Path**
    ```bash
    # Windows
    where python
-   
+
    # macOS/Linux
    which python
    ```
@@ -484,7 +484,7 @@ To integrate MemoGraph with Bob-Shell:
    ```
 
 2. **Manual Configuration**
-   
+
    Add to Bob-Shell's MCP configuration file:
    ```json
    {

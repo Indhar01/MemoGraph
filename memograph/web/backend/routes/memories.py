@@ -55,11 +55,11 @@ async def list_memories(
 ):
     """
     List memories with pagination and filtering.
-    
+
     This endpoint provides a paginated list of all memories in the vault with
     optional filtering by memory type, tags, and salience score. Results can
     be sorted by various fields.
-    
+
     Args:
         request: FastAPI request object (injected)
         page: Page number to retrieve (starts at 1)
@@ -69,13 +69,13 @@ async def list_memories(
         min_salience: Minimum salience score to include (0.0-1.0)
         sort_by: Field to sort by (salience, created_at, modified_at, title)
         order: Sort order (asc or desc)
-        
+
     Returns:
         MemoryListResponse with paginated results and metadata
-        
+
     Raises:
         MemoGraphError: If validation fails or kernel is not initialized
-        
+
     Example:
         GET /api/memories?page=1&page_size=20&memory_type=episodic&tags=python,coding
     """
@@ -84,21 +84,21 @@ async def list_memories(
         validate_pagination(page, page_size)
     except MemoGraphError:
         raise
-    
+
     # Get kernel instance from app state
     kernel = getattr(request.app.state, 'kernel', None)
     if not kernel:
         raise kernel_not_initialized_error()
-    
+
     try:
         logger.debug(f"Listing memories: page={page}, page_size={page_size}, memory_type={memory_type}")
         # Get all nodes from the memory graph
         all_nodes = kernel.graph.all_nodes()
         logger.debug(f"Found {len(all_nodes)} total memories in vault")
-        
+
         # Apply filters sequentially
         filtered_nodes = all_nodes
-        
+
         # Filter by memory type if specified
         if memory_type:
             # Validate that the memory type is valid
@@ -108,30 +108,30 @@ async def list_memories(
                 MemoryType(memory_type)
             except ValueError:
                 raise invalid_memory_type_error(memory_type)
-            
+
             filtered_nodes = [n for n in filtered_nodes if n.memory_type.value == memory_type]
             logger.debug(f"After memory_type filter: {len(filtered_nodes)} memories")
-        
+
         # Filter by tags if specified (OR operation - matches any tag)
         if tags:
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             if tag_list:
                 filtered_nodes = [
-                    n for n in filtered_nodes 
+                    n for n in filtered_nodes
                     if any(tag in n.tags for tag in tag_list)
                 ]
                 logger.debug(f"After tags filter ({tag_list}): {len(filtered_nodes)} memories")
-        
+
         # Filter by minimum salience if specified
         if min_salience > 0:
             validate_salience(min_salience)
             filtered_nodes = [n for n in filtered_nodes if n.salience >= min_salience]
             logger.debug(f"After salience filter (>={min_salience}): {len(filtered_nodes)} memories")
-        
+
         # Sort the filtered results
         reverse = (order == "desc")
         logger.debug(f"Sorting by {sort_by} ({order})")
-        
+
         if sort_by == "salience":
             filtered_nodes.sort(key=lambda n: n.salience, reverse=reverse)
         elif sort_by == "created_at":
@@ -141,15 +141,15 @@ async def list_memories(
         elif sort_by == "title":
             # Case-insensitive title sorting
             filtered_nodes.sort(key=lambda n: n.title.lower(), reverse=reverse)
-        
+
         # Apply pagination to the filtered and sorted results
         total = len(filtered_nodes)
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         page_nodes = filtered_nodes[start_idx:end_idx]
-        
+
         logger.debug(f"Returning page {page}: items {start_idx}-{end_idx} of {total}")
-        
+
         # Convert memory nodes to API response models
         memory_responses = [
             MemoryResponse(
@@ -169,7 +169,7 @@ async def list_memories(
             )
             for node in page_nodes
         ]
-        
+
         # Return paginated response with metadata
         return MemoryListResponse(
             memories=memory_responses,
@@ -183,12 +183,12 @@ async def list_memories(
 async def get_memory(memory_id: str, request: Request):
     """Get a specific memory by ID."""
     kernel = request.app.state.kernel
-    
+
     try:
         node = kernel.graph.get(memory_id)
         if not node:
             raise HTTPException(status_code=404, detail=f"Memory '{memory_id}' not found")
-        
+
         return MemoryResponse(
             id=node.id,
             title=node.title,
@@ -204,7 +204,7 @@ async def get_memory(memory_id: str, request: Request):
             backlinks=node.backlinks,
             source_path=node.source_path
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -215,11 +215,11 @@ async def get_memory(memory_id: str, request: Request):
 async def create_memory(memory: CreateMemoryRequest, request: Request):
     """Create a new memory."""
     kernel = request.app.state.kernel
-    
+
     try:
         # Convert memory_type string to enum
         memory_type_enum = MemoryType(memory.memory_type)
-        
+
         # Create memory
         file_path = await kernel.remember_async(
             title=memory.title,
@@ -229,20 +229,20 @@ async def create_memory(memory: CreateMemoryRequest, request: Request):
             salience=memory.salience,
             meta=memory.meta
         )
-        
+
         # Re-ingest to update graph
         await kernel.ingest_async(force=False)
-        
+
         # Extract memory ID from file path
         from pathlib import Path
         memory_id = Path(file_path).stem
-        
+
         return {
             "id": memory_id,
             "file_path": file_path,
             "message": "Memory created successfully"
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create memory: {str(e)}")
 
@@ -251,13 +251,13 @@ async def create_memory(memory: CreateMemoryRequest, request: Request):
 async def update_memory(memory_id: str, update: UpdateMemoryRequest, request: Request):
     """Update an existing memory."""
     kernel = request.app.state.kernel
-    
+
     try:
         # Check if memory exists
         node = kernel.graph.get(memory_id)
         if not node:
             raise HTTPException(status_code=404, detail=f"Memory '{memory_id}' not found")
-        
+
         # Prepare update data
         update_data = {}
         if update.content:
@@ -268,24 +268,24 @@ async def update_memory(memory_id: str, update: UpdateMemoryRequest, request: Re
             update_data["salience"] = update.salience
         if update.meta:
             update_data["meta"] = update.meta
-        
+
         # Update memory
         updated, errors = await kernel.update_many_async(
             [(memory_id, update_data)],
             continue_on_error=False
         )
-        
+
         if errors:
             raise HTTPException(status_code=500, detail=f"Update failed: {errors[0][1]}")
-        
+
         # Re-ingest
         await kernel.ingest_async(force=False)
-        
+
         return {
             "id": memory_id,
             "message": "Memory updated successfully"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -296,27 +296,27 @@ async def update_memory(memory_id: str, update: UpdateMemoryRequest, request: Re
 async def delete_memory(memory_id: str, request: Request):
     """Delete a memory."""
     kernel = request.app.state.kernel
-    
+
     try:
         node = kernel.graph.get(memory_id)
         if not node:
             raise HTTPException(status_code=404, detail=f"Memory '{memory_id}' not found")
-        
+
         # Delete the file
         if node.source_path:
             from pathlib import Path
             file_path = Path(node.source_path)
             if file_path.exists():
                 file_path.unlink()
-        
+
         # Remove from graph
         kernel.graph.remove_node(memory_id)
-        
+
         return {
             "id": memory_id,
             "message": "Memory deleted successfully"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

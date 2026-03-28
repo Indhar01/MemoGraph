@@ -130,35 +130,35 @@ jobs:
           import time
           import tempfile
           import os
-          
+
           # Create temp vault
           with tempfile.TemporaryDirectory() as tmpdir:
               vault = os.path.join(tmpdir, 'vault')
               os.makedirs(vault)
-              
+
               # Create test file
               test_file = os.path.join(vault, 'test.md')
               with open(test_file, 'w') as f:
                   f.write('---\ntitle: Test\ntags: [test]\n---\nContent')
-              
+
               # Benchmark
               kernel = EnhancedMemoryKernel(vault_path=vault)
-              
+
               start = time.time()
               kernel.ingest()
               ingest_time = time.time() - start
-              
+
               start = time.time()
               results = kernel.retrieve_nodes('test')
               query_time = time.time() - start
-              
+
               print(f'Ingest time: {ingest_time:.3f}s')
               print(f'Query time: {query_time:.3f}s')
-              
+
               # Fail if too slow
               assert ingest_time < 5.0, f'Ingest too slow: {ingest_time:.3f}s'
               assert query_time < 1.0, f'Query too slow: {query_time:.3f}s'
-              
+
               print('✓ Performance benchmarks passed')
           "
 
