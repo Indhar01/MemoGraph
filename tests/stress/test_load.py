@@ -183,9 +183,9 @@ class TestSpikeLoad:
         logger.info(f"Recovery: 10 ops in {recovery_time:.3f}s")
 
         # Recovery should be similar to baseline
-        assert recovery_time < baseline_time * 2, (
-            f"System not recovering: {recovery_time:.3f}s vs {baseline_time:.3f}s baseline"
-        )
+        assert (
+            recovery_time < baseline_time * 2
+        ), f"System not recovering: {recovery_time:.3f}s vs {baseline_time:.3f}s baseline"
 
     @pytest.mark.asyncio
     async def test_query_spike(self, tmp_path: Path):
