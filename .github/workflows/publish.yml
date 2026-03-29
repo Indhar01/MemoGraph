@@ -27,7 +27,7 @@ jobs:
           pip install build
 
       - name: Build package
-          # This creates the dist/ folder
+        # This creates the dist/ folder
         run: python -m build
 
       - name: Publish to PyPI

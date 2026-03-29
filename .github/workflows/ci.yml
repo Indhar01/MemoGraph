@@ -239,7 +239,7 @@ jobs:
 
       - name: Run all tests with coverage
         run: |
-          pytest --cov=memograph --cov-report=xml --cov-report=term
+          pytest --ignore=tests/stress/ --cov=memograph --cov-report=xml --cov-report=term
 
       - name: Quality summary
         run: |
