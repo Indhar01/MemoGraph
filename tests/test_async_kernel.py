@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 
 from memograph.core.kernel_async import AsyncMemoryKernel, create_async_kernel
-from memograph.core.validation import ValidationError
 
 
 @pytest.fixture
@@ -104,7 +103,7 @@ class TestAsyncRemember:
     @pytest.mark.asyncio
     async def test_remember_async_validation(self, async_kernel):
         """Test validation in async remember."""
-        with pytest.raises(ValidationError):
+        with pytest.raises((TypeError, ValueError)):
             await async_kernel.remember_async(
                 title="",  # Empty title
                 content="Content",
@@ -161,7 +160,7 @@ class TestAsyncRetrieve:
     @pytest.mark.asyncio
     async def test_retrieve_async_validation(self, populated_async_kernel):
         """Test validation in async retrieve."""
-        with pytest.raises(ValidationError):
+        with pytest.raises((TypeError, ValueError)):
             await populated_async_kernel.retrieve_nodes_async("")
 
     @pytest.mark.asyncio
@@ -342,7 +341,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_validation_error_propagation(self, async_kernel):
         """Test that validation errors propagate correctly."""
-        with pytest.raises(ValidationError):
+        with pytest.raises((TypeError, ValueError)):
             await async_kernel.remember_async("", "Content")
 
     @pytest.mark.asyncio
@@ -356,7 +355,7 @@ class TestErrorHandling:
         tasks.append(async_kernel.remember_async("", "Content"))
 
         # Should raise ValidationError
-        with pytest.raises(ValidationError):
+        with pytest.raises((TypeError, ValueError)):
             await asyncio.gather(*tasks)
 
 

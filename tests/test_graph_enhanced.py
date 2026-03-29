@@ -408,7 +408,7 @@ class TestIndexMaintenance:
         graph.clear()
 
         # Everything should be empty
-        assert len(graph._node_index) == 0
+        assert len(graph._nodes) == 0
         assert len(graph._tag_index) == 0
         assert len(graph._type_index) == 0
         assert len(graph._backlink_index) == 0

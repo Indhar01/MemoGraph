@@ -46,7 +46,7 @@ class Action:
 
     def __post_init__(self):
         if self.metadata is None:
-            self.meta dict[str, Any] = {}
+            self.metadata: dict[str, Any] = {}
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""

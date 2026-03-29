@@ -5,7 +5,15 @@ from .core.gam_retriever import GAMRetriever
 from .core.gam_scorer import GAMConfig, GAMScorer
 from .core.kernel import MemoryKernel
 
-__version__ = "0.0.2"
+try:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        __version__ = version("memograph")
+    except PackageNotFoundError:
+        __version__ = "0.1.0"
+except ImportError:
+    __version__ = "0.1.0"
 __all__ = [
     "MemoryKernel",
     "MemoryType",

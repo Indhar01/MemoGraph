@@ -23,7 +23,7 @@ class MemoryResponse(BaseModel):
     source_path: str | None = None
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "python-tips",
                 "title": "Python Tips",

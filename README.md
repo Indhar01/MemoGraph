@@ -93,7 +93,7 @@ print(context)
 
 MemoGraph includes a full-featured MCP server for seamless integration with AI assistants like **Cline** and **Claude Desktop**.
 
-### 14 Available Tools
+### 19 Available Tools
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -105,6 +105,8 @@ MemoGraph includes a full-featured MCP server for seamless integration with AI a
 | **Analytics** | `get_vault_stats` | Vault statistics and insights |
 | **Discovery** | `list_available_tools` | List all available tools |
 | **Autonomous** | `auto_hook_query`, `auto_hook_response`, `configure_autonomous_mode`, `get_autonomous_config` | Autonomous memory management |
+| **Graph** | `relate_memories`, `search_by_graph`, `find_path` | Graph-native linking and traversal |
+| **Bulk** | `bulk_create` | Create multiple memories in one call |
 
 ### Quick Setup for Cline
 

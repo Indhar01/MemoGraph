@@ -7,7 +7,7 @@
         "env": {
           "MEMOGRAPH_VAULT": "C:\\Users\\YOUR_USERNAME\\Documents\\my-vault"
         },
-        "comment": "MemoGraph MCP Server - 10 tools available: search_vault, create_memory, query_with_context, get_vault_stats, list_memories, get_memory, import_document, delete_memory, update_memory, list_available_tools. LLM provider is optional - if not set, context is returned for Cline to use. To enable answer generation in MemoGraph, add: MEMOGRAPH_PROVIDER=ollama and MEMOGRAPH_MODEL=llama3.1:latest. See CONFIG_REFERENCE.md for details."
+        "comment": "MemoGraph MCP Server - 19 tools available: search_vault, create_memory, query_with_context, get_vault_info, get_vault_stats, list_memories, get_memory, import_document, delete_memory, update_memory, list_available_tools, auto_hook_query, auto_hook_response, configure_autonomous_mode, get_autonomous_config, relate_memories, search_by_graph, find_path, bulk_create. LLM provider is optional - if not set, context is returned for Cline to use. To enable answer generation in MemoGraph, add: MEMOGRAPH_PROVIDER=ollama and MEMOGRAPH_MODEL=llama3.1:latest."
       }
     }
   }

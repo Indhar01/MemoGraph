@@ -289,7 +289,7 @@ async def update_memory(memory_id: str, update: UpdateMemoryRequest, request: Re
             )
 
         # Prepare update data
-        update_ dict[str, Any] = {}
+        update_data: dict = {}
         if update.content:
             update_data["content"] = update.content
         if update.tags is not None:
