@@ -40,7 +40,7 @@ class CacheStats:
         total = self.hits + self.misses
         return self.hits / total if total > 0 else 0.0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert stats to dictionary."""
         return {**asdict(self), "hit_rate": self.hit_rate}
 

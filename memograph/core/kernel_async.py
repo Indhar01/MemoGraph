@@ -91,7 +91,7 @@ class AsyncMemoryKernel(EnhancedMemoryKernel):
             f"AsyncMemoryKernel initialized with max_concurrent={max_concurrent}"
         )
 
-    async def remember_async(
+    async def remember_async(  # type: ignore[override]
         self,
         title: str,
         content: str,

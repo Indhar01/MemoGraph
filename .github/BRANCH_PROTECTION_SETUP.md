@@ -141,15 +141,15 @@ Protection Rules:
      - Dismiss stale reviews: Yes
      - Require review from Code Owners: Yes
      - Require approval of latest push: Yes
-  
+
   ✅ Require status checks to pass
      - Required checks: lint, test, test-enhanced, integration, quality-gates
      - Require branches up to date: Yes
-  
+
   ✅ Require conversation resolution: Yes
   ✅ Include administrators: Yes
   ✅ Require linear history: Yes (Optional)
-  
+
   ❌ Allow force pushes: No
   ❌ Allow deletions: No
 ```
@@ -199,7 +199,7 @@ If you need to bypass (only if admin bypass is enabled):
 ## Troubleshooting
 
 ### Issue: "Review required" but I'm the only developer
-**Solution**: 
+**Solution**:
 - Either allow self-review by not including administrators in rules
 - Or temporarily disable "Require review from Code Owners" for personal projects
 - Or add a secondary GitHub account as collaborator
@@ -252,6 +252,6 @@ If you encounter any issues with branch protection setup, refer to this guide or
 
 ---
 
-**Setup Date**: 2026-03-29  
-**Last Updated**: 2026-03-29  
+**Setup Date**: 2026-03-29
+**Last Updated**: 2026-03-29
 **Maintained By**: @Indhar01

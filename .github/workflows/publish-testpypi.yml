@@ -17,7 +17,7 @@ jobs:
     environment:
       name: testpypi
       url: https://test.pypi.org/project/memograph/
-    
+
     permissions:
       # IMPORTANT: This is required for Trusted Publishing (OIDC)
       id-token: write

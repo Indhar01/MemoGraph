@@ -53,7 +53,7 @@ class GraphStats:
 
     def __post_init__(self):
         if self.nodes_by_type is None:
-            self.nodes_by_type = {}
+            self.nodes_by_type: dict[str, int] = {}
 
     def to_dict(self) -> dict:
         """Convert stats to dictionary."""
@@ -296,13 +296,13 @@ class EnhancedVaultGraph(VaultGraph):
             for mem_type, node_ids in self._type_index.items()
         }
 
-    def all_nodes(self) -> Iterator[MemoryNode]:
+    def all_nodes(self) -> list[MemoryNode]:
         """Iterate over all nodes efficiently.
 
-        Yields:
-            Memory nodes
+        Returns:
+            List of memory nodes
         """
-        return iter(self._node_index.values())
+        return list(self._node_index.values())
 
     def neighbors(
         self, node_id: str, depth: int = 1, include_backlinks: bool = True

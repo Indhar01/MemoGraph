@@ -31,13 +31,13 @@ def print_section(title: str) -> None:
 def check_version_consistency() -> bool:
     """Check if versions are consistent across files."""
     print_section("📦 Version Consistency Check")
-    
+
     versions = {}
     files_to_check = {
         "pyproject.toml": r'version = "([^"]+)"',
         "smithery.json": r'"version": "([^"]+)"',
     }
-    
+
     for file_path, pattern in files_to_check.items():
         try:
             with open(file_path, "r") as f:
@@ -52,7 +52,7 @@ def check_version_consistency() -> bool:
         except FileNotFoundError:
             print(f"{check_mark(False)} {file_path}: File not found")
             return False
-    
+
     # Check if all versions match
     version_values = list(versions.values())
     if len(set(version_values)) == 1:
@@ -67,15 +67,12 @@ def check_version_consistency() -> bool:
 def check_git_status() -> bool:
     """Check if git working directory is clean."""
     print_section("🔍 Git Status Check")
-    
+
     try:
         result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            check=True
+            ["git", "status", "--porcelain"], capture_output=True, text=True, check=True
         )
-        
+
         if result.stdout.strip():
             print(f"{check_mark(False)} Working directory has uncommitted changes:")
             print(result.stdout)
@@ -92,16 +89,16 @@ def check_git_status() -> bool:
 def check_tests() -> bool:
     """Check if tests pass."""
     print_section("🧪 Test Suite Check")
-    
+
     print("Running pytest...")
     try:
         result = subprocess.run(
             ["pytest", "-v", "--tb=short"],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300,  # 5 minute timeout
         )
-        
+
         if result.returncode == 0:
             print(f"{check_mark(True)} All tests passed")
             # Show summary
@@ -128,16 +125,18 @@ def check_tests() -> bool:
 def check_pypi_credentials() -> bool:
     """Check if PyPI credentials are configured."""
     print_section("🔑 PyPI Credentials Check")
-    
+
     pypirc_path = Path.home() / ".pypirc"
     has_pypirc = pypirc_path.exists()
     has_env = "TWINE_USERNAME" in os.environ and "TWINE_PASSWORD" in os.environ
-    
+
     if has_pypirc:
         print(f"{check_mark(True)} Found ~/.pypirc configuration")
         return True
     elif has_env:
-        print(f"{check_mark(True)} Found TWINE_USERNAME and TWINE_PASSWORD environment variables")
+        print(
+            f"{check_mark(True)} Found TWINE_USERNAME and TWINE_PASSWORD environment variables"
+        )
         return True
     else:
         print(f"{check_mark(False)} No PyPI credentials found")
@@ -151,24 +150,24 @@ def check_pypi_credentials() -> bool:
 def check_smithery_json() -> bool:
     """Validate smithery.json configuration."""
     print_section("📝 Smithery Config Check")
-    
+
     try:
         with open("smithery.json", "r") as f:
             config = json.load(f)
-        
+
         required_fields = ["name", "version", "description", "author", "tools"]
         missing = [f for f in required_fields if f not in config]
-        
+
         if missing:
             print(f"{check_mark(False)} Missing required fields: {', '.join(missing)}")
             return False
-        
+
         print(f"{check_mark(True)} All required fields present")
         print(f"  Name: {config['name']}")
         print(f"  Version: {config['version']}")
         print(f"  Tools: {len(config['tools'])} tools configured")
         return True
-        
+
     except FileNotFoundError:
         print(f"{check_mark(False)} smithery.json not found")
         return False
@@ -180,16 +179,16 @@ def check_smithery_json() -> bool:
 def check_mcp_server() -> bool:
     """Check if MCP server can start."""
     print_section("🔌 MCP Server Check")
-    
+
     print("Testing if MCP server can start...")
     try:
         result = subprocess.run(
             ["python", "-m", "memograph.mcp.run_server", "--help"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
-        
+
         if result.returncode == 0:
             print(f"{check_mark(True)} MCP server module loads successfully")
             return True
@@ -208,25 +207,21 @@ def check_mcp_server() -> bool:
 def check_build_tools() -> bool:
     """Check if build tools are installed."""
     print_section("🛠️  Build Tools Check")
-    
+
     tools = ["build", "twine"]
     all_present = True
-    
+
     for tool in tools:
         try:
             if tool == "build":
                 result = subprocess.run(
-                    ["python", "-m", "build", "--help"],
-                    capture_output=True,
-                    timeout=5
+                    ["python", "-m", "build", "--help"], capture_output=True, timeout=5
                 )
             else:
                 result = subprocess.run(
-                    [tool, "--version"],
-                    capture_output=True,
-                    timeout=5
+                    [tool, "--version"], capture_output=True, timeout=5
                 )
-            
+
             if result.returncode == 0:
                 print(f"{check_mark(True)} {tool} is installed")
             else:
@@ -235,10 +230,10 @@ def check_build_tools() -> bool:
         except FileNotFoundError:
             print(f"{check_mark(False)} {tool} not found")
             all_present = False
-    
+
     if not all_present:
         print(f"\n{YELLOW}Install missing tools with: pip install build twine{RESET}")
-    
+
     return all_present
 
 
@@ -247,7 +242,7 @@ def main():
     print(f"\n{BLUE}{'=' * 60}{RESET}")
     print(f"{BLUE}🚀 MemoGraph Pre-Publish Checklist{RESET}")
     print(f"{BLUE}{'=' * 60}{RESET}")
-    
+
     checks = [
         ("Version Consistency", check_version_consistency),
         ("Git Status", check_git_status),
@@ -257,7 +252,7 @@ def main():
         ("PyPI Credentials", check_pypi_credentials),
         ("Test Suite", check_tests),
     ]
-    
+
     results = {}
     for name, check_func in checks:
         try:
@@ -265,28 +260,30 @@ def main():
         except Exception as e:
             print(f"\n{RED}Error during {name}: {e}{RESET}")
             results[name] = False
-    
+
     # Print summary
     print_section("📊 Summary")
-    
+
     passed = sum(results.values())
     total = len(results)
-    
+
     for name, result in results.items():
         status = f"{GREEN}PASS{RESET}" if result else f"{RED}FAIL{RESET}"
         print(f"{check_mark(result)} {name}: {status}")
-    
+
     print(f"\n{BLUE}{'=' * 60}{RESET}")
     print(f"Results: {passed}/{total} checks passed")
-    
+
     if passed == total:
         print(f"\n{GREEN}✅ All checks passed! You're ready to publish.{RESET}")
-        print(f"\nNext step:")
-        print(f"  bash scripts/publish_to_marketplace.sh")
+        print("\nNext step:")
+        print("  bash scripts/publish_to_marketplace.sh")
         return 0
     else:
-        print(f"\n{RED}❌ {total - passed} check(s) failed. Please fix issues before publishing.{RESET}")
-        print(f"\nSee MARKETPLACE_PUBLISHING_GUIDE.md for help.")
+        print(
+            f"\n{RED}❌ {total - passed} check(s) failed. Please fix issues before publishing.{RESET}"
+        )
+        print("\nSee MARKETPLACE_PUBLISHING_GUIDE.md for help.")
         return 1
 
 

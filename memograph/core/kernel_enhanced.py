@@ -115,13 +115,13 @@ class EnhancedMemoryKernel(MemoryKernel):
 
         if enable_cache:
             # Set cache directory
-            cache_dir = (
+            cache_dir_path: Path = (
                 Path(vault_path) / ".cache" if cache_dir is None else Path(cache_dir)
             )
 
             # Initialize embedding cache
             self.embedding_cache = MultiLevelCache(
-                cache_dir=cache_dir / "embeddings",
+                cache_dir=cache_dir_path / "embeddings",
                 memory_max_size=memory_cache_size,
                 memory_max_mb=memory_cache_mb,
                 enable_disk_cache=enable_disk_cache,
@@ -139,7 +139,7 @@ class EnhancedMemoryKernel(MemoryKernel):
                 f"query_ttl={query_cache_ttl}s"
             )
 
-    def remember(
+    def remember(  # type: ignore[override]
         self,
         title: str,
         content: str,
@@ -201,7 +201,7 @@ class EnhancedMemoryKernel(MemoryKernel):
                 context={"title": title, "error": str(e)},
             )
 
-    def retrieve_nodes(
+    def retrieve_nodes(  # type: ignore[override]
         self,
         query: str,
         tags: list[str] | None = None,
@@ -347,7 +347,7 @@ class EnhancedMemoryKernel(MemoryKernel):
             self.query_cache.clear()
             logger.info("Query cache cleared")
 
-    def ingest(self, force: bool = False, show_progress: bool = True):
+    def ingest(self, force: bool = False, show_progress: bool = True):  # type: ignore[override]
         """Ingest vault with progress indication.
 
         Args:

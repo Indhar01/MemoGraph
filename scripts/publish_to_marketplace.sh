@@ -174,14 +174,14 @@ if [ -f "smithery.json" ]; then
     # Extract version from smithery.json (handles both with and without quotes)
     # Remove carriage returns and trim whitespace
     SMITHERY_VERSION=$($PYTHON_CMD -c "import json; print(json.load(open('smithery.json'))['version'])" 2>/dev/null | tr -d '\r' | xargs)
-    
+
     if [ -n "$SMITHERY_VERSION" ]; then
         info "Version in smithery.json: $SMITHERY_VERSION"
-        
+
         # Trim both versions and remove any remaining carriage returns
         PYPROJECT_VERSION=$(echo "$PYPROJECT_VERSION" | tr -d '\r' | xargs)
         SMITHERY_VERSION=$(echo "$SMITHERY_VERSION" | tr -d '\r' | xargs)
-        
+
         if [ "$PYPROJECT_VERSION" != "$SMITHERY_VERSION" ]; then
             error_exit "Version mismatch! pyproject.toml ($PYPROJECT_VERSION) != smithery.json ($SMITHERY_VERSION)"
         fi
@@ -288,11 +288,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
             warn "Nothing to commit (already committed?)"
         fi
     fi
-    
+
     # Create tag
     if git tag -a "v$CURRENT_VERSION" -m "Release v$CURRENT_VERSION"; then
         echo -e "${GREEN}✓ Tag created${NC}"
-        
+
         # Push to remote
         if git remote | grep -q '^origin$'; then
             echo "Pushing to $CURRENT_BRANCH and tags..."
