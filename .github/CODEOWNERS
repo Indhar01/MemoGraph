@@ -1,0 +1,37 @@
+# CODEOWNERS file for MemoGraph
+# This file defines code ownership and automatically assigns reviewers for pull requests
+# Documentation: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo
+* @Indhar01
+
+# Core functionality - requires careful review
+/memograph/core/ @Indhar01
+/memograph/adapters/ @Indhar01
+
+# CI/CD workflows - critical for automation
+/.github/workflows/ @Indhar01
+
+# Tests - ensure quality
+/tests/ @Indhar01
+
+# Documentation - maintain clarity
+*.md @Indhar01
+/docs/ @Indhar01
+
+# Configuration files - handle with care
+pyproject.toml @Indhar01
+setup.py @Indhar01
+requirements.txt @Indhar01
+.pre-commit-config.yaml @Indhar01
+.ruff.toml @Indhar01
+mypy.ini @Indhar01
+
+# MCP Server - integration point
+/memograph/mcp/ @Indhar01
+
+# Security and contribution guidelines
+SECURITY.md @Indhar01
+CODE_OF_CONDUCT.md @Indhar01
+CONTRIBUTING.md @Indhar01
+LICENSE @Indhar01

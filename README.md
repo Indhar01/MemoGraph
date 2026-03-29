@@ -3,6 +3,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/memograph)](https://pypi.org/project/memograph/)
 [![Python Version](https://img.shields.io/pypi/pyversions/memograph)](https://pypi.org/project/memograph/)
 [![License](https://img.shields.io/github/license/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/blob/main/LICENSE)
+[![Smithery](https://smithery.ai/badge/@indhar01/memograph)](https://smithery.ai/server/@indhar01/memograph)
+[![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](http://mypy-lang.org/)
@@ -349,7 +351,7 @@ Inspired by the need for better memory management in LLM applications. Built wit
 
 ## 🚦 Status
 
-**Current Version**: 0.0.2 (Alpha)
+**Current Version**: 0.1.0 (Alpha - Marketplace Ready)
 
 This project is in active development with a focus on code quality and stability:
 
