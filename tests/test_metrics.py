@@ -257,13 +257,20 @@ class TestActionLogger:
         assert len(logger.get_recent_actions()) == 0
 
     def test_clear_history_before_date(self, tmp_path):
+        import time
+
         logger = ActionLogger(str(tmp_path / "vault"))
         logger.log_action("m1", "create", "Old")
+
+        # Small delay to ensure different timestamps (increased for CI reliability)
+        time.sleep(0.1)
         cutoff = datetime.now()
+
         logger.log_action("m2", "create", "New")
         logger.clear_history(before_date=cutoff)
         remaining = logger.get_recent_actions()
         assert len(remaining) == 1
+        assert remaining[0]["memory_id"] == "m2"
 
     def test_group_consecutive(self, tmp_path):
         logger = ActionLogger(str(tmp_path / "vault"))

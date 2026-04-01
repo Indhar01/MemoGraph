@@ -42,8 +42,12 @@ class Action:
     action_type: ActionType
     summary: str
     timestamp: str
+<<<<<<< HEAD
     timestamp_ns: int | None = None
     metadata: dict[str, Any] = None
+=======
+    metadata: dict[str, Any] | None = None
+>>>>>>> f46ba8bae6dd3cf969f0aad7ae1feae5096c7676
     user: str | None = None
 
     def __post_init__(self):
@@ -86,7 +90,7 @@ class ActionLogger:
             memory_id: ID of the memory
             action_type: Type of action performed
             summary: Human-readable summary
-            meta Additional metadata
+            metadata: Additional metadata
             user: User who performed action (optional)
 
         Returns:

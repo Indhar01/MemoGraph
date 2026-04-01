@@ -202,7 +202,7 @@ class MemoryQuery:
             )
 
         # Retrieve nodes using the kernel
-        results = self.kernel.retrieve_nodes(
+        results: list[MemoryNode] = self.kernel.retrieve_nodes(
             query=self._query,
             tags=self._tags,
             depth=self._depth,
@@ -1060,7 +1060,7 @@ class MemoryKernel:
         for idx, (memory_id, update_data) in enumerate(updates):
             try:
                 # Find the memory file
-                memory_path = None
+                memory_path: Path | None = None
                 for md_file in self.vault_path.rglob("*.md"):
                     if md_file.stem == memory_id or md_file.stem.startswith(
                         f"{memory_id}-"
@@ -1127,7 +1127,7 @@ class MemoryKernel:
                     + yaml.safe_dump(frontmatter, sort_keys=False).strip()
                     + "\n---\n\n"
                 )
-                memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")
+                memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")  # type: ignore[union-attr]
 
                 successful_ids.append(memory_id)
                 logger.debug(

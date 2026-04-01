@@ -167,9 +167,12 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
         if not memograph_server:
             return []
         nodes = memograph_server.kernel.graph.all_nodes()
+        from typing import cast
+        from mcp.types import AnyUrl
+
         return [
             Resource(
-                uri=f"memograph://vault/{node.id}",
+                uri=cast(AnyUrl, f"memograph://vault/{node.id}"),
                 name=node.title,
                 description=f"[{node.memory_type.value}] {', '.join(node.tags)}"
                 if node.tags
@@ -200,9 +203,12 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
                 content += f"**Links:** {', '.join(node.links)}\n\n"
             content += node.content
 
+            from typing import cast
+            from mcp.types import AnyUrl
+
             return [
                 TextResourceContents(
-                    uri=uri_str, text=content, mimeType="text/markdown"
+                    uri=cast(AnyUrl, uri_str), text=content, mimeType="text/markdown"
                 )
             ]
 
@@ -212,9 +218,12 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
             content = f"# Memories tagged: {tag}\n\n"
             for node in nodes:
                 content += f"- **{node.title}** ({node.memory_type.value}, salience: {node.salience})\n"
+            from typing import cast
+            from mcp.types import AnyUrl
+
             return [
                 TextResourceContents(
-                    uri=uri_str, text=content, mimeType="text/markdown"
+                    uri=cast(AnyUrl, uri_str), text=content, mimeType="text/markdown"
                 )
             ]
 

@@ -659,7 +659,7 @@ class MemoGraphMCPServer:
         """
         try:
             # Find the memory file
-            memory_path = None
+            memory_path: Path | None = None
             for md_file in self.vault_path.rglob("*.md"):
                 if md_file.stem == memory_id or md_file.stem.startswith(
                     f"{memory_id}-"
