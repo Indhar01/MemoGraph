@@ -1,182 +1,177 @@
 {
-  "name": "memograph",
-  "version": "0.1.0",
-  "description": "Graph-based memory system for LLMs with intelligent retrieval",
-  "author": "Indirakumar",
-  "homepage": "https://github.com/Indhar01/MemoGraph",
-  "license": "MIT",
-  "tags": ["memory", "graph", "llm", "knowledge-graph", "semantic-search", "retrieval"],
-  "capabilities": {
-    "storage": true,
-    "semantic_search": true,
-    "graph_traversal": true,
-    "embeddings": true,
-    "autonomous_hooks": true
+  "serverInfo": {
+    "name": "memograph",
+    "version": "0.1.0"
   },
-  "runtime": {
-    "type": "python",
-    "version": ">=3.10",
-    "entrypoint": "-m memograph.mcp.run_server"
-  },
-  "configSchema": {
-    "type": "object",
-    "required": ["vault"],
-    "properties": {
-      "vault": {
-        "type": "string",
-        "description": "Path to your MemoGraph vault directory",
-        "env": "MEMOGRAPH_VAULT",
-        "examples": ["~/memograph-vault", "/path/to/vault", "./vault"]
-      },
-      "llm_provider": {
-        "type": "string",
-        "description": "LLM provider (ollama, claude, or openai)",
-        "enum": ["ollama", "claude", "openai"],
-        "env": "MEMOGRAPH_PROVIDER",
-        "default": "ollama"
-      },
-      "llm_model": {
-        "type": "string",
-        "description": "Specific model name to use",
-        "env": "MEMOGRAPH_MODEL",
-        "examples": ["llama3.1", "claude-3-5-sonnet-20241022", "gpt-4"]
-      },
-      "embedding_provider": {
-        "type": "string",
-        "description": "Embedding provider for semantic search (sentence-transformers, openai, ollama, or none)",
-        "enum": ["sentence-transformers", "openai", "ollama", "none"],
-        "env": "MEMOGRAPH_EMBEDDING_PROVIDER",
-        "default": "sentence-transformers"
-      },
-      "embedding_model": {
-        "type": "string",
-        "description": "Specific embedding model to use",
-        "env": "MEMOGRAPH_EMBEDDING_MODEL",
-        "examples": ["all-MiniLM-L6-v2", "text-embedding-3-small", "nomic-embed-text"]
-      },
-      "enable_gam": {
-        "type": "boolean",
-        "description": "Enable Graph Attention Memory (GAM) for enhanced retrieval",
-        "default": false
-      },
-      "autonomous_mode": {
-        "type": "boolean",
-        "description": "Enable autonomous memory capture during conversations",
-        "default": true
-      },
-      "log_level": {
-        "type": "string",
-        "description": "Logging level (DEBUG, INFO, WARNING, ERROR)",
-        "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
-        "default": "INFO"
-      }
-    }
+  "authentication": {
+    "required": false,
+    "schemes": []
   },
   "tools": [
     {
       "name": "search_vault",
       "description": "Search memories using semantic or keyword search with configurable filters",
-      "category": "search"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search query" },
+          "limit": { "type": "integer", "description": "Max results to return", "default": 10 }
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "query_with_context",
       "description": "Retrieve relevant context for a question with token compression for LLM prompts",
-      "category": "search"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string", "description": "The question to answer" }
+        },
+        "required": ["question"]
+      }
     },
     {
       "name": "create_memory",
       "description": "Create a new memory in the vault with title, content, tags, and type",
-      "category": "create"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "type": { "type": "string" }
+        },
+        "required": ["title", "content"]
+      }
     },
     {
       "name": "import_document",
       "description": "Import TXT or MD documents into the vault, preserving formatting and metadata",
-      "category": "create"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Path to the document to import" }
+        },
+        "required": ["path"]
+      }
     },
     {
       "name": "bulk_create",
       "description": "Create multiple memories in a single operation for efficient batch imports",
-      "category": "create"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "content": { "type": "string" },
+                "tags": { "type": "array", "items": { "type": "string" } }
+              },
+              "required": ["title", "content"]
+            }
+          }
+        },
+        "required": ["memories"]
+      }
     },
     {
       "name": "list_memories",
       "description": "List memories with optional filters (tags, type, date range)",
-      "category": "read"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "type": { "type": "string" },
+          "limit": { "type": "integer", "default": 20 }
+        }
+      }
     },
     {
       "name": "get_memory",
       "description": "Get full content and metadata of a specific memory by title",
-      "category": "read"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Title of the memory to retrieve" }
+        },
+        "required": ["title"]
+      }
     },
     {
       "name": "get_vault_info",
       "description": "Get information about the configured vault (path, size, configuration)",
-      "category": "read"
-    },
-    {
-      "name": "update_memory",
-      "description": "Update an existing memory's content, tags, or metadata",
-      "category": "update"
-    },
-    {
-      "name": "delete_memory",
-      "description": "Delete a memory from the vault permanently",
-      "category": "delete"
+      "inputSchema": { "type": "object", "properties": {} }
     },
     {
       "name": "get_vault_stats",
       "description": "Get vault statistics and analytics (memory count, tags, types, connections)",
-      "category": "analytics"
+      "inputSchema": { "type": "object", "properties": {} }
     },
     {
-      "name": "list_available_tools",
-      "description": "List all available MCP tools with descriptions and categories",
-      "category": "discovery"
+      "name": "update_memory",
+      "description": "Update an existing memory's content, tags, or metadata",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["title"]
+      }
+    },
+    {
+      "name": "delete_memory",
+      "description": "Delete a memory from the vault permanently",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Title of the memory to delete" }
+        },
+        "required": ["title"]
+      }
     },
     {
       "name": "relate_memories",
       "description": "Create a bidirectional graph link between two memories for enhanced traversal",
-      "category": "graph"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string", "description": "Title of the source memory" },
+          "target": { "type": "string", "description": "Title of the target memory" }
+        },
+        "required": ["source", "target"]
+      }
     },
     {
       "name": "search_by_graph",
       "description": "Traverse connected memories from a starting point using BFS with configurable depth",
-      "category": "graph"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "start": { "type": "string", "description": "Title of the starting memory" },
+          "depth": { "type": "integer", "default": 2 }
+        },
+        "required": ["start"]
+      }
     },
     {
       "name": "find_path",
       "description": "Find the shortest graph path between two memories using BFS",
-      "category": "graph"
-    },
-    {
-      "name": "auto_hook_query",
-      "description": "Autonomous hook that processes user queries to capture relevant context",
-      "category": "autonomous"
-    },
-    {
-      "name": "auto_hook_response",
-      "description": "Autonomous hook that processes AI responses to extract and store insights",
-      "category": "autonomous"
-    },
-    {
-      "name": "configure_autonomous_mode",
-      "description": "Configure autonomous behavior settings (enable/disable, filters, thresholds)",
-      "category": "autonomous"
-    },
-    {
-      "name": "get_autonomous_config",
-      "description": "Get current autonomous behavior settings and status",
-      "category": "autonomous"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": { "type": "string" },
+          "target": { "type": "string" }
+        },
+        "required": ["source", "target"]
+      }
     }
   ],
-  "documentation": {
-    "quickstart": "https://github.com/Indhar01/MemoGraph#quick-start",
-    "api_reference": "https://github.com/Indhar01/MemoGraph/blob/main/README.md",
-    "mcp_setup": "https://github.com/Indhar01/MemoGraph/blob/main/docs/MCP_TROUBLESHOOTING.md",
-    "examples": "https://github.com/Indhar01/MemoGraph/tree/main/examples"
-  },
-  "support": {
-    "issues": "https://github.com/Indhar01/MemoGraph/issues",
-    "discussions": "https://github.com/Indhar01/MemoGraph/discussions"
-  }
+  "resources": [],
+  "prompts": []
 }

@@ -8,31 +8,28 @@ startCommand:
       vault:
         type: string
         title: "Vault Path"
-        description: >
-          Absolute path to your MemoGraph vault directory
-          (the folder containing your .md memory files).
+        description: "Absolute path to your MemoGraph vault directory"
         default: "~/my-vault"
       provider:
         type: string
         title: "LLM Provider"
-        description: >
-          LLM provider for AI-generated answers in query_with_context.
-          Optional — if not set, raw context is returned.
-        enum:
-          - "ollama"
-          - "claude"
+        description: "LLM provider (ollama or claude). Optional."
+        enum: ["ollama", "claude"]
       model:
         type: string
         title: "LLM Model"
-        description: >
-          Specific model name for the LLM provider
-          (e.g. "llama3" for ollama, "claude-opus-4-6" for claude).
-          Optional — uses provider default if omitted.
+        description: "Model name override. Optional."
   commandFunction: >
     (config) => ({
       command: "python",
-      args: ["-m", "memograph.mcp.run_server", "--vault", config.vault || "~/my-vault"],
+      args: [
+        "-m", "memograph.mcp.run_server",
+        "--vault", config.vault || "~/my-vault",
+        ...(config.provider ? ["--provider", config.provider] : []),
+        ...(config.model ? ["--model", config.model] : [])
+      ],
       env: {
+        MEMOGRAPH_VAULT: config.vault || "~/my-vault",
         ...(config.provider ? { MEMOGRAPH_PROVIDER: config.provider } : {}),
         ...(config.model ? { MEMOGRAPH_MODEL: config.model } : {})
       }
