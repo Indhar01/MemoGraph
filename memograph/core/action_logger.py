@@ -284,11 +284,7 @@ class ActionLogger:
                         return action_ns >= cutoff_ns
                     return datetime.fromisoformat(action["timestamp"]) >= before_date
 
-                filtered = [
-                    a
-                    for a in history
-                    if _is_on_or_after_cutoff(a)
-                ]
+                filtered = [a for a in history if _is_on_or_after_cutoff(a)]
                 self._write_history(filtered)
                 logger.info(
                     f"Cleared {len(history) - len(filtered)} actions before {before_date}"
