@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import time as time_module
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,13 @@ from .graph import VaultGraph
 from .indexer import VaultIndexer
 from .node import MemoryNode
 from .retriever import HybridRetriever
+from .validation import (
+    validate_depth,
+    validate_query,
+    validate_salience,
+    validate_tags,
+    validate_top_k,
+)
 
 # Initialize logger for MemoGraph
 logger = logging.getLogger("memograph")
@@ -194,7 +202,7 @@ class MemoryQuery:
             )
 
         # Retrieve nodes using the kernel
-        results = self.kernel.retrieve_nodes(
+        results: list[MemoryNode] = self.kernel.retrieve_nodes(
             query=self._query,
             tags=self._tags,
             depth=self._depth,
@@ -255,6 +263,15 @@ class MemoryKernel:
         auto_extract: bool = False,
         use_gam: bool = False,
         gam_config: GAMConfig | None = None,
+        enable_cache: bool = False,
+        cache_dir: str | None = None,
+        validate_inputs: bool = False,
+        max_concurrent: int = 10,
+        memory_cache_size: int = 1000,
+        memory_cache_mb: int = 512,
+        enable_disk_cache: bool = True,
+        query_cache_ttl: int = 300,
+        query_cache_size: int = 100,
     ) -> None:
         """
         Initialize the memory kernel.
@@ -262,36 +279,20 @@ class MemoryKernel:
         Args:
             vault_path: Path to the vault directory. Will be created if it doesn't exist.
             embedding_adapter: Optional embedding adapter for semantic search.
-                Must implement embed_query() and embed_documents() methods.
             llm_client: Optional LLM client for auto-extraction of entities.
             llm_config: Optional configuration dictionary for the LLM.
             auto_extract: Whether to automatically extract entities during ingestion.
-                Requires llm_client to be provided.
             use_gam: Enable Graph Attention Memory (GAM) scoring for enhanced retrieval.
-                Default: False (backward compatible). When enabled, uses GAMRetriever
-                with attention-based scoring, co-access tracking, and temporal decay.
             gam_config: Optional GAM configuration for custom scoring weights.
-                If None and use_gam=True, uses default GAM weights.
-
-        Example:
-            >>> # Basic usage (backward compatible)
-            >>> kernel = MemoryKernel(vault_path="./memories")
-            >>>
-            >>> # With GAM enabled
-            >>> kernel = MemoryKernel(vault_path="./memories", use_gam=True)
-            >>>
-            >>> # With custom GAM configuration
-            >>> from memograph.core.gam_scorer import GAMConfig
-            >>> config = GAMConfig(
-            ...     relationship_weight=0.4,
-            ...     recency_weight=0.3,
-            ...     salience_weight=0.3
-            ... )
-            >>> kernel = MemoryKernel(
-            ...     vault_path="./memories",
-            ...     use_gam=True,
-            ...     gam_config=config
-            ... )
+            enable_cache: Enable embedding and query result caching.
+            cache_dir: Directory for cache files (default: vault_path/.cache).
+            validate_inputs: Enable input validation with helpful error messages.
+            max_concurrent: Maximum concurrent async operations (semaphore limit).
+            memory_cache_size: Max items in memory cache (when caching enabled).
+            memory_cache_mb: Max memory usage in MB for cache.
+            enable_disk_cache: Whether to enable disk-based caching.
+            query_cache_ttl: Query cache TTL in seconds.
+            query_cache_size: Max queries to cache.
         """
         self.vault_path = Path(vault_path).expanduser()
         self.vault_path.mkdir(parents=True, exist_ok=True)
@@ -306,6 +307,7 @@ class MemoryKernel:
 
         # Initialize retriever based on GAM setting
         self.use_gam = use_gam
+        self.enable_gam = use_gam  # Backwards-compat alias
         self.gam_config = gam_config
 
         # Declare retriever type (GAMRetriever is a subclass of HybridRetriever)
@@ -333,6 +335,42 @@ class MemoryKernel:
         if auto_extract and llm_client:
             self.organizer = SmartAutoOrganizer(llm_client, llm_config)
             logger.info("Auto-extraction enabled with LLM client")
+
+        # Validation setting
+        self.validate_inputs = validate_inputs
+
+        # Concurrency control for async operations
+        self.max_concurrent = max_concurrent
+        self._semaphore = asyncio.Semaphore(max_concurrent)
+
+        # Caching setup
+        self.embedding_cache = None
+        self.query_cache = None
+
+        if enable_cache:
+            from memograph.storage.cache_enhanced import (
+                MultiLevelCache,
+                QueryResultCache,
+            )
+
+            cache_dir_path = (
+                Path(vault_path) / ".cache" if cache_dir is None else Path(cache_dir)
+            )
+
+            self.embedding_cache = MultiLevelCache(
+                cache_dir=cache_dir_path / "embeddings",
+                memory_max_size=memory_cache_size,
+                memory_max_mb=memory_cache_mb,
+                enable_disk_cache=enable_disk_cache,
+            )
+            self.query_cache = QueryResultCache(
+                ttl_seconds=query_cache_ttl, max_size=query_cache_size
+            )
+            logger.info(
+                f"Caching enabled: memory={memory_cache_size} items, "
+                f"disk={'yes' if enable_disk_cache else 'no'}, "
+                f"query_ttl={query_cache_ttl}s"
+            )
 
         logger.info("MemoGraph kernel initialized successfully")
 
@@ -813,6 +851,12 @@ class MemoryKernel:
                 f"memory_type must be a MemoryType enum, got {type(memory_type).__name__}"
             )
 
+        # Validate tags and salience with enhanced validation if enabled
+        if self.validate_inputs:
+            if tags:
+                tags = validate_tags(tags)
+            salience = validate_salience(salience)
+
         # Process tags
         normalized_tags = self._normalize_tags(tags)
 
@@ -1016,7 +1060,7 @@ class MemoryKernel:
         for idx, (memory_id, update_data) in enumerate(updates):
             try:
                 # Find the memory file
-                memory_path = None
+                memory_path: Path | None = None
                 for md_file in self.vault_path.rglob("*.md"):
                     if md_file.stem == memory_id or md_file.stem.startswith(
                         f"{memory_id}-"
@@ -1083,7 +1127,7 @@ class MemoryKernel:
                     + yaml.safe_dump(frontmatter, sort_keys=False).strip()
                     + "\n---\n\n"
                 )
-                memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")
+                memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")  # type: ignore[union-attr]
 
                 successful_ids.append(memory_id)
                 logger.debug(
@@ -1169,68 +1213,47 @@ class MemoryKernel:
         tags: list[str] | None = None,
         depth: int = 2,
         top_k: int = 8,
+        use_cache: bool = True,
     ) -> list[MemoryNode]:
         """
         Retrieve relevant memory nodes using hybrid search (keyword + semantic + graph).
 
-        This method performs intelligent retrieval by:
-        1. Finding seed nodes via keyword matching
-        2. Using embeddings for semantic similarity (if adapter available)
-        3. Traversing the graph to find related memories via wikilinks
-        4. Ranking results by relevance, salience, and recency
-
         Args:
-            query: Search query string. Will be tokenized for keyword matching
-                and embedded for semantic search (if embeddings enabled).
-            tags: Optional list of tags to filter results. Only memories with
-                at least one matching tag will be included.
-            depth: Graph traversal depth from seed nodes. Controls how many
-                hops through wikilinks to explore. Default: 2
-                - depth=0: Only direct matches
-                - depth=1: Direct matches + 1 hop neighbors
-                - depth=2: Includes neighbors of neighbors
-            top_k: Maximum number of nodes to return, ranked by relevance.
-                Default: 8
+            query: Search query string.
+            tags: Optional list of tags to filter results.
+            depth: Graph traversal depth from seed nodes. Default: 2
+            top_k: Maximum number of nodes to return. Default: 8
+            use_cache: Whether to use query result cache. Default: True
 
         Returns:
-            List of MemoryNode objects ranked by relevance score (hybrid of
-            keyword match, semantic similarity, salience, and graph centrality).
-
-        Note:
-            If the graph is empty, this method will automatically call ingest()
-            to load memories from the vault directory.
-
-        Example:
-            >>> kernel = MemoryKernel(vault_path="./vault")
-            >>> # Simple search
-            >>> nodes = kernel.retrieve_nodes("machine learning")
-            >>> for node in nodes:
-            ...     print(f"{node.title}: {node.salience}")
-            >>>
-            >>> # Advanced search with filters
-            >>> nodes = kernel.retrieve_nodes(
-            ...     query="python optimization",
-            ...     tags=["programming", "performance"],
-            ...     depth=3,
-            ...     top_k=10
-            ... )
+            List of MemoryNode objects ranked by relevance score.
         """
-        # Validate query
-        if not query or not isinstance(query, str):
-            raise TypeError(
-                f"query must be a non-empty string, got {type(query).__name__}"
-            )
+        # Validate inputs
+        if self.validate_inputs:
+            query = validate_query(query)
+            if tags:
+                tags = validate_tags(tags)
+            depth = validate_depth(depth)
+            top_k = validate_top_k(top_k)
+        else:
+            if not query or not isinstance(query, str):
+                raise TypeError(
+                    f"query must be a non-empty string, got {type(query).__name__}"
+                )
+            if not query.strip():
+                raise ValueError("query cannot be empty")
+            if not isinstance(depth, int) or depth < 0:
+                raise ValueError(f"depth must be a non-negative integer, got {depth}")
+            if not isinstance(top_k, int) or top_k <= 0:
+                raise ValueError(f"top_k must be a positive integer, got {top_k}")
 
-        if not query.strip():
-            raise ValueError("query cannot be empty")
-
-        # Validate depth
-        if not isinstance(depth, int) or depth < 0:
-            raise ValueError(f"depth must be a non-negative integer, got {depth}")
-
-        # Validate top_k
-        if not isinstance(top_k, int) or top_k <= 0:
-            raise ValueError(f"top_k must be a positive integer, got {top_k}")
+        # Check query cache
+        if use_cache and self.query_cache:
+            cache_key = f"{query}|{tags}|{depth}|{top_k}"
+            cached_results = self.query_cache.get(cache_key)
+            if cached_results is not None:
+                logger.debug(f"Query cache hit: {query}")
+                return cached_results
 
         normalized_tags = self._normalize_tags(tags)
 
@@ -1249,6 +1272,7 @@ class MemoryKernel:
 
         logger.debug(f"Found {len(seed_ids)} seed nodes for query: '{query}'")
 
+        start_time = time_module.time()
         results = self.retriever.retrieve(
             query=query,
             seed_ids=seed_ids,
@@ -1256,8 +1280,16 @@ class MemoryKernel:
             depth=depth,
             top_k=top_k,
         )
+        duration = time_module.time() - start_time
 
-        logger.info(f"Retrieved {len(results)} nodes for query: '{query}'")
+        # Cache results
+        if use_cache and self.query_cache:
+            cache_key = f"{query}|{tags}|{depth}|{top_k}"
+            self.query_cache.put(cache_key, results)
+
+        logger.info(
+            f"Retrieved {len(results)} nodes for query: '{query}' in {duration:.3f}s"
+        )
 
         return results
 
@@ -1513,6 +1545,34 @@ class MemoryKernel:
 
         return self.retriever.get_access_statistics()
 
+    # ==================== Cache Management ====================
+
+    def get_cache_stats(self) -> dict:
+        """Get cache statistics.
+
+        Returns:
+            Dictionary with cache statistics for embedding and query caches.
+        """
+        stats: dict[str, Any] = {}
+        if self.embedding_cache:
+            stats["embedding"] = self.embedding_cache.get_stats()
+        if self.query_cache:
+            stats["query"] = self.query_cache.get_stats()
+        return stats
+
+    def clear_cache(self, cache_type: str = "all"):
+        """Clear caches.
+
+        Args:
+            cache_type: Type of cache to clear ('embedding', 'query', 'all').
+        """
+        if cache_type in ("embedding", "all") and self.embedding_cache:
+            self.embedding_cache.clear()
+            logger.info("Embedding cache cleared")
+        if cache_type in ("query", "all") and self.query_cache:
+            self.query_cache.clear()
+            logger.info("Query cache cleared")
+
     async def search_async(
         self,
         query: str,
@@ -1611,31 +1671,29 @@ class MemoryKernel:
         tags: list[str] | None = None,
         depth: int = 2,
         top_k: int = 8,
+        use_cache: bool = True,
+        use_gam: bool | None = None,
+        **kwargs,
     ) -> list[MemoryNode]:
-        """
-        Async version of retrieve_nodes() for FastAPI and async frameworks.
-
-        Runs the synchronous retrieve_nodes() method in a thread pool.
+        """Async version of retrieve_nodes().
 
         Args:
-            Same as retrieve_nodes()
-
-        Returns:
-            List of MemoryNode objects ranked by relevance.
-
-        Example:
-            >>> async def search_memories():
-            ...     nodes = await kernel.retrieve_nodes_async("python tips")
-            ...     for node in nodes:
-            ...         print(node.title)
+            query: Search query string.
+            tags: Optional list of tags to filter results.
+            depth: Graph traversal depth.
+            top_k: Maximum number of nodes to return.
+            use_cache: Whether to use query result cache.
+            use_gam: Ignored (kept for backwards compat with GAMAsyncKernel).
         """
-        return await asyncio.to_thread(
-            self.retrieve_nodes,
-            query=query,
-            tags=tags,
-            depth=depth,
-            top_k=top_k,
-        )
+        async with self._semaphore:
+            return await asyncio.to_thread(
+                self.retrieve_nodes,
+                query=query,
+                tags=tags,
+                depth=depth,
+                top_k=top_k,
+                use_cache=use_cache,
+            )
 
     async def context_window_async(
         self,
@@ -1734,3 +1792,290 @@ class MemoryKernel:
             updates=updates,
             continue_on_error=continue_on_error,
         )
+
+    async def get_cache_stats_async(self) -> dict:
+        """Get cache statistics asynchronously."""
+        return await asyncio.to_thread(self.get_cache_stats)
+
+    async def clear_cache_async(self, cache_type: str = "all"):
+        """Clear caches asynchronously."""
+        await asyncio.to_thread(self.clear_cache, cache_type)
+
+    # ==================== Batch Async Operations ====================
+
+    async def remember_batch_async(
+        self,
+        memories: list[dict[str, Any]],
+        show_progress: bool = False,
+        batch_size: int = 10,
+    ) -> list[str]:
+        """Create multiple memories asynchronously in batches.
+
+        Args:
+            memories: List of memory dictionaries with title, content, tags, etc.
+            show_progress: Whether to show progress bar (requires rich).
+            batch_size: Number of concurrent operations per batch.
+
+        Returns:
+            List of file paths for created memories.
+        """
+
+        async def create_memory(memory: dict[str, Any]) -> str:
+            kwargs = {}
+            if "memory_type" in memory and memory["memory_type"] is not None:
+                kwargs["memory_type"] = memory["memory_type"]
+            return await self.remember_async(
+                memory.get("title", ""),
+                memory.get("content", ""),
+                tags=memory.get("tags"),
+                salience=memory.get("salience", 0.5),
+                **kwargs,
+            )
+
+        if show_progress:
+            try:
+                from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TextColumn("{task.completed}/{task.total}"),
+                ) as progress:
+                    task = progress.add_task(
+                        "Creating memories...", total=len(memories)
+                    )
+                    results = []
+                    for i in range(0, len(memories), batch_size):
+                        batch = memories[i : i + batch_size]
+                        batch_results = await asyncio.gather(
+                            *[create_memory(m) for m in batch]
+                        )
+                        results.extend(batch_results)
+                        progress.update(task, advance=len(batch))
+                    await asyncio.sleep(0.1)
+                    await self.ingest_async(force=True)
+                    return results
+            except ImportError:
+                pass
+
+        results = []
+        for i in range(0, len(memories), batch_size):
+            batch = memories[i : i + batch_size]
+            batch_results = await asyncio.gather(*[create_memory(m) for m in batch])
+            results.extend(batch_results)
+
+        await asyncio.sleep(0.1)
+        await self.ingest_async(force=True)
+        return results
+
+    async def retrieve_batch_async(
+        self,
+        queries: list[str],
+        tags: list[str] | None = None,
+        depth: int = 2,
+        top_k: int = 8,
+        deduplicate: bool = True,
+        show_progress: bool = True,
+        **kwargs,
+    ) -> dict[str, list[MemoryNode]]:
+        """Retrieve results for multiple queries concurrently.
+
+        Args:
+            queries: List of search queries.
+            tags: Filter by tags (applied to all queries).
+            depth: Graph traversal depth.
+            top_k: Number of results per query.
+            deduplicate: Remove duplicate nodes across queries.
+            show_progress: Show progress indicator.
+
+        Returns:
+            Dictionary mapping queries to their result lists.
+        """
+
+        async def retrieve_one(q: str) -> tuple[str, list[MemoryNode]]:
+            nodes = await self.retrieve_nodes_async(
+                q, tags=tags, depth=depth, top_k=top_k
+            )
+            return (q, nodes)
+
+        results_list = await asyncio.gather(*[retrieve_one(q) for q in queries])
+        results = dict(results_list)
+
+        if deduplicate:
+            seen_ids: set[str] = set()
+            deduplicated: dict[str, list[MemoryNode]] = {}
+            for query_str, nodes in results.items():
+                unique = []
+                for node in nodes:
+                    if node.id not in seen_ids:
+                        unique.append(node)
+                        seen_ids.add(node.id)
+                deduplicated[query_str] = unique
+            results = deduplicated
+
+        return results
+
+    async def update_batch_async(
+        self, updates: list[dict[str, Any]], show_progress: bool = True
+    ) -> list[str]:
+        """Update multiple memories concurrently.
+
+        Args:
+            updates: List of update dicts with 'id' and fields to update.
+            show_progress: Show progress indicator.
+
+        Returns:
+            List of updated memory IDs.
+        """
+        from memograph.core.validation import validate_memory_id
+
+        for update in updates:
+            if "id" not in update:
+                raise ValueError("Each update must contain 'id' field")
+            validate_memory_id(update["id"])
+
+        async def update_single(update: dict[str, Any]) -> str:
+            async with self._semaphore:
+                memory_id = update["id"]
+                node = self.graph.get(memory_id)
+                if not node:
+                    raise FileNotFoundError(f"Memory not found: {memory_id}")
+
+                file_path = Path(node.source_path)
+                content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
+
+                if content.startswith("---"):
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        frontmatter = yaml.safe_load(parts[1])
+                        body = parts[2].strip()
+                    else:
+                        frontmatter = {}
+                        body = content
+                else:
+                    frontmatter = {}
+                    body = content
+
+                if "tags" in update:
+                    frontmatter["tags"] = update["tags"]
+                if "salience" in update:
+                    frontmatter["salience"] = update["salience"]
+                if "content" in update:
+                    body = update["content"]
+
+                new_content = f"---\n{yaml.dump(frontmatter, default_flow_style=False)}---\n{body}"
+                await asyncio.to_thread(
+                    file_path.write_text, new_content, encoding="utf-8"
+                )
+                return memory_id
+
+        updated_ids = await asyncio.gather(*[update_single(u) for u in updates])
+        await self.ingest_async(force=True)
+        return list(updated_ids)
+
+    async def delete_batch_async(
+        self, memory_ids: list[str], show_progress: bool = True
+    ) -> list[str]:
+        """Delete multiple memories concurrently.
+
+        Args:
+            memory_ids: List of memory IDs to delete.
+            show_progress: Show progress indicator.
+
+        Returns:
+            List of deleted memory IDs.
+        """
+        from memograph.core.validation import validate_memory_id
+
+        for memory_id in memory_ids:
+            validate_memory_id(memory_id)
+
+        async def delete_single(memory_id: str) -> str:
+            async with self._semaphore:
+                node = self.graph.get(memory_id)
+                if not node:
+                    raise FileNotFoundError(f"Memory not found: {memory_id}")
+                file_path = Path(node.source_path)
+                await asyncio.to_thread(file_path.unlink)
+                return memory_id
+
+        deleted_ids = await asyncio.gather(*[delete_single(mid) for mid in memory_ids])
+        await self.ingest_async(force=True)
+        return list(deleted_ids)
+
+    async def aggregate_results_async(
+        self, queries: list[str], aggregation: str = "union", **kwargs
+    ) -> list[MemoryNode]:
+        """Aggregate results from multiple queries.
+
+        Args:
+            queries: List of search queries.
+            aggregation: Aggregation method ('union' or 'intersection').
+
+        Returns:
+            Aggregated list of memory nodes.
+        """
+        results = await self.retrieve_batch_async(queries, deduplicate=False, **kwargs)
+
+        if aggregation == "union":
+            seen: set[str] = set()
+            union_nodes = []
+            for nodes in results.values():
+                for node in nodes:
+                    if node.id not in seen:
+                        union_nodes.append(node)
+                        seen.add(node.id)
+            return union_nodes
+        elif aggregation == "intersection":
+            if not results:
+                return []
+            first_query = list(results.keys())[0]
+            intersection_ids = {node.id for node in results[first_query]}
+            for _query, nodes in list(results.items())[1:]:
+                intersection_ids &= {node.id for node in nodes}
+            all_nodes_map = {
+                node.id: node for nodes in results.values() for node in nodes
+            }
+            return [all_nodes_map[nid] for nid in intersection_ids]
+        else:
+            raise ValueError(f"Unknown aggregation method: {aggregation}")
+
+    # ==================== GAM Async Stats ====================
+
+    async def get_gam_stats_async(self) -> dict[str, Any]:
+        """Get GAM statistics asynchronously.
+
+        Returns:
+            Dictionary with GAM statistics.
+        """
+        if not self.use_gam:
+            return {"enabled": False}
+
+        gam_config = getattr(self, "gam_config", None)
+
+        if isinstance(self.retriever, GAMRetriever):
+            tracker = getattr(self.retriever, "access_tracker", None)
+            if tracker:
+                return await asyncio.to_thread(
+                    lambda: {
+                        "enabled": True,
+                        "total_accesses": len(tracker.access_history),
+                        "unique_nodes": len(tracker.node_access_counts),
+                        "config": gam_config,
+                    }
+                )
+        return {
+            "enabled": True,
+            "total_accesses": 0,
+            "unique_nodes": 0,
+            "config": gam_config,
+        }
+
+    async def reset_gam_stats_async(self):
+        """Reset GAM access statistics asynchronously."""
+        if isinstance(self.retriever, GAMRetriever):
+            tracker = getattr(self.retriever, "access_tracker", None)
+            if tracker:
+                await asyncio.to_thread(tracker.reset)

@@ -414,14 +414,15 @@ retriever = MemoGraphRetriever(kernel=kernel)
 
 ### MCP Server
 
-The MCP server provides 10 tools for AI assistants:
+The MCP server provides 14 tools for AI assistants:
 - Search: `search_vault`, `query_with_context`
 - Create: `create_memory`, `import_document`
-- Read: `list_memories`, `get_memory`
+- Read: `list_memories`, `get_memory`, `get_vault_info`
 - Update: `update_memory`
 - Delete: `delete_memory`
 - Analytics: `get_vault_stats`
 - Discovery: `list_available_tools`
+- Autonomous: `auto_hook_query`, `auto_hook_response`, `configure_autonomous_mode`, `get_autonomous_config`
 
 ## MCP Server Setup and Troubleshooting
 

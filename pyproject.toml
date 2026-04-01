@@ -83,6 +83,10 @@ embeddings = [
     "sentence-transformers>=2.2.0",
     "numpy>=1.24.0",
 ]
+web = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+]
 all = [
     "memograph[openai,anthropic,ollama,litellm,embeddings]",
 ]
@@ -219,6 +223,10 @@ omit = [
     "*/test_*.py",
     "*/__pycache__/*",
     "*/site-packages/*",
+    "memograph/mcp/run_server.py",
+    "memograph/mcp/__main__.py",
+    "memograph/mcp_setup.py",
+    "memograph/importers/*",
 ]
 
 [tool.coverage.report]

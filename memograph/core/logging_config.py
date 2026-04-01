@@ -56,8 +56,9 @@ class JSONFormatter(logging.Formatter):
             log_data["exception"] = self.formatException(record.exc_info)
 
         # Add extra fields
-        if hasattr(record, "extra_fields"):
-            log_data.update(record.extra_fields)
+        extra_fields = getattr(record, "extra_fields", None)
+        if isinstance(extra_fields, dict):
+            log_data.update(extra_fields)
 
         # Add any custom attributes
         for key, value in record.__dict__.items():
@@ -153,6 +154,7 @@ def setup_logging(
     root_logger.handlers.clear()
 
     # Create formatters
+    formatter: logging.Formatter
     if json_format:
         formatter = JSONFormatter()
     else:

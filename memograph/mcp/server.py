@@ -50,6 +50,15 @@ class MemoGraphMCPServer:
         self.llm_provider = llm_provider
         self.llm_model = llm_model
 
+        # Auto-ingest vault on startup so tools like list_memories work immediately
+        try:
+            self.kernel.ingest()
+            logger.info(
+                f"Ingested vault: {len(self.kernel.graph._nodes)} memories loaded"
+            )
+        except Exception as e:
+            logger.warning(f"Initial vault ingest failed: {e}")
+
         # Initialize autonomous hooks (can be enabled/disabled via configuration)
         self.autonomous_hooks = AutonomousHooks(self)
 
@@ -98,9 +107,11 @@ class MemoGraphMCPServer:
         Returns:
             Dictionary with server metadata
         """
+        import memograph
+
         return {
             "name": "MemoGraph MCP Server",
-            "version": "1.0.0",
+            "version": memograph.__version__,
             "vault": {
                 "path": str(self.vault_path),
                 "name": self.vault_path.name,
@@ -252,12 +263,43 @@ class MemoGraphMCPServer:
                 salience=salience,
             )
 
+            # Find suggested links based on shared tags and keyword overlap
+            suggested_links = []
+            new_tags = set(tags or [])
+            title_words = set(title.lower().split())
+            content_words = set(w.lower() for w in content.split() if len(w) > 3)
+            check_words = title_words | content_words
+
+            for node in self.kernel.graph.all_nodes():
+                if node.source_path and Path(node.source_path) == Path(path):
+                    continue
+                reasons = []
+                shared_tags = new_tags & set(node.tags)
+                if shared_tags:
+                    reasons.append(f"shared tags: {', '.join(shared_tags)}")
+                node_words = set(node.title.lower().split())
+                overlap = check_words & node_words
+                if overlap:
+                    reasons.append(f"keyword overlap: {', '.join(list(overlap)[:3])}")
+                if reasons:
+                    suggested_links.append(
+                        {
+                            "id": node.id,
+                            "title": node.title,
+                            "reason": "; ".join(reasons),
+                        }
+                    )
+
+            # Limit suggestions
+            suggested_links = suggested_links[:5]
+
             return self._add_vault_context(
                 {
                     "success": True,
                     "message": f"Created memory: {title}",
                     "path": path,
                     "title": title,
+                    "suggested_links": suggested_links,
                 }
             )
 
@@ -562,22 +604,38 @@ class MemoGraphMCPServer:
             Dictionary with import result
         """
         try:
-            from ..importers.documents import DocumentImporter
+            # Read file content
+            import_path = Path(file_path).expanduser()
+            if not import_path.exists():
+                return self._add_vault_context(
+                    {"success": False, "error": f"File not found: {file_path}"}
+                )
 
-            importer = DocumentImporter(str(self.vault_path))
+            if import_path.suffix.lower() not in (".txt", ".md"):
+                return self._add_vault_context(
+                    {
+                        "success": False,
+                        "error": f"Unsupported file type: {import_path.suffix}. "
+                        "Supported: .txt, .md",
+                    }
+                )
 
-            success, message = importer.import_file(
-                file_path=file_path,
-                memory_type=memory_type,
-                salience=salience,
+            content = import_path.read_text(encoding="utf-8")
+            title = import_path.stem.replace("-", " ").replace("_", " ").title()
+
+            path = self.kernel.remember(
+                title=title,
+                content=content,
+                memory_type=MemoryType(memory_type),
                 tags=tags or [],
-                overwrite=False,
+                salience=salience,
             )
 
             return self._add_vault_context(
                 {
-                    "success": success,
-                    "message": message,
+                    "success": True,
+                    "message": f"Imported '{import_path.name}' as memory: {title}",
+                    "path": path,
                 }
             )
 
@@ -601,7 +659,7 @@ class MemoGraphMCPServer:
         """
         try:
             # Find the memory file
-            memory_path = None
+            memory_path: Path | None = None
             for md_file in self.vault_path.rglob("*.md"):
                 if md_file.stem == memory_id or md_file.stem.startswith(
                     f"{memory_id}-"
@@ -624,9 +682,8 @@ class MemoGraphMCPServer:
             # Delete the file
             memory_path.unlink()
 
-            # Remove from graph
-            if node:
-                self.kernel.graph._nodes.pop(memory_id, None)
+            # Remove from graph and re-ingest to keep indexes consistent
+            self.kernel.graph.remove_node(memory_id)
 
             logger.info(f"Deleted memory: {memory_id}")
 
@@ -792,6 +849,12 @@ class MemoGraphMCPServer:
                         "configure_autonomous_mode",
                         "get_autonomous_config",
                     ],
+                    "graph": [
+                        "relate_memories",
+                        "search_by_graph",
+                        "find_path",
+                    ],
+                    "bulk": ["bulk_create"],
                 },
             }
         except Exception as e:
@@ -800,6 +863,234 @@ class MemoGraphMCPServer:
                 "success": False,
                 "error": str(e),
             }
+
+    # ==================== Graph-Native Tools ====================
+
+    async def relate_memories(
+        self,
+        source_id: str,
+        target_id: str,
+        relationship: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a wikilink connection between two memories.
+
+        Args:
+            source_id: ID of the source memory
+            target_id: ID of the target memory to link to
+            relationship: Optional description of the relationship
+
+        Returns:
+            Dictionary with result
+        """
+        try:
+            import re
+
+            source_node = self.kernel.graph.get(source_id)
+            if not source_node:
+                return self._add_vault_context(
+                    {"success": False, "error": f"Source memory not found: {source_id}"}
+                )
+
+            target_node = self.kernel.graph.get(target_id)
+            if not target_node:
+                return self._add_vault_context(
+                    {"success": False, "error": f"Target memory not found: {target_id}"}
+                )
+
+            # Check if link already exists
+            if target_id in source_node.links:
+                return self._add_vault_context(
+                    {
+                        "success": True,
+                        "message": f"Link already exists: {source_id} -> {target_id}",
+                        "already_linked": True,
+                    }
+                )
+
+            # Read the source file and append wikilink
+            source_path = Path(source_node.source_path)
+            content = source_path.read_text(encoding="utf-8")
+
+            link_text = f"[[{target_id}]]"
+            if relationship:
+                link_text = f"{relationship}: [[{target_id}]]"
+
+            # Append the link before the tag line (if any) or at the end
+            tag_pattern = r"\n\n#[\w\s#]+$"
+            tag_match = re.search(tag_pattern, content)
+            if tag_match:
+                insert_pos = tag_match.start()
+                content = (
+                    content[:insert_pos] + f"\n\n{link_text}" + content[insert_pos:]
+                )
+            else:
+                content = content.rstrip() + f"\n\n{link_text}\n"
+
+            source_path.write_text(content, encoding="utf-8")
+
+            # Re-ingest to update graph
+            self.kernel.ingest(force=True)
+
+            return self._add_vault_context(
+                {
+                    "success": True,
+                    "message": f"Linked '{source_node.title}' -> '{target_node.title}'",
+                    "source": source_id,
+                    "target": target_id,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error relating memories: {e}")
+            return self._add_vault_context({"success": False, "error": str(e)})
+
+    async def search_by_graph(
+        self,
+        memory_id: str,
+        depth: int = 2,
+        include_backlinks: bool = True,
+    ) -> dict[str, Any]:
+        """Traverse the graph from a memory to find connected memories.
+
+        Args:
+            memory_id: Starting memory ID
+            depth: How many hops to traverse
+            include_backlinks: Whether to follow backlinks
+
+        Returns:
+            Dictionary with connected nodes and their relationships
+        """
+        try:
+            node = self.kernel.graph.get(memory_id)
+            if not node:
+                return self._add_vault_context(
+                    {"success": False, "error": f"Memory not found: {memory_id}"}
+                )
+
+            neighbors = self.kernel.graph.neighbors(
+                memory_id, depth=depth, include_backlinks=include_backlinks
+            )
+
+            formatted = [
+                {
+                    "id": n.id,
+                    "title": n.title,
+                    "memory_type": n.memory_type.value,
+                    "tags": n.tags,
+                    "salience": n.salience,
+                    "links_to": [
+                        lid
+                        for lid in n.links
+                        if lid in {nb.id for nb in neighbors} or lid == memory_id
+                    ],
+                    "preview": n.content[:200],
+                }
+                for n in neighbors
+            ]
+
+            return self._add_vault_context(
+                {
+                    "success": True,
+                    "center": {
+                        "id": node.id,
+                        "title": node.title,
+                        "links": node.links,
+                        "backlinks": node.backlinks,
+                    },
+                    "connected_count": len(formatted),
+                    "depth": depth,
+                    "connected": formatted,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error in graph search: {e}")
+            return self._add_vault_context({"success": False, "error": str(e)})
+
+    async def find_path(
+        self,
+        from_id: str,
+        to_id: str,
+    ) -> dict[str, Any]:
+        """Find the shortest path between two memories in the graph.
+
+        Args:
+            from_id: Starting memory ID
+            to_id: Target memory ID
+
+        Returns:
+            Dictionary with the path or message if no path exists
+        """
+        try:
+            path = self.kernel.graph.find_path(from_id, to_id)
+
+            if path is None:
+                return self._add_vault_context(
+                    {
+                        "success": True,
+                        "path_found": False,
+                        "message": f"No path found between '{from_id}' and '{to_id}'",
+                    }
+                )
+
+            formatted_path = [
+                {
+                    "id": node.id,
+                    "title": node.title,
+                    "memory_type": node.memory_type.value,
+                }
+                for node in path
+            ]
+
+            return self._add_vault_context(
+                {
+                    "success": True,
+                    "path_found": True,
+                    "path_length": len(path),
+                    "path": formatted_path,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error finding path: {e}")
+            return self._add_vault_context({"success": False, "error": str(e)})
+
+    async def bulk_create(
+        self,
+        memories: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Create multiple memories in one operation.
+
+        Args:
+            memories: List of memory dicts, each with title, content,
+                      and optionally memory_type, tags, salience
+
+        Returns:
+            Dictionary with creation results
+        """
+        try:
+            results, errors = self.kernel.remember_many(
+                memories=memories, continue_on_error=True
+            )
+
+            return self._add_vault_context(
+                {
+                    "success": True,
+                    "created": len(results),
+                    "failed": len(errors),
+                    "paths": results,
+                    "errors": [
+                        {"memory": str(mem.get("title", "unknown")), "error": str(err)}
+                        for mem, err in errors
+                    ]
+                    if errors
+                    else [],
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Error in bulk create: {e}")
+            return self._add_vault_context({"success": False, "error": str(e)})
 
     # ==================== Autonomous Hooks Methods ====================
 
@@ -1234,6 +1525,110 @@ class MemoGraphMCPServer:
                 "inputSchema": {
                     "type": "object",
                     "properties": {},
+                },
+            },
+            {
+                "name": "relate_memories",
+                "description": "Create a wikilink connection between two memories in the graph. This builds the knowledge graph by linking related ideas.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "source_id": {
+                            "type": "string",
+                            "description": "ID of the source memory",
+                        },
+                        "target_id": {
+                            "type": "string",
+                            "description": "ID of the target memory to link to",
+                        },
+                        "relationship": {
+                            "type": "string",
+                            "description": "Optional description of the relationship (e.g., 'related to', 'builds on', 'contradicts')",
+                        },
+                    },
+                    "required": ["source_id", "target_id"],
+                },
+            },
+            {
+                "name": "search_by_graph",
+                "description": "Traverse the knowledge graph from a memory to find connected memories within N hops. Reveals how ideas connect through wikilinks.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "memory_id": {
+                            "type": "string",
+                            "description": "Starting memory ID",
+                        },
+                        "depth": {
+                            "type": "number",
+                            "description": "How many hops to traverse (default: 2)",
+                            "default": 2,
+                        },
+                        "include_backlinks": {
+                            "type": "boolean",
+                            "description": "Whether to follow backlinks (default: true)",
+                            "default": True,
+                        },
+                    },
+                    "required": ["memory_id"],
+                },
+            },
+            {
+                "name": "find_path",
+                "description": "Find the shortest path between two memories through the knowledge graph. Shows how two ideas connect through intermediate memories.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "from_id": {
+                            "type": "string",
+                            "description": "Starting memory ID",
+                        },
+                        "to_id": {
+                            "type": "string",
+                            "description": "Target memory ID",
+                        },
+                    },
+                    "required": ["from_id", "to_id"],
+                },
+            },
+            {
+                "name": "bulk_create",
+                "description": "Create multiple memories in one operation. More efficient than calling create_memory multiple times.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "memories": {
+                            "type": "array",
+                            "description": "List of memory objects to create",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "content": {"type": "string"},
+                                    "memory_type": {
+                                        "type": "string",
+                                        "enum": [
+                                            "episodic",
+                                            "semantic",
+                                            "procedural",
+                                            "fact",
+                                        ],
+                                        "default": "semantic",
+                                    },
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                    },
+                                    "salience": {
+                                        "type": "number",
+                                        "default": 0.7,
+                                    },
+                                },
+                                "required": ["title", "content"],
+                            },
+                        },
+                    },
+                    "required": ["memories"],
                 },
             },
         ]

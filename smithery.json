@@ -58,7 +58,7 @@
     },
     {
       "name": "import_document",
-      "description": "Import TXT, PDF, or DOCX documents"
+      "description": "Import TXT or MD documents"
     },
     {
       "name": "get_vault_stats",
@@ -79,6 +79,26 @@
     {
       "name": "configure_autonomous_mode",
       "description": "Configure autonomous behavior settings"
+    },
+    {
+      "name": "get_autonomous_config",
+      "description": "Get current autonomous behavior settings"
+    },
+    {
+      "name": "relate_memories",
+      "description": "Create a graph link between two memories"
+    },
+    {
+      "name": "search_by_graph",
+      "description": "Traverse connected memories from a starting memory"
+    },
+    {
+      "name": "find_path",
+      "description": "Find the shortest graph path between two memories"
+    },
+    {
+      "name": "bulk_create",
+      "description": "Create multiple memories in one operation"
     }
   ],
   "config": {
@@ -95,13 +115,13 @@
         "name": "llm_provider",
         "description": "LLM provider (ollama, claude, or openai)",
         "type": "string",
-        "env": "MEMOGRAPH_LLM_PROVIDER"
+        "env": "MEMOGRAPH_PROVIDER"
       },
       {
         "name": "llm_model",
         "description": "Specific model name to use",
         "type": "string",
-        "env": "MEMOGRAPH_LLM_MODEL"
+        "env": "MEMOGRAPH_MODEL"
       }
     ]
   },
@@ -125,8 +145,8 @@
         "args": ["-m", "memograph.mcp.run_server"],
         "env": {
           "MEMOGRAPH_VAULT": "~/my-vault",
-          "MEMOGRAPH_LLM_PROVIDER": "ollama",
-          "MEMOGRAPH_LLM_MODEL": "llama3"
+          "MEMOGRAPH_PROVIDER": "ollama",
+          "MEMOGRAPH_MODEL": "llama3"
         }
       }
     }

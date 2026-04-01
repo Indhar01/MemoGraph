@@ -40,7 +40,7 @@ class CacheStats:
         total = self.hits + self.misses
         return self.hits / total if total > 0 else 0.0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert stats to dictionary."""
         return {**asdict(self), "hit_rate": self.hit_rate}
 
@@ -247,14 +247,15 @@ class DiskCache:
         key_hash = hashlib.md5(key.encode()).hexdigest()
         return self.cache_dir / f"{key_hash}.json"
 
-    def _load_metadata(self) -> dict:
+    def _load_metadata(self) -> dict[Any, Any]:
         """Load cache metadata."""
         if self._metadata_file.exists():
             try:
                 with open(self._metadata_file, encoding="utf-8") as f:
-                    return json.load(f)
+                    data: dict[Any, Any] = json.load(f)
+                    return data
             except Exception as e:
-                logger.warning(f"Failed to load cache metadata: {e}")
+                logger.warning(f"Failed to load cache meta {e}")
 
         return {}
 

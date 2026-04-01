@@ -167,9 +167,9 @@ async def search_memories(search_req: SearchRequest, request: Request):
 
 @router.get("/search/autocomplete")
 async def autocomplete(
+    request: Request,
     q: str = Query(..., min_length=1, description="Query string for autocomplete"),
     limit: int = Query(10, ge=1, le=50, description="Maximum number of suggestions"),
-    request: Request = None,
 ):
     """
     Autocomplete suggestions based on memory titles and tags.

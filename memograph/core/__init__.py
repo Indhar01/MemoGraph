@@ -23,7 +23,7 @@ from .enums import (
     StatusType,
 )
 from .extractor import SmartAutoOrganizer
-from .graph import VaultGraph
+from .graph import GraphStats, VaultGraph
 from .kernel import MemoryKernel
 from .node import MemoryNode
 
@@ -32,6 +32,7 @@ __all__ = [
     "MemoryKernel",
     "MemoryNode",
     "VaultGraph",
+    "GraphStats",
     # Enums
     "MemoryType",
     "EntityType",

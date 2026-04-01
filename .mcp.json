@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "memograph-windows": {
+      "command": "py",
+      "args": [
+        "-3.11",
+        "-m",
+        "memograph.mcp.run_server",
+        "--vault",
+        "~/memograph-vault"
+      ]
+    },
+    "memograph-macos": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "memograph.mcp.run_server",
+        "--vault",
+        "~/memograph-vault"
+      ]
+    },
+    "memograph-linux": {
+      "command": "python3",
+      "args": [
+        "-m",
+        "memograph.mcp.run_server",
+        "--vault",
+        "~/memograph-vault"
+      ]
+    }
+  }
+}

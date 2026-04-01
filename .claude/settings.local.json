@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from memograph.core.kernel_enhanced import EnhancedMemoryKernel; print\\(''kernel_enhanced OK''\\)\")",
+      "Bash(python -c \"from memograph.core.kernel_async import AsyncMemoryKernel; print\\(''kernel_async OK''\\)\")",
+      "Bash(python -c \"from memograph.core.kernel_batch import BatchMemoryKernel; print\\(''kernel_batch OK''\\)\")",
+      "Bash(python -c \"from memograph.core.kernel_gam_async import GAMAsyncKernel; print\\(''kernel_gam_async OK''\\)\")",
+      "Bash(python -c \"from memograph.core.graph_enhanced import EnhancedVaultGraph; print\\(''graph_enhanced OK''\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python -c \"import memograph; print\\(f''version: {memograph.__version__}''\\)\")",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/ --ignore=tests/stress/ -x -q)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m ruff format --check .)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m ruff format . 2>&1)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/ --ignore=tests/stress/ -q)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m mypy memograph/ --config-file=pyproject.toml)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m ruff check .)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/test_mcp_server.py -x -q)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m ruff check --fix .)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m ruff format .)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/test_cache_enhanced.py::TestCachePerformance::test_embedding_cache_speedup -v)",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -c \"import mcp.types; print\\([x for x in dir\\(mcp.types\\) if 'Resource' in x or 'Prompt' in x]\\)\")",
+      "Bash(C:/Users/IBM3320/AppData/Local/Programs/Python/Python311/python.exe -m pytest tests/ --ignore=tests/stress/ -q --cov=memograph --cov-report=term)"
+    ]
+  }
+}

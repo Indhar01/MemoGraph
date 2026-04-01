@@ -41,12 +41,12 @@ class Action:
     action_type: ActionType
     summary: str
     timestamp: str
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
     user: str | None = None
 
     def __post_init__(self):
         if self.metadata is None:
-            self.metadata = {}
+            self.metadata: dict[str, Any] = {}
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -84,7 +84,7 @@ class ActionLogger:
             memory_id: ID of the memory
             action_type: Type of action performed
             summary: Human-readable summary
-            meta Additional metadata
+            metadata: Additional metadata
             user: User who performed action (optional)
 
         Returns:
@@ -182,7 +182,7 @@ class ActionLogger:
             }
 
         # Count by type
-        by_type = {}
+        by_type: dict[str, int] = {}
         memory_ids = set()
 
         for action in history:
@@ -290,7 +290,8 @@ class ActionLogger:
 
         try:
             with open(self.history_path, encoding="utf-8") as f:
-                return json.load(f)
+                data: list[dict[str, Any]] = json.load(f)
+                return data
         except (OSError, json.JSONDecodeError) as e:
             logger.error(f"Failed to read history: {e}")
             return []
