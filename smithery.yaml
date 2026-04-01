@@ -13,13 +13,13 @@ startCommand:
       provider:
         type: string
         title: "LLM Provider"
-        description: "LLM provider (ollama or claude). Optional."
+        description: "LLM provider for AI-generated answers (optional)"
         enum: ["ollama", "claude"]
       model:
         type: string
         title: "LLM Model"
-        description: "Model name override. Optional."
-  commandFunction: >
+        description: "Model name override (optional)"
+  commandFunction: |
     (config) => ({
       command: "python",
       args: [

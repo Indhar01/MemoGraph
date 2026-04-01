@@ -1,22 +1,12 @@
 {
-  "name": "memograph",
-  "version": "0.1.0",
-  "description": "Graph-based memory system for LLMs with intelligent retrieval",
-  "author": "Indirakumar",
-  "homepage": "https://github.com/Indhar01/MemoGraph",
-  "license": "MIT",
-  "tags": ["memory", "graph", "llm", "knowledge-graph", "semantic-search", "retrieval"],
-  "capabilities": {
-    "storage": true,
-    "semantic_search": true,
-    "graph_traversal": true,
-    "embeddings": true,
-    "autonomous_hooks": true
+  "serverInfo": {
+    "name": "memograph",
+    "version": "0.1.0",
+    "description": "Graph-based memory system for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings"
   },
-  "runtime": {
-    "type": "python",
-    "version": ">=3.10",
-    "entrypoint": "-m memograph.mcp.run_server"
+  "authentication": {
+    "required": false,
+    "schemes": []
   },
   "configSchema": {
     "type": "object",
@@ -24,51 +14,16 @@
     "properties": {
       "vault": {
         "type": "string",
-        "description": "Path to your MemoGraph vault directory",
-        "env": "MEMOGRAPH_VAULT",
-        "examples": ["~/memograph-vault", "/path/to/vault", "./vault"]
+        "description": "Path to your MemoGraph vault directory"
       },
-      "llm_provider": {
+      "provider": {
         "type": "string",
-        "description": "LLM provider (ollama, claude, or openai)",
-        "enum": ["ollama", "claude", "openai"],
-        "env": "MEMOGRAPH_PROVIDER",
-        "default": "ollama"
+        "description": "LLM provider (ollama or claude)",
+        "enum": ["ollama", "claude"]
       },
-      "llm_model": {
+      "model": {
         "type": "string",
-        "description": "Specific model name to use",
-        "env": "MEMOGRAPH_MODEL",
-        "examples": ["llama3.1", "claude-3-5-sonnet-20241022", "gpt-4"]
-      },
-      "embedding_provider": {
-        "type": "string",
-        "description": "Embedding provider for semantic search (sentence-transformers, openai, ollama, or none)",
-        "enum": ["sentence-transformers", "openai", "ollama", "none"],
-        "env": "MEMOGRAPH_EMBEDDING_PROVIDER",
-        "default": "sentence-transformers"
-      },
-      "embedding_model": {
-        "type": "string",
-        "description": "Specific embedding model to use",
-        "env": "MEMOGRAPH_EMBEDDING_MODEL",
-        "examples": ["all-MiniLM-L6-v2", "text-embedding-3-small", "nomic-embed-text"]
-      },
-      "enable_gam": {
-        "type": "boolean",
-        "description": "Enable Graph Attention Memory (GAM) for enhanced retrieval",
-        "default": false
-      },
-      "autonomous_mode": {
-        "type": "boolean",
-        "description": "Enable autonomous memory capture during conversations",
-        "default": true
-      },
-      "log_level": {
-        "type": "string",
-        "description": "Logging level (DEBUG, INFO, WARNING, ERROR)",
-        "enum": ["DEBUG", "INFO", "WARNING", "ERROR"],
-        "default": "INFO"
+        "description": "Specific model name to use"
       }
     }
   },
@@ -76,107 +31,266 @@
     {
       "name": "search_vault",
       "description": "Search memories using semantic or keyword search with configurable filters",
-      "category": "search"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search query" },
+          "top_k": { "type": "integer", "description": "Max results to return", "default": 8 },
+          "memory_type": { "type": "string", "description": "Filter by memory type", "enum": ["episodic", "semantic", "procedural", "fact"] },
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "Filter by tags" }
+        },
+        "required": ["query"]
+      }
     },
     {
       "name": "query_with_context",
-      "description": "Retrieve relevant context for a question with token compression for LLM prompts",
-      "category": "search"
+      "description": "Retrieve relevant context for a question with optional AI-generated answer",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string", "description": "The question to answer" },
+          "top_k": { "type": "integer", "description": "Number of memories to use as context", "default": 8 },
+          "generate_answer": { "type": "boolean", "description": "Generate AI answer if LLM configured", "default": true }
+        },
+        "required": ["question"]
+      }
     },
     {
       "name": "create_memory",
       "description": "Create a new memory in the vault with title, content, tags, and type",
-      "category": "create"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "description": "Memory title" },
+          "content": { "type": "string", "description": "Memory content" },
+          "tags": { "type": "array", "items": { "type": "string" }, "description": "Optional tags" },
+          "memory_type": { "type": "string", "description": "Type of memory", "enum": ["episodic", "semantic", "procedural", "fact"], "default": "semantic" },
+          "salience": { "type": "number", "description": "Importance score 0.0-1.0", "default": 0.7 }
+        },
+        "required": ["title", "content"]
+      }
     },
     {
       "name": "import_document",
-      "description": "Import TXT or MD documents into the vault, preserving formatting and metadata",
-      "category": "create"
+      "description": "Import TXT or MD documents into the vault",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": { "type": "string", "description": "Path to the document to import" },
+          "memory_type": { "type": "string", "enum": ["episodic", "semantic", "procedural", "fact"], "default": "episodic" },
+          "salience": { "type": "number", "default": 0.7 },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["file_path"]
+      }
     },
     {
       "name": "bulk_create",
-      "description": "Create multiple memories in a single operation for efficient batch imports",
-      "category": "create"
+      "description": "Create multiple memories in a single operation",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": { "type": "string" },
+                "content": { "type": "string" },
+                "tags": { "type": "array", "items": { "type": "string" } },
+                "memory_type": { "type": "string", "enum": ["episodic", "semantic", "procedural", "fact"] },
+                "salience": { "type": "number" }
+              },
+              "required": ["title", "content"]
+            }
+          }
+        },
+        "required": ["memories"]
+      }
     },
     {
       "name": "list_memories",
-      "description": "List memories with optional filters (tags, type, date range)",
-      "category": "read"
+      "description": "List memories with optional filters",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_type": { "type": "string", "enum": ["episodic", "semantic", "procedural", "fact"] },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "limit": { "type": "integer", "default": 20 },
+          "sort_by": { "type": "string", "enum": ["created", "salience", "title"], "default": "created" }
+        }
+      }
     },
     {
       "name": "get_memory",
-      "description": "Get full content and metadata of a specific memory by title",
-      "category": "read"
+      "description": "Get full content and metadata of a specific memory by ID",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": { "type": "string", "description": "Memory ID to retrieve" }
+        },
+        "required": ["memory_id"]
+      }
     },
     {
       "name": "get_vault_info",
-      "description": "Get information about the configured vault (path, size, configuration)",
-      "category": "read"
+      "description": "Get information about the configured vault",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "get_vault_stats",
+      "description": "Get vault statistics and analytics",
+      "inputSchema": { "type": "object", "properties": {} }
     },
     {
       "name": "update_memory",
       "description": "Update an existing memory's content, tags, or metadata",
-      "category": "update"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": { "type": "string", "description": "Memory ID to update" },
+          "title": { "type": "string" },
+          "content": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "salience": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["memory_id"]
+      }
     },
     {
       "name": "delete_memory",
       "description": "Delete a memory from the vault permanently",
-      "category": "delete"
-    },
-    {
-      "name": "get_vault_stats",
-      "description": "Get vault statistics and analytics (memory count, tags, types, connections)",
-      "category": "analytics"
-    },
-    {
-      "name": "list_available_tools",
-      "description": "List all available MCP tools with descriptions and categories",
-      "category": "discovery"
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": { "type": "string", "description": "Memory ID to delete" }
+        },
+        "required": ["memory_id"]
+      }
     },
     {
       "name": "relate_memories",
-      "description": "Create a bidirectional graph link between two memories for enhanced traversal",
-      "category": "graph"
+      "description": "Create a wikilink connection between two memories in the graph",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source_id": { "type": "string", "description": "Source memory ID" },
+          "target_id": { "type": "string", "description": "Target memory ID" }
+        },
+        "required": ["source_id", "target_id"]
+      }
     },
     {
       "name": "search_by_graph",
-      "description": "Traverse connected memories from a starting point using BFS with configurable depth",
-      "category": "graph"
+      "description": "Traverse connected memories using BFS with configurable depth",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "memory_id": { "type": "string", "description": "Starting memory ID" },
+          "depth": { "type": "integer", "default": 2 },
+          "include_backlinks": { "type": "boolean", "default": true }
+        },
+        "required": ["memory_id"]
+      }
     },
     {
       "name": "find_path",
-      "description": "Find the shortest graph path between two memories using BFS",
-      "category": "graph"
+      "description": "Find the shortest graph path between two memories",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "from_id": { "type": "string", "description": "Starting memory ID" },
+          "to_id": { "type": "string", "description": "Target memory ID" }
+        },
+        "required": ["from_id", "to_id"]
+      }
     },
     {
       "name": "auto_hook_query",
-      "description": "Autonomous hook that processes user queries to capture relevant context",
-      "category": "autonomous"
+      "description": "Autonomous hook for user queries - searches vault and provides context",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_query": { "type": "string", "description": "The user's query" },
+          "auto_search": { "type": "boolean" },
+          "auto_save_query": { "type": "boolean" }
+        },
+        "required": ["user_query"]
+      }
     },
     {
       "name": "auto_hook_response",
-      "description": "Autonomous hook that processes AI responses to extract and store insights",
-      "category": "autonomous"
+      "description": "Autonomous hook for AI responses - saves interaction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "user_query": { "type": "string" },
+          "ai_response": { "type": "string" },
+          "auto_save": { "type": "boolean" }
+        },
+        "required": ["user_query", "ai_response"]
+      }
     },
     {
       "name": "configure_autonomous_mode",
-      "description": "Configure autonomous behavior settings (enable/disable, filters, thresholds)",
-      "category": "autonomous"
+      "description": "Configure autonomous hooks behavior",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "auto_search": { "type": "boolean" },
+          "auto_save_responses": { "type": "boolean" },
+          "auto_save_queries": { "type": "boolean" },
+          "min_query_length": { "type": "number" }
+        }
+      }
     },
     {
       "name": "get_autonomous_config",
-      "description": "Get current autonomous behavior settings and status",
-      "category": "autonomous"
+      "description": "Get current autonomous hooks configuration",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "list_available_tools",
+      "description": "List all available MCP tools with descriptions",
+      "inputSchema": { "type": "object", "properties": {} }
     }
   ],
-  "documentation": {
-    "quickstart": "https://github.com/Indhar01/MemoGraph#quick-start",
-    "api_reference": "https://github.com/Indhar01/MemoGraph/blob/main/README.md",
-    "mcp_setup": "https://github.com/Indhar01/MemoGraph/blob/main/docs/MCP_TROUBLESHOOTING.md",
-    "examples": "https://github.com/Indhar01/MemoGraph/tree/main/examples"
-  },
-  "support": {
-    "issues": "https://github.com/Indhar01/MemoGraph/issues",
-    "discussions": "https://github.com/Indhar01/MemoGraph/discussions"
-  }
+  "resources": [
+    {
+      "uriTemplate": "memograph://vault/{memory_id}",
+      "name": "Memory by ID",
+      "description": "Get a specific memory by its ID",
+      "mimeType": "text/markdown"
+    },
+    {
+      "uriTemplate": "memograph://tag/{tag}",
+      "name": "Memories by tag",
+      "description": "List all memories with a specific tag"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "vault-summary",
+      "description": "Get a summary of your entire memory vault"
+    },
+    {
+      "name": "recall",
+      "description": "Recall what you know about a specific topic",
+      "arguments": [
+        { "name": "topic", "description": "Topic to recall", "required": true }
+      ]
+    },
+    {
+      "name": "weekly-review",
+      "description": "Review recent memories for a weekly review"
+    },
+    {
+      "name": "find-connections",
+      "description": "Find connections between two topics in your vault",
+      "arguments": [
+        { "name": "topic_a", "description": "First topic", "required": true },
+        { "name": "topic_b", "description": "Second topic", "required": true }
+      ]
+    }
+  ]
 }

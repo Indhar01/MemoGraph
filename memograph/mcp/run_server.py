@@ -140,9 +140,13 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
     """Run the MCP server using the official SDK."""
     global memograph_server
 
-    from .card_server import start_card_server
-    card_port = int(os.environ.get("CARD_SERVER_PORT", "8080"))
-    start_card_server(port=card_port)
+    try:
+        from .card_server import start_card_server
+        card_port = int(os.environ.get("CARD_SERVER_PORT", "8080"))
+        start_card_server(port=card_port)
+        logger.info(f"Card server started on port {card_port}")
+    except Exception as e:
+        logger.warning(f"Card server failed to start (non-fatal): {e}")
 
     # Initialize MemoGraph server
     memograph_server = MemoGraphMCPServer(
