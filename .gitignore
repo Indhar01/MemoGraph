@@ -50,6 +50,8 @@ CHAT_IMPROVEMENTS.md
 TIMEOUT_FIX_SUMMARY.md
 test_chat_improvements.py
 
+.mcpregistry_*
+
 node_modules/
 docs/
 .bob/

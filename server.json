@@ -1,16 +1,29 @@
 {
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.indhar01/memograph",
-  "displayName": "MemoGraph",
-  "description": "Graph-based memory system for LLMs with intelligent retrieval using knowledge graphs, hybrid search, and semantic embeddings",
-  "location": {
-    "type": "pypi",
-    "package": "memograph"
+  "description": "Graph-based memory system for LLMs with knowledge graphs and semantic search",
+  "repository": {
+    "url": "https://github.com/Indhar01/MemoGraph",
+    "source": "github"
   },
-  "execution": {
-    "command": "python",
-    "args": ["-m", "memograph.mcp.run_server"],
-    "env": {
-      "MEMOGRAPH_VAULT": "~/my-vault"
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "memograph",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Path to your MemoGraph vault directory",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false,
+          "name": "MEMOGRAPH_VAULT"
+        }
+      ]
     }
-  }
+  ]
 }

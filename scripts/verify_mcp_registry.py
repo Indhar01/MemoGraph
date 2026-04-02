@@ -50,7 +50,7 @@ def check_server_json() -> bool:
         return False
 
     # Check required fields
-    required_fields = ["name", "displayName", "description", "location", "execution"]
+    required_fields = ["$schema", "name", "description", "repository", "version", "packages"]
     missing_fields = [field for field in required_fields if field not in data]
 
     if missing_fields:
@@ -59,6 +59,23 @@ def check_server_json() -> bool:
         )
         return False
     print_status("Required fields present", True)
+
+    # Check $schema
+    expected_schema = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+    actual_schema = data.get("$schema", "")
+    if actual_schema != expected_schema:
+        print_status("Correct $schema", False, f"Wrong schema URL")
+        return False
+    print_status("Correct $schema", True)
+
+    # Check description length (must be <= 100 characters)
+    description = data.get("description", "")
+    if len(description) > 100:
+        print_status(
+            "Description length", False, f"Too long: {len(description)} chars (max 100)"
+        )
+        return False
+    print_status(f"Description length OK: {len(description)}/100 chars", True)
 
     # Verify namespace format
     expected_namespace = "io.github.indhar01/memograph"
@@ -73,39 +90,49 @@ def check_server_json() -> bool:
         return False
     print_status(f"Correct namespace: {expected_namespace}", True)
 
-    # Verify location
-    if data.get("location", {}).get("type") != "pypi":
-        print_status("Location type", False, "Expected 'pypi'")
+    # Verify repository
+    repo = data.get("repository", {})
+    if repo.get("url") != "https://github.com/Indhar01/MemoGraph":
+        print_status("Repository URL", False, "Wrong URL")
         return False
-    print_status("Location type: pypi", True)
+    print_status("Repository URL correct", True)
 
-    if data.get("location", {}).get("package") != "memograph":
-        print_status("Package name", False, "Expected 'memograph'")
+    if repo.get("source") != "github":
+        print_status("Repository source", False, "Expected: github")
         return False
-    print_status("Package name: memograph", True)
+    print_status("Repository source: github", True)
 
-    # Verify execution
-    expected_command = "python"
-    actual_command = data.get("execution", {}).get("command", "")
-
-    if actual_command != expected_command:
-        print_status(
-            "Execution command",
-            False,
-            f"Expected: {expected_command}, Got: {actual_command}",
-        )
+    # Verify version
+    version = data.get("version", "")
+    if not version:
+        print_status("Version field", False, "Version is required")
         return False
-    print_status("Execution command: python", True)
+    print_status(f"Version: {version}", True)
 
-    expected_args = ["-m", "memograph.mcp.run_server"]
-    actual_args = data.get("execution", {}).get("args", [])
-
-    if actual_args != expected_args:
-        print_status(
-            "Execution args", False, f"Expected: {expected_args}, Got: {actual_args}"
-        )
+    # Verify packages array
+    packages = data.get("packages", [])
+    if not packages or len(packages) == 0:
+        print_status("Packages array", False, "At least one package required")
         return False
-    print_status("Execution args correct", True)
+    print_status(f"Packages array: {len(packages)} package(s)", True)
+
+    # Verify first package
+    package = packages[0]
+
+    if package.get("registryType") != "pypi":
+        print_status("Package registry type", False, "Expected: pypi")
+        return False
+    print_status("Package registry type: pypi", True)
+
+    if package.get("identifier") != "memograph":
+        print_status("Package identifier", False, "Expected: memograph")
+        return False
+    print_status("Package identifier: memograph", True)
+
+    if package.get("transport", {}).get("type") != "stdio":
+        print_status("Transport type", False, "Expected: stdio")
+        return False
+    print_status("Transport type: stdio", True)
 
     return True
 
