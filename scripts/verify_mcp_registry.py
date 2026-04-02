@@ -64,7 +64,7 @@ def check_server_json() -> bool:
     expected_schema = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
     actual_schema = data.get("$schema", "")
     if actual_schema != expected_schema:
-        print_status("Correct $schema", False, f"Wrong schema URL")
+        print_status("Correct $schema", False, "Wrong schema URL")
         return False
     print_status("Correct $schema", True)
 
