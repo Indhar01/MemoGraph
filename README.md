@@ -1,5 +1,7 @@
 # MemoGraph 🧠
 
+<!-- mcp-name: io.github.Indhar01/memograph -->
+
 [![PyPI version](https://img.shields.io/pypi/v/memograph)](https://pypi.org/project/memograph/)
 [![Python Version](https://img.shields.io/pypi/pyversions/memograph)](https://pypi.org/project/memograph/)
 [![License](https://img.shields.io/github/license/Indhar01/MemoGraph)](https://github.com/Indhar01/MemoGraph/blob/main/LICENSE)
