@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "memograph": {
+      "command": "c:\\Users\\INDIRAKUMARS\\Documents\\Projects\\MemoGraph\\run_memograph_mcp.bat",
+      "args": [],
+      "env": {
+        "MEMOGRAPH_VAULT": "c:\\Users\\INDIRAKUMARS\\Documents\\memograph-vault"
+      },
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}

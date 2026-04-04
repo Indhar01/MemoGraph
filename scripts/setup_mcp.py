@@ -12,6 +12,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Fix encoding for Windows console to support Unicode output
+if platform.system() == "Windows":
+    try:
+        # Try to set UTF-8 encoding for stdout/stderr
+        if sys.stdout.encoding != 'utf-8':
+            sys.stdout.reconfigure(encoding='utf-8')
+        if sys.stderr.encoding != 'utf-8':
+            sys.stderr.reconfigure(encoding='utf-8')
+    except (AttributeError, OSError):
+        # Fallback: If reconfigure not available or fails, we'll use ASCII-safe output
+        pass
+
 
 def get_python_executable() -> str:
     """Get the full path to the current Python executable."""
@@ -50,7 +62,10 @@ REM Use the Python that has memograph installed
 "{python_exe}" -m memograph.mcp.run_server
 """
         wrapper_path.write_text(content, encoding="utf-8")
-        print(f"✓ Created wrapper script: {wrapper_path}")
+        try:
+            print(f"✓ Created wrapper script: {wrapper_path}")
+        except UnicodeEncodeError:
+            print(f"Created wrapper script: {wrapper_path}")
 
     else:  # macOS/Linux
         wrapper_path = project_root / "run_memograph_mcp.sh"
@@ -66,7 +81,10 @@ cd "{project_root}"
         wrapper_path.write_text(content, encoding="utf-8")
         # Make executable
         wrapper_path.chmod(0o755)
-        print(f"✓ Created wrapper script: {wrapper_path}")
+        try:
+            print(f"✓ Created wrapper script: {wrapper_path}")
+        except UnicodeEncodeError:
+            print(f"Created wrapper script: {wrapper_path}")
 
     return wrapper_path
 
@@ -207,7 +225,10 @@ def write_config(client: str, config: dict, backup: bool = True) -> bool:
     """
     config_path = get_config_path(client)
     if not config_path:
-        print(f"✗ Could not determine config path for {client}")
+        try:
+            print(f"✗ Could not determine config path for {client}")
+        except UnicodeEncodeError:
+            print(f"Could not determine config path for {client}")
         return False
 
     # Create parent directory if needed
@@ -219,7 +240,10 @@ def write_config(client: str, config: dict, backup: bool = True) -> bool:
         import shutil
 
         shutil.copy2(config_path, backup_path)
-        print(f"✓ Backed up existing config to: {backup_path}")
+        try:
+            print(f"✓ Backed up existing config to: {backup_path}")
+        except UnicodeEncodeError:
+            print(f"Backed up existing config to: {backup_path}")
 
     # Load and merge with existing config
     existing = {}
@@ -228,7 +252,10 @@ def write_config(client: str, config: dict, backup: bool = True) -> bool:
             with open(config_path, encoding="utf-8") as f:
                 existing = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            print(f"⚠ Warning: Could not read existing config: {e}")
+            try:
+                print(f"⚠ Warning: Could not read existing config: {e}")
+            except UnicodeEncodeError:
+                print(f"Warning: Could not read existing config: {e}")
 
     # Merge configurations
     final_config = merge_config(existing, config)
@@ -237,10 +264,16 @@ def write_config(client: str, config: dict, backup: bool = True) -> bool:
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(final_config, f, indent=2)
-        print(f"✓ Wrote config to: {config_path}")
+        try:
+            print(f"✓ Wrote config to: {config_path}")
+        except UnicodeEncodeError:
+            print(f"Wrote config to: {config_path}")
         return True
     except OSError as e:
-        print(f"✗ Failed to write config: {e}")
+        try:
+            print(f"✗ Failed to write config: {e}")
+        except UnicodeEncodeError:
+            print(f"Failed to write config: {e}")
         return False
 
 
@@ -386,7 +419,11 @@ def main():
 
     args = parser.parse_args()
 
-    print("🔧 MemoGraph MCP Setup")
+    # Use ASCII-safe output if UTF-8 not available
+    try:
+        print("🔧 MemoGraph MCP Setup")
+    except UnicodeEncodeError:
+        print("MemoGraph MCP Setup")
     print("=" * 60)
 
     # Verify setup first
@@ -398,20 +435,29 @@ def main():
 
     # Check if memograph is installed
     if not results["memograph"]["installed"]:
-        print("\n❌ MemoGraph is not installed!")
+        try:
+            print("\n❌ MemoGraph is not installed!")
+        except UnicodeEncodeError:
+            print("\nMemoGraph is not installed!")
         print("   Run: pip install -e .")
         sys.exit(1)
 
     # Create vault if it doesn't exist
     vault_path = Path(args.vault).expanduser()
     if not vault_path.exists():
-        print(f"\n📁 Creating vault at: {vault_path}")
+        try:
+            print(f"\n📁 Creating vault at: {vault_path}")
+        except UnicodeEncodeError:
+            print(f"\nCreating vault at: {vault_path}")
         vault_path.mkdir(parents=True, exist_ok=True)
 
     # Configure clients
     clients = ["claude", "cline", "bob"] if args.client == "all" else [args.client]
 
-    print(f"\n⚙️  Configuring {len(clients)} client(s)...")
+    try:
+        print(f"\n⚙️  Configuring {len(clients)} client(s)...")
+    except UnicodeEncodeError:
+        print(f"\nConfiguring {len(clients)} client(s)...")
     success_count = 0
 
     for client in clients:
@@ -430,14 +476,23 @@ def main():
     # Summary
     print("\n" + "=" * 60)
     if success_count == len(clients):
-        print("✅ Setup Complete!")
+        try:
+            print("✅ Setup Complete!")
+        except UnicodeEncodeError:
+            print("Setup Complete!")
         print(f"\nConfigured {success_count}/{len(clients)} client(s)")
-        print("\n📋 Next Steps:")
+        try:
+            print("\n📋 Next Steps:")
+        except UnicodeEncodeError:
+            print("\nNext Steps:")
         print("  1. Restart your MCP client(s)")
         print("  2. Test with: 'Search my MemoGraph vault'")
         print("  3. Check logs if tools don't appear")
     else:
-        print(f"⚠️  Partial Success: {success_count}/{len(clients)} configured")
+        try:
+            print(f"⚠️  Partial Success: {success_count}/{len(clients)} configured")
+        except UnicodeEncodeError:
+            print(f"Partial Success: {success_count}/{len(clients)} configured")
         print("\nCheck the errors above and try again.")
 
 

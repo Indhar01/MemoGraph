@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 import time as time_module
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -372,6 +373,15 @@ class MemoryKernel:
                 f"query_ttl={query_cache_ttl}s"
             )
 
+        # Ingest failure tracking (Fix #4)
+        self._last_ingest_error: Exception | None = None
+        self._ingest_attempt_count = 0
+        self._max_auto_ingest_attempts = 3
+        
+        # Thread safety for graph operations (Fix #5)
+        self._graph_lock = threading.RLock()
+        self._graph_version = 0
+        
         logger.info("MemoGraph kernel initialized successfully")
 
     @classmethod
@@ -538,6 +548,30 @@ class MemoryKernel:
         """Convert text to a URL-safe slug."""
         slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.strip().lower()).strip("-")
         return slug or datetime.now(timezone.utc).strftime("memory-%Y%m%d-%H%M%S")
+    
+    @staticmethod
+    def _atomic_write(file_path: Path, content: str) -> None:
+        """Write file atomically using temp file + rename to prevent corruption.
+        
+        Args:
+            file_path: Target file path to write to
+            content: Content to write
+            
+        Raises:
+            OSError: If write or rename fails
+        """
+        temp_path = file_path.with_suffix('.tmp')
+        try:
+            temp_path.write_text(content, encoding="utf-8")
+            temp_path.replace(file_path)  # Atomic on POSIX and Windows
+        except Exception:
+            # Clean up temp file on failure (best effort)
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass  # Best effort cleanup
+            raise
 
     def ingest(
         self, force: bool = False, auto_extract: bool | None = None
@@ -577,51 +611,74 @@ class MemoryKernel:
             >>> stats = kernel.ingest(auto_extract=True)
             >>> print(f"Extracted {stats['entities_extracted']} entities")
         """
-        logger.info(f"Starting ingestion from vault: {self.vault_path}")
+        # Thread-safe graph rebuild (Fix #5)
+        with self._graph_lock:
+            try:
+                logger.info(
+                    f"Acquiring graph lock for ingest "
+                    f"(version: {self._graph_version})"
+                )
+                logger.info(f"Starting ingestion from vault: {self.vault_path}")
 
-        # Rebuild graph from scratch
-        self.graph = VaultGraph()
-        indexed, skipped = self.indexer.index(self.graph, force=force)
+                # Rebuild graph from scratch
+                self.graph = VaultGraph()
+                indexed, skipped = self.indexer.index(self.graph, force=force)
 
-        # Recreate retriever with same configuration
-        if self.use_gam:
-            self.retriever = GAMRetriever(
-                self.graph,
-                embedding_adapter=self.retriever.embeddings,
-                use_gam=True,
-                gam_config=self.gam_config,
-                access_tracker=getattr(
-                    self.retriever, "access_tracker", None
-                ),  # Preserve tracker
-            )
-        else:
-            self.retriever = HybridRetriever(
-                self.graph, embedding_adapter=self.retriever.embeddings
-            )
+                # Recreate retriever with same configuration
+                if self.use_gam:
+                    self.retriever = GAMRetriever(
+                        self.graph,
+                        embedding_adapter=self.retriever.embeddings,
+                        use_gam=True,
+                        gam_config=self.gam_config,
+                        access_tracker=getattr(
+                            self.retriever, "access_tracker", None
+                        ),  # Preserve tracker
+                    )
+                else:
+                    self.retriever = HybridRetriever(
+                        self.graph, embedding_adapter=self.retriever.embeddings
+                    )
 
-        logger.info(f"Indexed {indexed} files, skipped {skipped} unchanged files")
+                logger.info(f"Indexed {indexed} files, skipped {skipped} unchanged files")
 
-        # Perform auto-extraction if enabled
-        extract_enabled = (
-            auto_extract if auto_extract is not None else self.auto_extract
-        )
-        entities_extracted = 0
+                # Perform auto-extraction if enabled
+                extract_enabled = (
+                    auto_extract if auto_extract is not None else self.auto_extract
+                )
+                entities_extracted = 0
 
-        if extract_enabled and self.organizer:
-            logger.info("Starting entity extraction from memories")
-            entities_extracted = self._extract_entities_from_memories()
-            logger.info(f"Extracted {entities_extracted} total entities")
+                if extract_enabled and self.organizer:
+                    logger.info("Starting entity extraction from memories")
+                    entities_extracted = self._extract_entities_from_memories()
+                    logger.info(f"Extracted {entities_extracted} total entities")
 
-        total = len(self.graph._nodes)
-
-        logger.info(f"Ingestion complete: {total} total memories in graph")
-
-        return {
-            "indexed": indexed,
-            "skipped": skipped,
-            "total": total,
-            "entities_extracted": entities_extracted,
-        }
+                total = len(self.graph._nodes)
+                
+                self._graph_version += 1
+                logger.info(f"Graph rebuilt (version: {self._graph_version})")
+                logger.info(f"Ingestion complete: {total} total memories in graph")
+                
+                # Clear error state on success (Fix #4)
+                self._last_ingest_error = None
+                self._ingest_attempt_count = 0
+                
+                return {
+                    "indexed": indexed,
+                    "skipped": skipped,
+                    "total": total,
+                    "entities_extracted": entities_extracted,
+                }
+                
+            except Exception as e:
+                # Track failure (Fix #4)
+                self._last_ingest_error = e
+                self._ingest_attempt_count += 1
+                logger.error(
+                    f"Ingest failed (attempt {self._ingest_attempt_count}): {e}",
+                    exc_info=True
+                )
+                raise
 
     def _extract_entities_from_memories(self) -> int:
         """
@@ -893,8 +950,31 @@ class MemoryKernel:
         if tags_line:
             body = f"{body}\n\n{tags_line}"
 
-        # Write file
-        file_path.write_text(frontmatter + body + "\n", encoding="utf-8")
+        # Write file with disk space handling (Fix #7)
+        try:
+            file_path.write_text(frontmatter + body + "\n", encoding="utf-8")
+        except OSError as e:
+            # Handle disk full, permission errors, etc.
+            if file_path.exists():
+                # Clean up partial write
+                try:
+                    file_path.unlink()
+                except Exception:
+                    pass  # Best effort cleanup
+            
+            if e.errno == 28 or "No space left" in str(e):  # ENOSPC
+                raise OSError(
+                    f"Disk full: Cannot write memory '{title}' to {file_path}. "
+                    f"Free up disk space and try again."
+                ) from e
+            elif e.errno == 13:  # EACCES
+                raise PermissionError(
+                    f"Permission denied: Cannot write to {file_path}"
+                ) from e
+            else:
+                raise OSError(
+                    f"Failed to write memory '{title}': {e}"
+                ) from e
 
         logger.info(f"Created memory: {title} -> {file_path.name}")
         logger.debug(
@@ -1059,16 +1139,13 @@ class MemoryKernel:
 
         for idx, (memory_id, update_data) in enumerate(updates):
             try:
-                # Find the memory file
-                memory_path: Path | None = None
-                for md_file in self.vault_path.rglob("*.md"):
-                    if md_file.stem == memory_id or md_file.stem.startswith(
-                        f"{memory_id}-"
-                    ):
-                        memory_path = md_file
-                        break
-
-                if not memory_path or not memory_path.exists():
+                # Find the memory file using graph lookup (much faster than rglob)
+                node = self.graph.get(memory_id)
+                if not node or not node.source_path:
+                    raise ValueError(f"Memory not found in graph: {memory_id}")
+                
+                memory_path = Path(node.source_path)
+                if not memory_path.exists():
                     raise ValueError(f"Memory file not found for ID: {memory_id}")
 
                 # Read existing content
@@ -1127,7 +1204,7 @@ class MemoryKernel:
                     + yaml.safe_dump(frontmatter, sort_keys=False).strip()
                     + "\n---\n\n"
                 )
-                memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")  # type: ignore[union-attr]
+                self._atomic_write(memory_path, new_frontmatter + body + "\n")  # type: ignore[union-attr]
 
                 successful_ids.append(memory_id)
                 logger.debug(
@@ -1257,10 +1334,30 @@ class MemoryKernel:
 
         normalized_tags = self._normalize_tags(tags)
 
-        # Auto-ingest if graph is empty
+        # Auto-ingest with failure tracking (Fix #4)
         if not self.graph._nodes:
-            logger.info("Graph is empty, running auto-ingest")
-            self.ingest()
+            if self._last_ingest_error:
+                raise RuntimeError(
+                    f"Cannot retrieve - ingest failed:\n"
+                    f"  {type(self._last_ingest_error).__name__}: "
+                    f"{self._last_ingest_error}\n\n"
+                    f"Fix issues and call kernel.ingest(force=True)"
+                )
+            
+            if self._ingest_attempt_count >= self._max_auto_ingest_attempts:
+                raise RuntimeError(
+                    f"Auto-ingest failed {self._ingest_attempt_count} times. "
+                    f"Check logs and retry manually."
+                )
+            
+            logger.info(
+                f"Auto-ingest attempt {self._ingest_attempt_count + 1}/"
+                f"{self._max_auto_ingest_attempts}"
+            )
+            try:
+                self.ingest()
+            except Exception as e:
+                raise RuntimeError(f"Auto-ingest failed: {e}") from e
 
         # Keyword-based seed finding
         query_words = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
@@ -1272,26 +1369,29 @@ class MemoryKernel:
 
         logger.debug(f"Found {len(seed_ids)} seed nodes for query: '{query}'")
 
-        start_time = time_module.time()
-        results = self.retriever.retrieve(
-            query=query,
-            seed_ids=seed_ids,
-            tags=normalized_tags,
-            depth=depth,
-            top_k=top_k,
-        )
-        duration = time_module.time() - start_time
+        # Retrieval with thread safety (Fix #5)
+        with self._graph_lock:
+            start_time = time_module.time()
+            results = self.retriever.retrieve(
+                query=query,
+                seed_ids=seed_ids,
+                tags=normalized_tags,
+                depth=depth,
+                top_k=top_k,
+            )
+            duration = time_module.time() - start_time
+            
+            logger.info(
+                f"Retrieved {len(results)} nodes "
+                f"(graph v{self._graph_version}) in {duration:.3f}s"
+            )
 
         # Cache results
         if use_cache and self.query_cache:
             cache_key = f"{query}|{tags}|{depth}|{top_k}"
             self.query_cache.put(cache_key, results)
 
-        logger.info(
-            f"Retrieved {len(results)} nodes for query: '{query}' in {duration:.3f}s"
-        )
-
-        return results
+            return results
 
     def query(self) -> MemoryQuery:
         """
@@ -1380,23 +1480,31 @@ class MemoryKernel:
 
         # Apply recency boost if requested
         if options.boost_recent and options.time_decay_factor:
+            import copy
+            import math
             import time
 
             current_time = time.time()
 
+            # Create copies to avoid modifying original nodes (prevents side effects)
+            boosted_results = []
             for node in results:
+                # Create shallow copy to avoid modifying original
+                boosted_node = copy.copy(node)
+                
                 # Calculate time difference in days
                 node_time = node.created_at.timestamp()
                 days_old = (current_time - node_time) / (24 * 3600)
 
                 # Apply exponential decay: score * exp(-decay_factor * days)
-                import math
-
                 recency_factor = math.exp(-options.time_decay_factor * days_old)
 
-                # Boost salience by recency
-                node.salience = node.salience * (0.5 + 0.5 * recency_factor)
+                # Boost salience on the copy
+                boosted_node.salience = node.salience * (0.5 + 0.5 * recency_factor)
+                boosted_results.append(boosted_node)
 
+            results = boosted_results
+            
             # Re-sort by boosted salience
             results.sort(key=lambda n: n.salience, reverse=True)
             logger.debug(

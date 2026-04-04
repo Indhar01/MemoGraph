@@ -78,31 +78,42 @@ class AutonomousHooks:
             )
 
             if should_search:
-                # Search vault for relevant context
+                # Search vault for relevant context with timeout
                 try:
+                    import asyncio
                     from ..core.assistant import retrieve_cited_context
 
-                    context, source_list = retrieve_cited_context(
-                        kernel=self.kernel,
-                        query=user_query,
-                        tags=None,
-                        top_k=5,
-                    )
+                    # Run search with 10 second timeout to prevent hanging
+                    try:
+                        context, source_list = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                retrieve_cited_context,
+                                kernel=self.kernel,
+                                query=user_query,
+                                tags=None,
+                                top_k=5,
+                            ),
+                            timeout=10.0
+                        )
 
-                    sources = [
-                        {
-                            "id": src.source_id,
-                            "title": src.title,
-                            "memory_type": src.memory_type,
-                            "tags": src.tags,
-                        }
-                        for src in source_list
-                    ]
+                        sources = [
+                            {
+                                "id": src.source_id,
+                                "title": src.title,
+                                "memory_type": src.memory_type,
+                                "tags": src.tags,
+                            }
+                            for src in source_list
+                        ]
 
-                    actions.append("searched_vault")
-                    logger.info(
-                        f"Auto-searched vault for query, found {len(sources)} sources"
-                    )
+                        actions.append("searched_vault")
+                        logger.info(
+                            f"Auto-searched vault for query, found {len(sources)} sources"
+                        )
+
+                    except asyncio.TimeoutError:
+                        logger.warning("Auto-search timed out after 10 seconds")
+                        # Continue without context instead of failing completely
 
                 except Exception as e:
                     logger.warning(f"Auto-search failed: {e}")

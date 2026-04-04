@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Search, Filter, X, Calendar, Tag, Loader2 } from 'lucide-react'
+import { Search, Filter, X, Calendar, Tag, Loader2, Clock } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { searchAPI } from '../lib/api'
 import { Memory, SearchFilters } from '../types'
+import { useDebounce, useLocalStorage } from '../hooks'
 
 export default function SearchPage() {
   const [query, setQuery] = useState('')
-  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [filters, setFilters] = useState<SearchFilters>({
     tags: [],
     dateFrom: null,
@@ -15,15 +15,13 @@ export default function SearchPage() {
     minSalience: 0,
   })
   const [showFilters, setShowFilters] = useState(false)
-
-  // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(query)
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [query])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  
+  // Search history stored in localStorage
+  const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('memograph-search-history', [])
+  
+  // Debounce search query using custom hook
+  const debouncedQuery = useDebounce(query, 300)
 
   // Fetch search results
   const { data, isLoading, error } = useQuery({
@@ -32,12 +30,22 @@ export default function SearchPage() {
     enabled: debouncedQuery.length > 0,
   })
 
+  // Add to search history when search is performed
+  useEffect(() => {
+    if (debouncedQuery && debouncedQuery.length > 2) {
+      setSearchHistory(prev => {
+        const newHistory = [debouncedQuery, ...prev.filter(h => h !== debouncedQuery)].slice(0, 10)
+        return newHistory
+      })
+    }
+  }, [debouncedQuery, setSearchHistory])
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setQuery('')
-        setDebouncedQuery('')
+        setShowSuggestions(false)
       }
     }
 
@@ -47,6 +55,23 @@ export default function SearchPage() {
 
   const results = data?.results || []
   const totalResults = data?.total || 0
+  
+  // Filter search history based on current query
+  const filteredHistory = searchHistory
+    .filter(h => h.toLowerCase().includes(query.toLowerCase()) && h !== query)
+    .slice(0, 5)
+  
+  // Show suggestions when there's input and user is focused on input
+  const shouldShowSuggestions = showSuggestions && query.length > 0 && (filteredHistory.length > 0)
+  
+  const handleSelectSuggestion = (suggestion: string) => {
+    setQuery(suggestion)
+    setShowSuggestions(false)
+  }
+  
+  const clearHistory = () => {
+    setSearchHistory([])
+  }
 
   return (
     <div className="search-page">
@@ -61,6 +86,8 @@ export default function SearchPage() {
               placeholder="Search memories... (try #id, keywords, or questions)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               autoFocus
             />
             {query && (
@@ -68,12 +95,44 @@ export default function SearchPage() {
                 className="clear-button"
                 onClick={() => {
                   setQuery('')
-                  setDebouncedQuery('')
+                  setShowSuggestions(false)
                 }}
                 aria-label="Clear search"
               >
                 <X size={16} />
               </button>
+            )}
+            
+            {/* Search Suggestions Dropdown */}
+            {shouldShowSuggestions && (
+              <div className="search-suggestions">
+                <div className="suggestions-header">
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} />
+                    <span>Recent Searches</span>
+                  </div>
+                  {searchHistory.length > 0 && (
+                    <button
+                      onClick={clearHistory}
+                      className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="suggestions-list">
+                  {filteredHistory.map((item, index) => (
+                    <button
+                      key={index}
+                      className="suggestion-item"
+                      onClick={() => handleSelectSuggestion(item)}
+                    >
+                      <Clock size={14} />
+                      <span>{item}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 

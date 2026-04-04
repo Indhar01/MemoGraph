@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-02
+
+### Added
+- 🎉 **Published to Official MCP Registry** at [io.github.indhar01/memograph](https://github.com/modelcontextprotocol/servers/tree/main/src/memograph)
+- Community & Feedback section in README with multiple engagement channels
+- Enhanced registry installation instructions with step-by-step setup
+- VERSIONING.md document with semantic versioning guidelines
+- Direct links to MCP Registry and improved discoverability
+
+### Changed
+- Updated README.md with accurate MCP Registry installation process
+- Improved version badge and status information
+- Enhanced documentation for registry users
+- Version bumped to 0.1.1 for registry integration improvements
+
+### Fixed
+- Corrected MCP Registry installation instructions (removed non-existent CLI installer)
+- Updated community engagement links and resources
+
 ## [0.1.0] - 2026-03-28
 
 ### Added
@@ -60,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wikilink and backlink support
 - Tag-based filtering
 
-[Unreleased]: https://github.com/Indhar01/MemoGraph/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Indhar01/MemoGraph/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Indhar01/MemoGraph/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Indhar01/MemoGraph/compare/v0.0.2...v0.1.0
 [0.0.2]: https://github.com/Indhar01/MemoGraph/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/Indhar01/MemoGraph/releases/tag/v0.0.1

@@ -36,28 +36,77 @@ class MemoGraphMCPServer:
         llm_provider: str | None = None,
         llm_model: str | None = None,
     ):
-        """Initialize MCP server with MemoGraph kernel.
-
-        Args:
-            vault_path: Path to the MemoGraph vault
-            llm_provider: LLM provider to use (ollama or claude). Optional - if not
-                         provided, query_with_context will return context for the
-                         client's LLM to use instead of generating answers.
-            llm_model: Specific model name (optional)
-        """
-        self.vault_path = Path(vault_path).expanduser()
-        self.kernel = MemoryKernel(str(self.vault_path))
+        """Initialize MCP server with validated vault path."""
+        # Validate and resolve path
+        try:
+            self.vault_path = Path(vault_path).expanduser().resolve()
+        except (RuntimeError, OSError) as e:
+            raise ValueError(f"Invalid vault path '{vault_path}': {e}") from e
+        
+        # Verify not a file
+        if self.vault_path.exists() and not self.vault_path.is_dir():
+            raise ValueError(
+                f"Vault path is a file, not a directory: {self.vault_path}"
+            )
+        
+        # Create if needed
+        if not self.vault_path.exists():
+            try:
+                self.vault_path.mkdir(parents=True, exist_ok=True)
+                logger.info(f"Created vault directory: {self.vault_path}")
+            except PermissionError as e:
+                raise PermissionError(
+                    f"Cannot create vault at {self.vault_path}: {e}"
+                ) from e
+        
+        # Verify write permissions
+        if not os.access(self.vault_path, os.W_OK):
+            raise PermissionError(
+                f"No write permission for vault: {self.vault_path}"
+            )
+        
+        logger.info(f"✓ Vault validated: {self.vault_path}")
+        
+        # Initialize kernel
+        try:
+            self.kernel = MemoryKernel(str(self.vault_path))
+        except Exception as e:
+            raise RuntimeError(f"Kernel init failed: {e}") from e
+        
         self.llm_provider = llm_provider
         self.llm_model = llm_model
-
-        # Auto-ingest vault on startup so tools like list_memories work immediately
+        
+        # Track ingest state
+        self._ingest_failed = False
+        self._ingest_error: Exception | None = None
+        
+        # Auto-ingest with comprehensive tracking
         try:
-            self.kernel.ingest()
+            stats = self.kernel.ingest()
             logger.info(
-                f"Ingested vault: {len(self.kernel.graph._nodes)} memories loaded"
+                f"✓ Ingested: {stats['indexed']} indexed, {stats['skipped']} skipped"
             )
+            
+            # Detect suspicious scenarios
+            if stats['indexed'] == 0 and stats['skipped'] == 0:
+                md_files = list(self.vault_path.rglob("*.md"))
+                if md_files:
+                    logger.error(
+                        f"❌ CRITICAL: {len(md_files)} .md files found "
+                        f"but none indexed - parsing errors!"
+                    )
+                    self._ingest_failed = True
+                    self._ingest_error = RuntimeError(
+                        f"All {len(md_files)} files failed to parse"
+                    )
+                else:
+                    logger.warning("⚠️  Empty vault - no memories found")
+                    
         except Exception as e:
-            logger.warning(f"Initial vault ingest failed: {e}")
+            logger.error(f"❌ CRITICAL: Ingest failed: {e}", exc_info=True)
+            logger.error("Server degraded - operations will fail")
+            self._ingest_failed = True
+            self._ingest_error = e
 
         # Initialize autonomous hooks (can be enabled/disabled via configuration)
         self.autonomous_hooks = AutonomousHooks(self)
@@ -79,6 +128,37 @@ class MemoGraphMCPServer:
             logger.info(
                 f"Initialized MemoGraph MCP server with vault: {self.vault_path} (no LLM provider - client will handle answers)"
             )
+
+    def _check_server_health(self) -> None:
+        """Raise error if server is in degraded state."""
+        if self._ingest_failed:
+            raise RuntimeError(
+                f"Server degraded due to ingest failure: {self._ingest_error}\n"
+                f"Fix vault issues and restart server"
+            )
+    
+    def _atomic_write(self, file_path: Path, content: str) -> None:
+        """Write file atomically using temp file + rename to prevent corruption.
+        
+        Args:
+            file_path: Target file path to write to
+            content: Content to write
+            
+        Raises:
+            OSError: If write or rename fails
+        """
+        temp_path = file_path.with_suffix('.tmp')
+        try:
+            temp_path.write_text(content, encoding="utf-8")
+            temp_path.replace(file_path)  # Atomic on POSIX and Windows
+        except Exception:
+            # Clean up temp file on failure (best effort)
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass  # Best effort cleanup
+            raise
 
     def _add_vault_context(self, response: dict[str, Any]) -> dict[str, Any]:
         """Add vault context information to any response.
@@ -181,6 +261,7 @@ class MemoGraphMCPServer:
             Dictionary with search results
         """
         try:
+            self._check_server_health()
             # Retrieve nodes
             results = self.kernel.retrieve_nodes(
                 query=query,
@@ -254,6 +335,7 @@ class MemoGraphMCPServer:
             Dictionary with creation result
         """
         try:
+            self._check_server_health()
             # Create memory
             path = self.kernel.remember(
                 title=title,
@@ -264,13 +346,28 @@ class MemoGraphMCPServer:
             )
 
             # Find suggested links based on shared tags and keyword overlap
+            # Optimized: limit candidate pool instead of checking all nodes
             suggested_links = []
             new_tags = set(tags or [])
             title_words = set(title.lower().split())
             content_words = set(w.lower() for w in content.split() if len(w) > 3)
             check_words = title_words | content_words
 
-            for node in self.kernel.graph.all_nodes():
+            # Limit candidate pool - only check memories with shared tags
+            candidates = []
+            if new_tags:
+                candidates = self.kernel.graph.get_by_tags(list(new_tags), match_all=False)
+            else:
+                # If no tags, just check recent memories
+                all_nodes = self.kernel.graph.all_nodes()
+                from datetime import datetime
+                candidates = sorted(
+                    all_nodes,
+                    key=lambda n: n.created_at or datetime.min,
+                    reverse=True
+                )[:100]  # Limit to 100 most recent
+
+            for node in candidates:
                 if node.source_path and Path(node.source_path) == Path(path):
                     continue
                 reasons = []
@@ -289,9 +386,10 @@ class MemoGraphMCPServer:
                             "reason": "; ".join(reasons),
                         }
                     )
+                    if len(suggested_links) >= 5:  # Stop at 5 suggestions
+                        break
 
-            # Limit suggestions
-            suggested_links = suggested_links[:5]
+            # Already limited to 5 in loop above
 
             return self._add_vault_context(
                 {
@@ -336,6 +434,7 @@ class MemoGraphMCPServer:
             Dictionary with answer (if LLM available) or context (for client to use)
         """
         try:
+            self._check_server_health()
             from ..core.assistant import (
                 build_answer_prompt,
                 retrieve_cited_context,
@@ -415,6 +514,7 @@ class MemoGraphMCPServer:
             Dictionary with vault statistics
         """
         try:
+            self._check_server_health()
             # Ingest to get stats
             stats = self.kernel.ingest(force=False)
 
@@ -473,6 +573,7 @@ class MemoGraphMCPServer:
             Dictionary with list of memories
         """
         try:
+            self._check_server_health()
             # Get all nodes
             nodes = self.kernel.graph.all_nodes()
 
@@ -544,6 +645,7 @@ class MemoGraphMCPServer:
             Dictionary with memory details
         """
         try:
+            self._check_server_health()
             node = self.kernel.graph.get(memory_id)
 
             if not node:
@@ -604,6 +706,7 @@ class MemoGraphMCPServer:
             Dictionary with import result
         """
         try:
+            self._check_server_health()
             # Read file content
             import_path = Path(file_path).expanduser()
             if not import_path.exists():
@@ -658,25 +761,27 @@ class MemoGraphMCPServer:
             Dictionary with deletion result
         """
         try:
-            # Find the memory file
-            memory_path: Path | None = None
-            for md_file in self.vault_path.rglob("*.md"):
-                if md_file.stem == memory_id or md_file.stem.startswith(
-                    f"{memory_id}-"
-                ):
-                    memory_path = md_file
-                    break
-
-            if not memory_path or not memory_path.exists():
+            self._check_server_health()
+            # Find the memory file using graph lookup (much faster than rglob)
+            node = self.kernel.graph.get(memory_id)
+            if not node or not node.source_path:
                 return self._add_vault_context(
                     {
                         "success": False,
                         "error": f"Memory not found: {memory_id}",
                     }
                 )
+            
+            memory_path = Path(node.source_path)
+            if not memory_path.exists():
+                return self._add_vault_context(
+                    {
+                        "success": False,
+                        "error": f"Memory file not found: {memory_path}",
+                    }
+                )
 
             # Get memory info before deletion
-            node = self.kernel.graph.get(memory_id)
             title = node.title if node else memory_id
 
             # Delete the file
@@ -727,24 +832,25 @@ class MemoGraphMCPServer:
             Dictionary with update result
         """
         try:
+            self._check_server_health()
             import re
             from datetime import datetime, timezone
 
             import yaml
 
-            # Find the memory file
-            memory_path = None
-            for md_file in self.vault_path.rglob("*.md"):
-                if md_file.stem == memory_id or md_file.stem.startswith(
-                    f"{memory_id}-"
-                ):
-                    memory_path = md_file
-                    break
-
-            if not memory_path or not memory_path.exists():
+            # Find the memory file using graph lookup (much faster than rglob)
+            node = self.kernel.graph.get(memory_id)
+            if not node or not node.source_path:
                 return {
                     "success": False,
                     "error": f"Memory not found: {memory_id}",
+                }
+            
+            memory_path = Path(node.source_path)
+            if not memory_path.exists():
+                return {
+                    "success": False,
+                    "error": f"Memory file not found: {memory_path}",
                 }
 
             # Read existing content
@@ -793,7 +899,7 @@ class MemoGraphMCPServer:
                 + yaml.safe_dump(frontmatter, sort_keys=False).strip()
                 + "\n---\n\n"
             )
-            memory_path.write_text(new_frontmatter + body + "\n", encoding="utf-8")
+            self._atomic_write(memory_path, new_frontmatter + body + "\n")
 
             logger.info(f"Updated memory: {memory_id}")
 
@@ -883,6 +989,7 @@ class MemoGraphMCPServer:
             Dictionary with result
         """
         try:
+            self._check_server_health()
             import re
 
             source_node = self.kernel.graph.get(source_id)
@@ -926,10 +1033,19 @@ class MemoGraphMCPServer:
             else:
                 content = content.rstrip() + f"\n\n{link_text}\n"
 
-            source_path.write_text(content, encoding="utf-8")
+            self._atomic_write(source_path, content)
 
-            # Re-ingest to update graph
-            self.kernel.ingest(force=True)
+            # Update graph incrementally instead of full rebuild (much faster)
+            source_node = self.kernel.graph.get(source_id)
+            if source_node:
+                # Update in-memory graph
+                if target_id not in source_node.links:
+                    source_node.links.append(target_id)
+                
+                # Rebuild backlinks (fast operation)
+                self.kernel.graph.build_backlinks()
+                
+                logger.debug(f"Updated graph incrementally for link: {source_id} -> {target_id}")
 
             return self._add_vault_context(
                 {
@@ -961,6 +1077,7 @@ class MemoGraphMCPServer:
             Dictionary with connected nodes and their relationships
         """
         try:
+            self._check_server_health()
             node = self.kernel.graph.get(memory_id)
             if not node:
                 return self._add_vault_context(
@@ -1022,6 +1139,7 @@ class MemoGraphMCPServer:
             Dictionary with the path or message if no path exists
         """
         try:
+            self._check_server_health()
             path = self.kernel.graph.find_path(from_id, to_id)
 
             if path is None:
@@ -1069,6 +1187,7 @@ class MemoGraphMCPServer:
             Dictionary with creation results
         """
         try:
+            self._check_server_health()
             results, errors = self.kernel.remember_many(
                 memories=memories, continue_on_error=True
             )

@@ -1,36 +1,66 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { memoriesApi } from '@/lib/api'
+import { memoriesApi } from '../lib/api'
+import { Pagination } from '../components/Pagination'
+import { SkeletonList } from '../components/LoadingSpinner'
+import { ErrorAlert } from '../components/ErrorDisplay'
 import { Calendar, Tag, TrendingUp, ExternalLink } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 export default function MemoriesPage() {
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize] = useState(20)
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['memories'],
-    queryFn: () => memoriesApi.list({ page: 1, page_size: 20, sort_by: 'modified_at', order: 'desc' }),
+    queryKey: ['memories', currentPage, pageSize],
+    queryFn: () => memoriesApi.list({
+      page: currentPage,
+      page_size: pageSize,
+      sort_by: 'modified_at',
+      order: 'desc'
+    }),
   })
+
+  const memories = data?.memories || []
+  const total = data?.total || 0
+  const totalPages = Math.ceil(total / pageSize)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-gray-500">Loading memories...</div>
+      <div>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Memories</h1>
+            <p className="text-gray-600 mt-1">Loading...</p>
+          </div>
+        </div>
+        <SkeletonList count={5} />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="card bg-red-50 border-red-200">
-        <p className="text-red-800">Error loading memories: {(error as Error).message}</p>
-        <p className="text-sm text-red-600 mt-2">
-          Make sure the backend server is running at http://localhost:8000
-        </p>
+      <div>
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Memories</h1>
+          </div>
+        </div>
+        <ErrorAlert
+          title="Failed to load memories"
+          message={(error as Error).message || 'Make sure the backend server is running at http://localhost:8000'}
+          onRetry={() => window.location.reload()}
+        />
       </div>
     )
   }
-
-  const memories = data?.memories || []
-  const total = data?.total || 0
 
   return (
     <div>
@@ -109,6 +139,19 @@ export default function MemoriesPage() {
               )}
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {memories.length > 0 && totalPages > 1 && (
+        <div className="mt-8">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={total}
+            itemsPerPage={pageSize}
+            onPageChange={handlePageChange}
+          />
         </div>
       )}
     </div>

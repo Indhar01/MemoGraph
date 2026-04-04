@@ -48,14 +48,16 @@ CI_FIX_SUMMARY.md
 CHAT_FEATURES.md
 CHAT_IMPROVEMENTS.md
 TIMEOUT_FIX_SUMMARY.md
-test_chat_improvements.py
+
+docs/
+
 
 .mcpregistry_*
 
 node_modules/
-docs/
 .bob/
 .cline/
+.claude/
 
 # Testing
 .pytest_cache/
