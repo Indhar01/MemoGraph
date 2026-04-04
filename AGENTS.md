@@ -21,7 +21,7 @@ This file provides guidance to agents when working with code in this repository.
 
 ### Code Style Non-Obvious Choices
 - **Type unions**: Use `X | Y` syntax, NOT `Union[X, Y]` - ruff rule UP007 is ignored for this
-- **Linting exceptions**: 
+- **Linting exceptions**:
   - `__init__.py` files: F401 (unused imports) allowed for re-exports
   - `temp_*.py` files: ALL rules ignored (for scratch/test files)
 - **MCP server coverage**: Files in `memograph/mcp/run_server.py`, `__main__.py`, `mcp_setup.py` excluded from coverage

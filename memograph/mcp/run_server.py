@@ -152,12 +152,12 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
     # Initialize MemoGraph server with comprehensive error handling
     try:
         vault_path_obj = Path(vault_path).expanduser().resolve()
-        
+
         # Validate path is directory, not file
         if vault_path_obj.exists() and not vault_path_obj.is_dir():
             logger.error(f"❌ Vault path is a file, not a directory: {vault_path}")
             sys.exit(1)
-        
+
         # Test write permissions
         if vault_path_obj.exists():
             test_file = vault_path_obj / ".memograph_write_test"
@@ -167,14 +167,14 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
             except PermissionError:
                 logger.error(f"❌ No write permission for vault: {vault_path}")
                 sys.exit(1)
-        
+
         memograph_server = MemoGraphMCPServer(
             vault_path=str(vault_path_obj),
             llm_provider=llm_provider,
             llm_model=llm_model,
         )
         logger.info("✓ MemoGraph server initialized successfully")
-        
+
     except PermissionError as e:
         logger.error(f"❌ Permission denied: {vault_path} - {e}")
         sys.exit(1)

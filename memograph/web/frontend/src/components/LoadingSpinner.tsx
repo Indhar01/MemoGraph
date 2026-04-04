@@ -1,6 +1,6 @@
 /**
  * Loading Components
- * 
+ *
  * Reusable loading indicators for various UI contexts.
  */
 
@@ -22,7 +22,7 @@ export function LoadingSpinner({ size = 'md', message, className }: LoadingSpinn
     md: 'w-6 h-6',
     lg: 'w-8 h-8',
   };
-  
+
   return (
     <div className={cn('flex items-center justify-center', className)}>
       <div className="flex flex-col items-center space-y-3">

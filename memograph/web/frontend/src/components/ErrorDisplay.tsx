@@ -1,6 +1,6 @@
 /**
  * Error Display Components
- * 
+ *
  * Reusable error display components for various error scenarios.
  */
 
@@ -19,12 +19,12 @@ interface ErrorAlertProps {
 /**
  * Inline error alert component
  */
-export function ErrorAlert({ 
-  title = 'Error', 
-  message, 
-  onRetry, 
+export function ErrorAlert({
+  title = 'Error',
+  message,
+  onRetry,
   onDismiss,
-  className 
+  className
 }: ErrorAlertProps) {
   return (
     <div className={cn('bg-red-50 border border-red-200 rounded-lg p-4', className)}>
@@ -71,7 +71,7 @@ interface ErrorPageProps {
 /**
  * Full-page error display
  */
-export function ErrorPage({ 
+export function ErrorPage({
   title = 'Something went wrong',
   message = 'An unexpected error occurred. Please try again.',
   statusCode,
@@ -158,7 +158,7 @@ interface ErrorCardProps {
  */
 export function ErrorCard({ error, onRetry, className }: ErrorCardProps) {
   const message = typeof error === 'string' ? error : error.message;
-  
+
   return (
     <div className={cn('bg-white border border-red-200 rounded-lg p-6', className)}>
       <div className="flex items-start space-x-3">

@@ -1,6 +1,6 @@
 /**
  * Pagination Component
- * 
+ *
  * Reusable pagination controls with page numbers and navigation.
  */
 

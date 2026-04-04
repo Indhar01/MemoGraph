@@ -1,6 +1,6 @@
 /**
  * Custom React hooks for MemoGraph Web UI
- * 
+ *
  * Collection of reusable hooks for common patterns:
  * - useDebounce: Debounce rapidly changing values
  * - useLocalStorage: Persist state in localStorage
@@ -16,16 +16,16 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 /**
  * Debounces a value, delaying updates until the value has stopped changing
  * for the specified delay period.
- * 
+ *
  * @param value - The value to debounce
  * @param delay - The delay in milliseconds (default: 500ms)
  * @returns The debounced value
- * 
+ *
  * @example
  * ```tsx
  * const [searchQuery, setSearchQuery] = useState('');
  * const debouncedQuery = useDebounce(searchQuery, 300);
- * 
+ *
  * // debouncedQuery will only update 300ms after the user stops typing
  * useEffect(() => {
  *   if (debouncedQuery) {
@@ -59,18 +59,18 @@ export function useDebounce<T>(value: T, delay: number = 500): T {
 /**
  * Persists state in localStorage with automatic serialization/deserialization.
  * Syncs across tabs and provides type safety.
- * 
+ *
  * @param key - The localStorage key
  * @param initialValue - The initial value if nothing is stored
  * @returns A tuple of [storedValue, setValue, removeValue]
- * 
+ *
  * @example
  * ```tsx
  * const [theme, setTheme, removeTheme] = useLocalStorage('theme', 'light');
- * 
+ *
  * // Update theme
  * setTheme('dark');
- * 
+ *
  * // Remove from localStorage
  * removeTheme();
  * ```
@@ -102,14 +102,14 @@ export function useLocalStorage<T>(
       try {
         // Allow value to be a function so we have same API as useState
         const valueToStore = value instanceof Function ? value(storedValue) : value;
-        
+
         // Save state
         setStoredValue(valueToStore);
-        
+
         // Save to local storage
         if (typeof window !== 'undefined') {
           window.localStorage.setItem(key, JSON.stringify(valueToStore));
-          
+
           // Dispatch custom event to sync across tabs
           window.dispatchEvent(new CustomEvent('local-storage', {
             detail: { key, value: valueToStore }
@@ -170,16 +170,16 @@ export function useLocalStorage<T>(
 /**
  * Tracks whether a media query matches the current viewport.
  * Useful for responsive behavior and conditional rendering.
- * 
+ *
  * @param query - The media query string to match
  * @returns Whether the media query currently matches
- * 
+ *
  * @example
  * ```tsx
  * const isMobile = useMediaQuery('(max-width: 768px)');
  * const isDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
  * const prefersReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
- * 
+ *
  * return (
  *   <div>
  *     {isMobile ? <MobileNav /> : <DesktopNav />}
@@ -201,7 +201,7 @@ export function useMediaQuery(query: string): boolean {
     }
 
     const mediaQuery = window.matchMedia(query);
-    
+
     // Set initial value
     setMatches(mediaQuery.matches);
 
@@ -214,7 +214,7 @@ export function useMediaQuery(query: string): boolean {
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handleChange);
       return () => mediaQuery.removeEventListener('change', handleChange);
-    } 
+    }
     // Fallback for older browsers
     else {
       mediaQuery.addListener(handleChange);
@@ -232,17 +232,17 @@ export function useMediaQuery(query: string): boolean {
 /**
  * Detects clicks outside a referenced element and triggers a callback.
  * Useful for closing dropdowns, modals, and popovers.
- * 
+ *
  * @param ref - The ref of the element to detect outside clicks for
  * @param handler - Callback function to execute on outside click
- * 
+ *
  * @example
  * ```tsx
  * const dropdownRef = useRef<HTMLDivElement>(null);
  * const [isOpen, setIsOpen] = useState(false);
- * 
+ *
  * useOnClickOutside(dropdownRef, () => setIsOpen(false));
- * 
+ *
  * return (
  *   <div ref={dropdownRef}>
  *     {isOpen && <DropdownMenu />}
@@ -257,7 +257,7 @@ export function useOnClickOutside<T extends HTMLElement = HTMLElement>(
   useEffect(() => {
     const listener = (event: MouseEvent | TouchEvent) => {
       const el = ref?.current;
-      
+
       // Do nothing if clicking ref's element or descendent elements
       if (!el || el.contains(event.target as Node)) {
         return;
@@ -283,16 +283,16 @@ export function useOnClickOutside<T extends HTMLElement = HTMLElement>(
 /**
  * Detects when a specific key or key combination is pressed.
  * Supports modifier keys (Ctrl, Alt, Shift, Meta).
- * 
+ *
  * @param targetKey - The key to detect (e.g., 'Enter', 'Escape', 'k')
  * @param modifiers - Optional modifier keys
  * @returns Whether the key (with modifiers) is currently pressed
- * 
+ *
  * @example
  * ```tsx
  * const searchPressed = useKeyPress('k', { meta: true }); // Cmd+K
  * const escapePressed = useKeyPress('Escape');
- * 
+ *
  * useEffect(() => {
  *   if (searchPressed) {
  *     openSearchModal();
@@ -308,7 +308,7 @@ export function useKeyPress(
 
   useEffect(() => {
     const downHandler = (event: KeyboardEvent) => {
-      const modifiersMatch = 
+      const modifiersMatch =
         (!modifiers?.ctrl || event.ctrlKey) &&
         (!modifiers?.alt || event.altKey) &&
         (!modifiers?.shift || event.shiftKey) &&
@@ -344,15 +344,15 @@ export function useKeyPress(
 /**
  * Returns the previous value of a state or prop.
  * Useful for detecting changes and animations.
- * 
+ *
  * @param value - The value to track
  * @returns The previous value
- * 
+ *
  * @example
  * ```tsx
  * const [count, setCount] = useState(0);
  * const prevCount = usePrevious(count);
- * 
+ *
  * console.log(`Count changed from ${prevCount} to ${count}`);
  * ```
  */
@@ -373,15 +373,15 @@ export function usePrevious<T>(value: T): T | undefined {
 /**
  * Declarative setInterval with automatic cleanup.
  * Can be paused by passing null as the delay.
- * 
+ *
  * @param callback - Function to call on each interval
  * @param delay - Delay in milliseconds, or null to pause
- * 
+ *
  * @example
  * ```tsx
  * const [count, setCount] = useState(0);
  * const [isRunning, setIsRunning] = useState(true);
- * 
+ *
  * useInterval(
  *   () => setCount(c => c + 1),
  *   isRunning ? 1000 : null

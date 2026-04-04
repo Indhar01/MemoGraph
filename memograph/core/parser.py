@@ -19,7 +19,7 @@ FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 
 def parse_file(path: Path, vault_root: Path) -> MemoryNode | None:
     """Parse markdown file with error recovery.
-    
+
     Returns None if file cannot be parsed (logs error).
     """
     try:
@@ -30,18 +30,17 @@ def parse_file(path: Path, vault_root: Path) -> MemoryNode | None:
     except PermissionError as e:
         logger.error(f"Permission denied {path.name}: {e} - skipping")
         return None
-    
+
     frontmatter: dict[str, Any] = {}
     content = raw
-    
+
     # Parse frontmatter with explicit error handling
     if m := FRONTMATTER_RE.match(raw):
         try:
             frontmatter = yaml.safe_load(m.group(1))
             if not isinstance(frontmatter, dict):
                 logger.error(
-                    f"Invalid frontmatter in {path.name}: "
-                    f"not a dict - skipping"
+                    f"Invalid frontmatter in {path.name}: not a dict - skipping"
                 )
                 return None
         except yaml.YAMLError as e:
@@ -50,18 +49,18 @@ def parse_file(path: Path, vault_root: Path) -> MemoryNode | None:
                 f"  Fix the YAML or remove the file - skipping"
             )
             return None
-        
-        content = raw[m.end():]
-    
+
+        content = raw[m.end() :]
+
     # Validate required fields
-    if not frontmatter.get('title'):
-        logger.warning(
-            f"Missing 'title' in {path.name} - using filename"
-        )
-    
+    if not frontmatter.get("title"):
+        logger.warning(f"Missing 'title' in {path.name} - using filename")
+
     # Parse with safe defaults
     try:
-        links = [link.lower().replace(" ", "-") for link in WIKILINK_RE.findall(content)]
+        links = [
+            link.lower().replace(" ", "-") for link in WIKILINK_RE.findall(content)
+        ]
         tags = TAG_RE.findall(content)
 
         node_id = path.relative_to(vault_root).with_suffix("").as_posix()
@@ -70,14 +69,18 @@ def parse_file(path: Path, vault_root: Path) -> MemoryNode | None:
         stat = path.stat()
 
         try:
-            mem_type = MemoryType(frontmatter.get("memory_type", MemoryType.SEMANTIC.value))
+            mem_type = MemoryType(
+                frontmatter.get("memory_type", MemoryType.SEMANTIC.value)
+            )
         except (TypeError, ValueError):
             mem_type = MemoryType.SEMANTIC
 
         created = frontmatter.get("created")
         try:
             created_at = (
-                datetime.fromisoformat(created) if created else datetime.now(timezone.utc)
+                datetime.fromisoformat(created)
+                if created
+                else datetime.now(timezone.utc)
             )
         except (TypeError, ValueError):
             created_at = datetime.now(timezone.utc)

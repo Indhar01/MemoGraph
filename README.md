@@ -398,7 +398,7 @@ We maintain high code quality standards:
 
 ### For Developers & Contributors
 - **[MCP Registry Guide](docs/MCP_REGISTRY_GUIDE.md)** - Publishing to official MCP Registry
-- **[Versioning Strategy](VERSIONING.md)** - Semantic versioning and release planning
+- **[Versioning Strategy](docs/VERSIONING.md)** - Semantic versioning and release planning
 - **[AGENTS.md](AGENTS.md)** - Guide for AI agents working with this codebase
 - **[Contributing Guide](CONTRIBUTING.md)** - How to contribute to the project
 - **[Code of Conduct](CODE_OF_CONDUCT.md)** - Community guidelines

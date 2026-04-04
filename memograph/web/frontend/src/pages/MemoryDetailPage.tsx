@@ -1,6 +1,6 @@
 /**
  * MemoryDetailPage - Detailed view of a single memory
- * 
+ *
  * Features:
  * - Full markdown rendering of content
  * - Metadata display (type, salience, dates, tags)
@@ -45,23 +45,23 @@ export default function MemoryDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+
   // Fetch memory data
   const { data: memory, isLoading, error } = useQuery({
     queryKey: ['memory', id],
     queryFn: () => memoriesApi.get(id!),
     enabled: !!id,
   });
-  
+
   // Fetch related memories (neighbors)
   const { data: neighborsData } = useQuery({
     queryKey: ['neighbors', id],
     queryFn: () => graphAPI.getNeighbors(id!, 1),
     enabled: !!id,
   });
-  
+
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: () => memoriesApi.delete(id!),
@@ -70,7 +70,7 @@ export default function MemoryDetailPage() {
       navigate('/memories');
     },
   });
-  
+
   const handleDelete = () => {
     if (showDeleteConfirm) {
       deleteMutation.mutate();
@@ -78,12 +78,12 @@ export default function MemoryDetailPage() {
       setShowDeleteConfirm(true);
     }
   };
-  
+
   const handleEdit = () => {
     // For now, navigate back to create page (could be enhanced with edit mode)
     navigate(`/memories/new`, { state: { memory } });
   };
-  
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -94,7 +94,7 @@ export default function MemoryDetailPage() {
       </div>
     );
   }
-  
+
   if (error || !memory) {
     return (
       <div className="max-w-4xl mx-auto">
@@ -119,10 +119,10 @@ export default function MemoryDetailPage() {
       </div>
     );
   }
-  
+
   const neighbors = neighborsData?.neighbors || [];
   const salienceLevel = getSalienceLevel(memory.salience);
-  
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Breadcrumbs */}
@@ -135,7 +135,7 @@ export default function MemoryDetailPage() {
           {memory.title}
         </span>
       </nav>
-      
+
       {/* Header with Actions */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1">
@@ -145,7 +145,7 @@ export default function MemoryDetailPage() {
           </div>
           <p className="text-gray-600">{getMemoryTypeDescription(memory.memory_type)}</p>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <button
             onClick={handleEdit}
@@ -154,7 +154,7 @@ export default function MemoryDetailPage() {
             <Edit className="w-4 h-4" />
             <span>Edit</span>
           </button>
-          
+
           {showDeleteConfirm ? (
             <div className="flex items-center space-x-2">
               <button
@@ -192,7 +192,7 @@ export default function MemoryDetailPage() {
           )}
         </div>
       </div>
-      
+
       {/* Metadata Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Memory Type */}
@@ -202,7 +202,7 @@ export default function MemoryDetailPage() {
             {memory.memory_type}
           </span>
         </div>
-        
+
         {/* Salience */}
         <div className="bg-white border rounded-lg p-4">
           <div className="text-xs text-gray-500 mb-1">Importance</div>
@@ -212,7 +212,7 @@ export default function MemoryDetailPage() {
             <span className={cn('text-xs', salienceLevel.color)}>({salienceLevel.label})</span>
           </div>
         </div>
-        
+
         {/* Access Count */}
         <div className="bg-white border rounded-lg p-4">
           <div className="text-xs text-gray-500 mb-1">Accessed</div>
@@ -224,7 +224,7 @@ export default function MemoryDetailPage() {
             Last: {formatRelativeTime(memory.last_accessed)}
           </div>
         </div>
-        
+
         {/* Dates */}
         <div className="bg-white border rounded-lg p-4">
           <div className="text-xs text-gray-500 mb-1">Dates</div>
@@ -240,7 +240,7 @@ export default function MemoryDetailPage() {
           </div>
         </div>
       </div>
-      
+
       {/* Tags */}
       {memory.tags.length > 0 && (
         <div className="mb-6">
@@ -261,7 +261,7 @@ export default function MemoryDetailPage() {
           </div>
         </div>
       )}
-      
+
       {/* Content */}
       <div className="bg-white border rounded-lg p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Content</h2>
@@ -269,7 +269,7 @@ export default function MemoryDetailPage() {
           <Markdown>{memory.content}</Markdown>
         </div>
       </div>
-      
+
       {/* Links Section */}
       {(memory.links.length > 0 || memory.backlinks.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -298,7 +298,7 @@ export default function MemoryDetailPage() {
               </div>
             </div>
           )}
-          
+
           {/* Backlinks */}
           {memory.backlinks.length > 0 && (
             <div className="bg-white border rounded-lg p-6">
@@ -326,7 +326,7 @@ export default function MemoryDetailPage() {
           )}
         </div>
       )}
-      
+
       {/* Related Memories (Graph Neighbors) */}
       {neighbors.length > 0 && (
         <div className="bg-white border rounded-lg p-6">
@@ -369,7 +369,7 @@ export default function MemoryDetailPage() {
           </div>
         </div>
       )}
-      
+
       {/* Back to List Button */}
       <div className="mt-8 pt-6 border-t">
         <Link

@@ -93,7 +93,7 @@ class AutonomousHooks:
                                 tags=None,
                                 top_k=5,
                             ),
-                            timeout=10.0
+                            timeout=10.0,
                         )
 
                         sources = [

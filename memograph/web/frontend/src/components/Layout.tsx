@@ -130,7 +130,7 @@ export default function Layout({ children }: LayoutProps) {
                   <Moon className="w-5 h-5" />
                 )}
               </button>
-              
+
               <Link
                 to="/memories/new"
                 className="btn btn-primary flex items-center space-x-2"

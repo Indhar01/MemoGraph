@@ -377,11 +377,11 @@ class MemoryKernel:
         self._last_ingest_error: Exception | None = None
         self._ingest_attempt_count = 0
         self._max_auto_ingest_attempts = 3
-        
+
         # Thread safety for graph operations (Fix #5)
         self._graph_lock = threading.RLock()
         self._graph_version = 0
-        
+
         logger.info("MemoGraph kernel initialized successfully")
 
     @classmethod
@@ -548,19 +548,19 @@ class MemoryKernel:
         """Convert text to a URL-safe slug."""
         slug = re.sub(r"[^a-zA-Z0-9]+", "-", text.strip().lower()).strip("-")
         return slug or datetime.now(timezone.utc).strftime("memory-%Y%m%d-%H%M%S")
-    
+
     @staticmethod
     def _atomic_write(file_path: Path, content: str) -> None:
         """Write file atomically using temp file + rename to prevent corruption.
-        
+
         Args:
             file_path: Target file path to write to
             content: Content to write
-            
+
         Raises:
             OSError: If write or rename fails
         """
-        temp_path = file_path.with_suffix('.tmp')
+        temp_path = file_path.with_suffix(".tmp")
         try:
             temp_path.write_text(content, encoding="utf-8")
             temp_path.replace(file_path)  # Atomic on POSIX and Windows
@@ -615,8 +615,7 @@ class MemoryKernel:
         with self._graph_lock:
             try:
                 logger.info(
-                    f"Acquiring graph lock for ingest "
-                    f"(version: {self._graph_version})"
+                    f"Acquiring graph lock for ingest (version: {self._graph_version})"
                 )
                 logger.info(f"Starting ingestion from vault: {self.vault_path}")
 
@@ -640,7 +639,9 @@ class MemoryKernel:
                         self.graph, embedding_adapter=self.retriever.embeddings
                     )
 
-                logger.info(f"Indexed {indexed} files, skipped {skipped} unchanged files")
+                logger.info(
+                    f"Indexed {indexed} files, skipped {skipped} unchanged files"
+                )
 
                 # Perform auto-extraction if enabled
                 extract_enabled = (
@@ -654,29 +655,29 @@ class MemoryKernel:
                     logger.info(f"Extracted {entities_extracted} total entities")
 
                 total = len(self.graph._nodes)
-                
+
                 self._graph_version += 1
                 logger.info(f"Graph rebuilt (version: {self._graph_version})")
                 logger.info(f"Ingestion complete: {total} total memories in graph")
-                
+
                 # Clear error state on success (Fix #4)
                 self._last_ingest_error = None
                 self._ingest_attempt_count = 0
-                
+
                 return {
                     "indexed": indexed,
                     "skipped": skipped,
                     "total": total,
                     "entities_extracted": entities_extracted,
                 }
-                
+
             except Exception as e:
                 # Track failure (Fix #4)
                 self._last_ingest_error = e
                 self._ingest_attempt_count += 1
                 logger.error(
                     f"Ingest failed (attempt {self._ingest_attempt_count}): {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
                 raise
 
@@ -961,7 +962,7 @@ class MemoryKernel:
                     file_path.unlink()
                 except Exception:
                     pass  # Best effort cleanup
-            
+
             if e.errno == 28 or "No space left" in str(e):  # ENOSPC
                 raise OSError(
                     f"Disk full: Cannot write memory '{title}' to {file_path}. "
@@ -972,9 +973,7 @@ class MemoryKernel:
                     f"Permission denied: Cannot write to {file_path}"
                 ) from e
             else:
-                raise OSError(
-                    f"Failed to write memory '{title}': {e}"
-                ) from e
+                raise OSError(f"Failed to write memory '{title}': {e}") from e
 
         logger.info(f"Created memory: {title} -> {file_path.name}")
         logger.debug(
@@ -1143,7 +1142,7 @@ class MemoryKernel:
                 node = self.graph.get(memory_id)
                 if not node or not node.source_path:
                     raise ValueError(f"Memory not found in graph: {memory_id}")
-                
+
                 memory_path = Path(node.source_path)
                 if not memory_path.exists():
                     raise ValueError(f"Memory file not found for ID: {memory_id}")
@@ -1343,13 +1342,13 @@ class MemoryKernel:
                     f"{self._last_ingest_error}\n\n"
                     f"Fix issues and call kernel.ingest(force=True)"
                 )
-            
+
             if self._ingest_attempt_count >= self._max_auto_ingest_attempts:
                 raise RuntimeError(
                     f"Auto-ingest failed {self._ingest_attempt_count} times. "
                     f"Check logs and retry manually."
                 )
-            
+
             logger.info(
                 f"Auto-ingest attempt {self._ingest_attempt_count + 1}/"
                 f"{self._max_auto_ingest_attempts}"
@@ -1380,7 +1379,7 @@ class MemoryKernel:
                 top_k=top_k,
             )
             duration = time_module.time() - start_time
-            
+
             logger.info(
                 f"Retrieved {len(results)} nodes "
                 f"(graph v{self._graph_version}) in {duration:.3f}s"
@@ -1491,7 +1490,7 @@ class MemoryKernel:
             for node in results:
                 # Create shallow copy to avoid modifying original
                 boosted_node = copy.copy(node)
-                
+
                 # Calculate time difference in days
                 node_time = node.created_at.timestamp()
                 days_old = (current_time - node_time) / (24 * 3600)
@@ -1504,7 +1503,7 @@ class MemoryKernel:
                 boosted_results.append(boosted_node)
 
             results = boosted_results
-            
+
             # Re-sort by boosted salience
             results.sort(key=lambda n: n.salience, reverse=True)
             logger.debug(

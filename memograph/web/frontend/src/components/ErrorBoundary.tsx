@@ -1,9 +1,9 @@
 /**
  * Error Boundary Component
- * 
+ *
  * React error boundary that catches JavaScript errors anywhere in the child
  * component tree and displays a fallback UI instead of crashing the entire app.
- * 
+ *
  * Usage:
  * ```tsx
  * <ErrorBoundary>
@@ -29,7 +29,7 @@ interface ErrorBoundaryState {
 
 /**
  * Error Boundary class component
- * 
+ *
  * Must be a class component because React error boundaries
  * require the componentDidCatch lifecycle method.
  */

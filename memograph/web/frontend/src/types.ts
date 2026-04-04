@@ -1,6 +1,6 @@
 /**
  * TypeScript type definitions for MemoGraph Web UI
- * 
+ *
  * These types match the Pydantic models from the backend API
  * and provide type safety throughout the frontend application.
  */

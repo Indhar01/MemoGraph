@@ -1,6 +1,6 @@
 /**
  * CreateMemoryPage - Memory creation form with markdown editor
- * 
+ *
  * Features:
  * - Title and content inputs
  * - Markdown editor with live preview
@@ -31,7 +31,7 @@ import { getMemoryTypeIcon, cn } from '../lib/utils';
 
 export default function CreateMemoryPage() {
   const navigate = useNavigate();
-  
+
   // Form state
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -40,16 +40,16 @@ export default function CreateMemoryPage() {
   const [salience, setSalience] = useState(0.5);
   const [tagInput, setTagInput] = useState('');
   const [showPreview, setShowPreview] = useState(false);
-  
+
   // Validation state
   const [errors, setErrors] = useState<Record<string, string>>({});
-  
+
   // Fetch available tags for autocomplete
   const { data: availableTags = [] } = useQuery({
     queryKey: ['tags'],
     queryFn: searchAPI.getAllTags,
   });
-  
+
   // Create memory mutation
   const createMutation = useMutation({
     mutationFn: (memory: CreateMemoryRequest) => memoriesApi.create(memory),
@@ -60,37 +60,37 @@ export default function CreateMemoryPage() {
       setErrors({ submit: error.response?.data?.detail || error.message });
     },
   });
-  
+
   // Validate form
   const validate = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!title.trim()) {
       newErrors.title = 'Title is required';
     } else if (title.length > 500) {
       newErrors.title = 'Title must be less than 500 characters';
     }
-    
+
     if (!content.trim()) {
       newErrors.content = 'Content is required';
     }
-    
+
     if (salience < 0 || salience > 1) {
       newErrors.salience = 'Salience must be between 0 and 1';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }, [title, content, salience]);
-  
+
   // Handle form submission
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validate()) {
       return;
     }
-    
+
     const memory: CreateMemoryRequest = {
       title: title.trim(),
       content: content.trim(),
@@ -98,10 +98,10 @@ export default function CreateMemoryPage() {
       tags,
       salience,
     };
-    
+
     createMutation.mutate(memory);
   }, [title, content, memoryType, tags, salience, validate, createMutation]);
-  
+
   // Handle tag input
   const handleAddTag = useCallback((tag: string) => {
     const cleanTag = tag.trim().replace(/^#/, '');
@@ -110,11 +110,11 @@ export default function CreateMemoryPage() {
       setTagInput('');
     }
   }, [tags]);
-  
+
   const handleRemoveTag = useCallback((tagToRemove: string) => {
     setTags(tags.filter(t => t !== tagToRemove));
   }, [tags]);
-  
+
   const handleTagInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -123,7 +123,7 @@ export default function CreateMemoryPage() {
       handleRemoveTag(tags[tags.length - 1]);
     }
   }, [tagInput, tags, handleAddTag, handleRemoveTag]);
-  
+
   // Filter autocomplete suggestions
   const tagSuggestions = availableTags
     .filter((tag: string) =>
@@ -131,7 +131,7 @@ export default function CreateMemoryPage() {
       !tags.includes(tag)
     )
     .slice(0, 5);
-  
+
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
@@ -141,7 +141,7 @@ export default function CreateMemoryPage() {
           Add a new memory to your vault
         </p>
       </div>
-      
+
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Global error */}
@@ -154,7 +154,7 @@ export default function CreateMemoryPage() {
             </div>
           </div>
         )}
-        
+
         {/* Title */}
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
@@ -176,7 +176,7 @@ export default function CreateMemoryPage() {
             <p className="text-sm text-red-600 mt-1">{errors.title}</p>
           )}
         </div>
-        
+
         {/* Content with Preview Toggle */}
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -201,7 +201,7 @@ export default function CreateMemoryPage() {
               )}
             </button>
           </div>
-          
+
           {showPreview ? (
             <div className="w-full min-h-[300px] px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 prose prose-sm max-w-none">
               {content ? (
@@ -230,7 +230,7 @@ export default function CreateMemoryPage() {
             Markdown formatting supported. Use **bold**, *italic*, `code`, etc.
           </p>
         </div>
-        
+
         {/* Memory Type and Salience Row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Memory Type */}
@@ -256,7 +256,7 @@ export default function CreateMemoryPage() {
               {memoryType === 'fact' && 'Discrete factual information'}
             </p>
           </div>
-          
+
           {/* Salience */}
           <div>
             <label htmlFor="salience" className="block text-sm font-medium text-gray-700 mb-2">
@@ -282,7 +282,7 @@ export default function CreateMemoryPage() {
             </div>
           </div>
         </div>
-        
+
         {/* Tags */}
         <div>
           <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-2">
@@ -291,7 +291,7 @@ export default function CreateMemoryPage() {
               <span>Tags</span>
             </div>
           </label>
-          
+
           {/* Selected tags */}
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
@@ -312,7 +312,7 @@ export default function CreateMemoryPage() {
               ))}
             </div>
           )}
-          
+
           {/* Tag input */}
           <div className="relative">
             <input
@@ -324,7 +324,7 @@ export default function CreateMemoryPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               placeholder="Type to add tags... (press Enter)"
             />
-            
+
             {/* Autocomplete suggestions */}
             {tagInput && tagSuggestions.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
@@ -342,7 +342,7 @@ export default function CreateMemoryPage() {
             )}
           </div>
         </div>
-        
+
         {/* Action Buttons */}
         <div className="flex items-center justify-end space-x-4 pt-6 border-t">
           <button

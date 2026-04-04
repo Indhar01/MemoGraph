@@ -1,6 +1,6 @@
 /**
  * Toast Component
- * 
+ *
  * Individual toast notification with animations and icons.
  * Supports success, error, info, and warning types.
  */
@@ -17,7 +17,7 @@ interface ToastProps {
 export function Toast({ toast }: ToastProps) {
   const { removeToast } = useToastStore();
   const [isExiting, setIsExiting] = useState(false);
-  
+
   // Handle exit animation before removing
   const handleClose = () => {
     setIsExiting(true);
@@ -25,26 +25,26 @@ export function Toast({ toast }: ToastProps) {
       removeToast(toast.id);
     }, 300); // Match animation duration
   };
-  
+
   // Auto-dismiss progress bar
   const [progress, setProgress] = useState(100);
-  
+
   useEffect(() => {
     if (toast.duration <= 0) return;
-    
+
     const interval = 50; // Update every 50ms
     const decrement = (interval / toast.duration) * 100;
-    
+
     const timer = setInterval(() => {
       setProgress((prev) => {
         const next = prev - decrement;
         return next <= 0 ? 0 : next;
       });
     }, interval);
-    
+
     return () => clearInterval(timer);
   }, [toast.duration]);
-  
+
   // Get icon and colors based on type
   const getTypeStyles = () => {
     switch (toast.type) {
@@ -79,9 +79,9 @@ export function Toast({ toast }: ToastProps) {
         };
     }
   };
-  
+
   const styles = getTypeStyles();
-  
+
   return (
     <div
       className={cn(
@@ -97,12 +97,12 @@ export function Toast({ toast }: ToastProps) {
       <div className={cn('flex-shrink-0 mt-0.5', styles.iconColor)}>
         {styles.icon}
       </div>
-      
+
       {/* Message */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{toast.message}</p>
       </div>
-      
+
       {/* Close button */}
       <button
         onClick={handleClose}
@@ -111,7 +111,7 @@ export function Toast({ toast }: ToastProps) {
       >
         <X className="w-4 h-4" />
       </button>
-      
+
       {/* Progress bar */}
       {toast.duration > 0 && (
         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 bg-opacity-30 rounded-b-lg overflow-hidden">
@@ -127,15 +127,15 @@ export function Toast({ toast }: ToastProps) {
 
 /**
  * ToastContainer Component
- * 
+ *
  * Renders all active toasts in a fixed position on the screen.
  * Place this component once at the root of your app.
  */
 export function ToastContainer() {
   const { toasts } = useToastStore();
-  
+
   if (toasts.length === 0) return null;
-  
+
   return (
     <div
       className="fixed top-4 right-4 z-50 flex flex-col space-y-2"

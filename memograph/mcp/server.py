@@ -42,13 +42,13 @@ class MemoGraphMCPServer:
             self.vault_path = Path(vault_path).expanduser().resolve()
         except (RuntimeError, OSError) as e:
             raise ValueError(f"Invalid vault path '{vault_path}': {e}") from e
-        
+
         # Verify not a file
         if self.vault_path.exists() and not self.vault_path.is_dir():
             raise ValueError(
                 f"Vault path is a file, not a directory: {self.vault_path}"
             )
-        
+
         # Create if needed
         if not self.vault_path.exists():
             try:
@@ -58,37 +58,35 @@ class MemoGraphMCPServer:
                 raise PermissionError(
                     f"Cannot create vault at {self.vault_path}: {e}"
                 ) from e
-        
+
         # Verify write permissions
         if not os.access(self.vault_path, os.W_OK):
-            raise PermissionError(
-                f"No write permission for vault: {self.vault_path}"
-            )
-        
+            raise PermissionError(f"No write permission for vault: {self.vault_path}")
+
         logger.info(f"✓ Vault validated: {self.vault_path}")
-        
+
         # Initialize kernel
         try:
             self.kernel = MemoryKernel(str(self.vault_path))
         except Exception as e:
             raise RuntimeError(f"Kernel init failed: {e}") from e
-        
+
         self.llm_provider = llm_provider
         self.llm_model = llm_model
-        
+
         # Track ingest state
         self._ingest_failed = False
         self._ingest_error: Exception | None = None
-        
+
         # Auto-ingest with comprehensive tracking
         try:
             stats = self.kernel.ingest()
             logger.info(
                 f"✓ Ingested: {stats['indexed']} indexed, {stats['skipped']} skipped"
             )
-            
+
             # Detect suspicious scenarios
-            if stats['indexed'] == 0 and stats['skipped'] == 0:
+            if stats["indexed"] == 0 and stats["skipped"] == 0:
                 md_files = list(self.vault_path.rglob("*.md"))
                 if md_files:
                     logger.error(
@@ -101,7 +99,7 @@ class MemoGraphMCPServer:
                     )
                 else:
                     logger.warning("⚠️  Empty vault - no memories found")
-                    
+
         except Exception as e:
             logger.error(f"❌ CRITICAL: Ingest failed: {e}", exc_info=True)
             logger.error("Server degraded - operations will fail")
@@ -136,18 +134,18 @@ class MemoGraphMCPServer:
                 f"Server degraded due to ingest failure: {self._ingest_error}\n"
                 f"Fix vault issues and restart server"
             )
-    
+
     def _atomic_write(self, file_path: Path, content: str) -> None:
         """Write file atomically using temp file + rename to prevent corruption.
-        
+
         Args:
             file_path: Target file path to write to
             content: Content to write
-            
+
         Raises:
             OSError: If write or rename fails
         """
-        temp_path = file_path.with_suffix('.tmp')
+        temp_path = file_path.with_suffix(".tmp")
         try:
             temp_path.write_text(content, encoding="utf-8")
             temp_path.replace(file_path)  # Atomic on POSIX and Windows
@@ -356,15 +354,16 @@ class MemoGraphMCPServer:
             # Limit candidate pool - only check memories with shared tags
             candidates = []
             if new_tags:
-                candidates = self.kernel.graph.get_by_tags(list(new_tags), match_all=False)
+                candidates = self.kernel.graph.get_by_tags(
+                    list(new_tags), match_all=False
+                )
             else:
                 # If no tags, just check recent memories
                 all_nodes = self.kernel.graph.all_nodes()
                 from datetime import datetime
+
                 candidates = sorted(
-                    all_nodes,
-                    key=lambda n: n.created_at or datetime.min,
-                    reverse=True
+                    all_nodes, key=lambda n: n.created_at or datetime.min, reverse=True
                 )[:100]  # Limit to 100 most recent
 
             for node in candidates:
@@ -771,7 +770,7 @@ class MemoGraphMCPServer:
                         "error": f"Memory not found: {memory_id}",
                     }
                 )
-            
+
             memory_path = Path(node.source_path)
             if not memory_path.exists():
                 return self._add_vault_context(
@@ -845,7 +844,7 @@ class MemoGraphMCPServer:
                     "success": False,
                     "error": f"Memory not found: {memory_id}",
                 }
-            
+
             memory_path = Path(node.source_path)
             if not memory_path.exists():
                 return {
@@ -1041,11 +1040,13 @@ class MemoGraphMCPServer:
                 # Update in-memory graph
                 if target_id not in source_node.links:
                     source_node.links.append(target_id)
-                
+
                 # Rebuild backlinks (fast operation)
                 self.kernel.graph.build_backlinks()
-                
-                logger.debug(f"Updated graph incrementally for link: {source_id} -> {target_id}")
+
+                logger.debug(
+                    f"Updated graph incrementally for link: {source_id} -> {target_id}"
+                )
 
             return self._add_vault_context(
                 {

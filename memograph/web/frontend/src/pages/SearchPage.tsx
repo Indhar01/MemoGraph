@@ -16,10 +16,10 @@ export default function SearchPage() {
   })
   const [showFilters, setShowFilters] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
-  
+
   // Search history stored in localStorage
   const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('memograph-search-history', [])
-  
+
   // Debounce search query using custom hook
   const debouncedQuery = useDebounce(query, 300)
 
@@ -55,20 +55,20 @@ export default function SearchPage() {
 
   const results = data?.results || []
   const totalResults = data?.total || 0
-  
+
   // Filter search history based on current query
   const filteredHistory = searchHistory
     .filter(h => h.toLowerCase().includes(query.toLowerCase()) && h !== query)
     .slice(0, 5)
-  
+
   // Show suggestions when there's input and user is focused on input
   const shouldShowSuggestions = showSuggestions && query.length > 0 && (filteredHistory.length > 0)
-  
+
   const handleSelectSuggestion = (suggestion: string) => {
     setQuery(suggestion)
     setShowSuggestions(false)
   }
-  
+
   const clearHistory = () => {
     setSearchHistory([])
   }
@@ -102,7 +102,7 @@ export default function SearchPage() {
                 <X size={16} />
               </button>
             )}
-            
+
             {/* Search Suggestions Dropdown */}
             {shouldShowSuggestions && (
               <div className="search-suggestions">
