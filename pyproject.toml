@@ -227,11 +227,11 @@ module = "memograph.integrations.notion.integration"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.integrations.obsidian.sync_state"
+module = "memograph.integrations.obsidian.sync"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.integrations.obsidian.sync"
+module = "memograph.integrations.obsidian.sync_state"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
@@ -290,9 +290,7 @@ ignore_errors = true
 module = "memograph.adapters.llm.litellm_adapter"
 ignore_errors = true
 
-[[tool.mypy.overrides]]
-module = "memograph.web.backend.errors"
-ignore_errors = true
+# Phase 4.2: removed override for memograph.web.backend.errors — now type-clean.
 
 # Temporary: memograph.swarm.* is in-progress; pre-commit mypy currently
 # blocks unrelated commits because of "Returning Any" warnings in pheromone
