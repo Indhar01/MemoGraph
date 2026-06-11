@@ -1,6 +1,7 @@
 """FastAPI server for MemoGraph web UI."""
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +15,11 @@ from ...core.kernel import MemoryKernel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# When MEMOGRAPH_DEBUG=1, the 500 handler echoes the exception string and
+# /api/health returns the vault path. In production this leaks internals
+# to clients; default off, opt-in for local debugging only.
+_DEBUG_ENABLED = os.environ.get("MEMOGRAPH_DEBUG", "").lower() in {"1", "true", "yes"}
 
 
 # Lifespan context manager for startup/shutdown
@@ -99,15 +105,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
 
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
+        # Always log full traceback server-side; never leak it to the client
+        # in production. Debug builds (MEMOGRAPH_DEBUG=1) echo the string for
+        # local diagnosis only.
         logger.error(f"Unhandled exception: {exc}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Internal server error",
-                "detail": str(exc),
-                "code": "INTERNAL_ERROR",
-            },
-        )
+        body: dict[str, str] = {
+            "error": "Internal server error",
+            "code": "INTERNAL_ERROR",
+        }
+        if _DEBUG_ENABLED:
+            body["detail"] = str(exc)
+        return JSONResponse(status_code=500, content=body)
 
     # Request timing middleware
     @app.middleware("http")
@@ -130,20 +138,30 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # Health check endpoint
     @app.get("/api/health")
     async def health(request: Request):
-        """Health check endpoint."""
-        kernel = request.app.state.kernel
-        total_memories = len(kernel.graph.all_nodes())
-        total_entities = len(kernel.graph.all_entities())
+        """Public health check.
 
-        return {
+        Intentionally minimal. Internal diagnostic fields (vault path,
+        memory/entity counts, feature flags) are gated behind
+        MEMOGRAPH_DEBUG=1 so they don't leak when the endpoint is
+        exposed publicly. Use /healthz / /readyz once Phase 1 lands
+        the dedicated probes.
+        """
+        body: dict[str, object] = {
             "status": "healthy",
-            "version": "1.0.0",
-            "vault_path": request.app.state.vault_path,
-            "total_memories": total_memories,
-            "total_entities": total_entities,
-            "gam_enabled": request.app.state.use_gam,
             "timestamp": time.time(),
         }
+        if _DEBUG_ENABLED:
+            kernel = request.app.state.kernel
+            body.update(
+                {
+                    "version": "1.0.0",
+                    "vault_path": request.app.state.vault_path,
+                    "total_memories": len(kernel.graph.all_nodes()),
+                    "total_entities": len(kernel.graph.all_entities()),
+                    "gam_enabled": request.app.state.use_gam,
+                }
+            )
+        return body
 
     # Root endpoint
     @app.get("/")
