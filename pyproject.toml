@@ -91,6 +91,11 @@ embeddings = [
 web = [
     "fastapi>=0.104.0,<1",
     "uvicorn[standard]>=0.24.0,<1",
+    # Rate limiting (in-memory backend by default; switch to Redis via
+    # MEMOGRAPH_RATELIMIT_STORAGE for multi-instance deployments).
+    "slowapi>=0.1.9,<1",
+    # Structured JSON logging output (env-toggled in server.py).
+    "python-json-logger>=2.0.7,<4",
 ]
 integrations = [
     "watchdog>=3.0.0,<7",
