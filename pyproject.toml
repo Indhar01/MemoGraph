@@ -60,36 +60,41 @@ classifiers = [
 ]
 
 dependencies = [
-    "PyYAML>=6.0",
-    "requests>=2.31.0",
-    "mcp>=1.0.0",
+    # Upper bounds pinned to the next major to prevent surprise breakage
+    # from major-version releases. Tighten further with a lockfile
+    # (requirements.lock) generated via pip-compile or `uv lock`.
+    "PyYAML>=6.0,<7",
+    "requests>=2.31.0,<3",
+    "mcp>=1.0.0,<2",
 ]
 
 [project.optional-dependencies]
 openai = [
     "openai>=1.0.0,<2.0.0",
-    "tiktoken>=0.5.0",
+    "tiktoken>=0.5.0,<1",
 ]
 anthropic = [
-    "anthropic>=0.39.0",
+    "anthropic>=0.39.0,<1",
 ]
 ollama = [
-    "ollama>=0.3.0",
+    "ollama>=0.3.0,<1",
 ]
 litellm = [
     "litellm>=1.52.0,<2.0.0",
 ]
 embeddings = [
-    "sentence-transformers>=2.2.0",
-    "numpy>=1.24.0",
+    # sentence-transformers has had quiet API churn between minor versions;
+    # cap to <4 until a contract test exists.
+    "sentence-transformers>=2.2.0,<4",
+    "numpy>=1.24.0,<3",
 ]
 web = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
+    "fastapi>=0.104.0,<1",
+    "uvicorn[standard]>=0.24.0,<1",
 ]
 integrations = [
-    "watchdog>=3.0.0",
-    "python-frontmatter>=1.0.0",
+    "watchdog>=3.0.0,<7",
+    "python-frontmatter>=1.0.0,<2",
 ]
 all = [
     "memograph[openai,anthropic,ollama,litellm,embeddings,integrations]",

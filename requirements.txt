@@ -3,9 +3,13 @@
 # Or with all optional dependencies: pip install -e .[all]
 
 # Core requirements
-PyYAML>=6.0
-requests>=2.31.0
-mcp>=1.0.0
+# Pinned with upper bounds to prevent surprise breakage from major-version
+# releases. For reproducible installs, generate a lockfile:
+#   pip-compile pyproject.toml -o requirements.lock
+# (or `uv pip compile pyproject.toml -o requirements.lock` if you prefer uv).
+PyYAML>=6.0,<7
+requests>=2.31.0,<3
+mcp>=1.0.0,<2
 
 # Optional LLM Provider Dependencies (install as needed)
 # For OpenAI: pip install -e .[openai]
