@@ -4,6 +4,7 @@
     "GET /api/v1/ai/analyze-kb",
     "GET /api/v1/ai/detect-gaps",
     "GET /api/v1/analytics",
+    "GET /api/v1/auth/me",
     "GET /api/v1/graph",
     "GET /api/v1/graph/neighbors/{node_id}",
     "GET /api/v1/health",

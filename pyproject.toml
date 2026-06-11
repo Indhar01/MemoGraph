@@ -96,6 +96,9 @@ web = [
     "slowapi>=0.1.9,<1",
     # Structured JSON logging output (env-toggled in server.py).
     "python-json-logger>=2.0.7,<4",
+    # Provider-neutral OIDC verification (works with WorkOS, Auth0, Clerk,
+    # Keycloak, etc. — picks JWKS URL + audience from env vars at startup).
+    "PyJWT[crypto]>=2.8.0,<3",
 ]
 integrations = [
     "watchdog>=3.0.0,<7",

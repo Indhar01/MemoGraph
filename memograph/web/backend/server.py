@@ -8,7 +8,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from ...core.kernel import MemoryKernel
+from .auth import AuthProvider, require_user
 from .middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from .rate_limit import limiter, rate_limit_exceeded_handler
 
@@ -115,6 +116,16 @@ async def lifespan(app: FastAPI):
 
 def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     """Create and configure the FastAPI application."""
+    provider = AuthProvider.from_env()
+    if provider is AuthProvider.NONE:
+        logger.warning(
+            "Starting MemoGraph with MEMOGRAPH_AUTH_PROVIDER=none. The API "
+            "is open. Set MEMOGRAPH_AUTH_PROVIDER=oidc|api_key|multi for "
+            "production deployments."
+        )
+    else:
+        logger.info("Auth provider: %s", provider.value)
+
     app = FastAPI(
         title="MemoGraph API",
         version="1.0.0",
@@ -178,6 +189,10 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
                 "error": exc.detail,
                 "code": f"HTTP_{exc.status_code}",
             },
+            # Forward headers the route attached (e.g. WWW-Authenticate
+            # on a 401, Retry-After on a 503). Without this, auth
+            # challenges silently lose their auth scheme.
+            headers=exc.headers,
         )
 
     @app.exception_handler(Exception)
@@ -214,14 +229,28 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # Import and register routes. Mount under both /api/v1/ (canonical
     # going forward) and /api/ (legacy, kept for back-compat with existing
     # callers; flagged with the deprecation header above).
+    #
+    # Every protected router gets ``Depends(require_user)`` applied at
+    # mount time so individual route bodies don't have to remember. When
+    # MEMOGRAPH_AUTH_PROVIDER=none, require_user returns an anonymous
+    # user rather than 401-ing — preserves local-dev workflows.
     from .routes import ai, analytics, graph, memories, search
 
+    auth_dep = [Depends(require_user)]
     for prefix in ("/api/v1", "/api"):
-        app.include_router(memories.router, prefix=prefix, tags=["memories"])
-        app.include_router(search.router, prefix=prefix, tags=["search"])
-        app.include_router(graph.router, prefix=prefix, tags=["graph"])
-        app.include_router(analytics.router, prefix=prefix, tags=["analytics"])
-        app.include_router(ai.router, prefix=prefix, tags=["ai"])
+        app.include_router(
+            memories.router, prefix=prefix, tags=["memories"], dependencies=auth_dep
+        )
+        app.include_router(
+            search.router, prefix=prefix, tags=["search"], dependencies=auth_dep
+        )
+        app.include_router(
+            graph.router, prefix=prefix, tags=["graph"], dependencies=auth_dep
+        )
+        app.include_router(
+            analytics.router, prefix=prefix, tags=["analytics"], dependencies=auth_dep
+        )
+        app.include_router(ai.router, prefix=prefix, tags=["ai"], dependencies=auth_dep)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
@@ -247,6 +276,18 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             status_code=200 if is_ready else 503,
             content={"status": "ready" if is_ready else "not_ready"},
         )
+
+    @app.get("/api/v1/auth/me")
+    async def whoami(user=Depends(require_user)):
+        """Introspection: return the caller's identity without leaking
+        raw claims. Useful for clients that need to know which scopes
+        they have."""
+        return {
+            "id": user.id,
+            "email": user.email,
+            "organization_id": user.organization_id,
+            "scopes": list(user.scopes),
+        }
 
     @app.get("/api/v1/health")
     @app.get("/api/health")

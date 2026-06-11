@@ -68,6 +68,41 @@ not yet on the hot path.
 These will be retired in Phase 4. Do not start new code paths that depend
 on `_enhanced` parallels.
 
+## Authentication
+
+The web API (`/api/v1/` and the legacy `/api/` prefix) is gated by
+`memograph.web.backend.auth.require_user`. Three providers are
+supported via `MEMOGRAPH_AUTH_PROVIDER`:
+
+- `none` — open API, used for local dev. Logs a startup warning so
+  this can't be set silently.
+- `api_key` — service-to-service, `X-API-Key` header validated
+  constant-time against `MEMOGRAPH_API_KEYS` (sha256-hashed).
+- `oidc` — browser flows; `Authorization: Bearer <jwt>` validated
+  against `MEMOGRAPH_OIDC_JWKS_URL` with `MEMOGRAPH_OIDC_AUDIENCE` and
+  optionally `MEMOGRAPH_OIDC_ISSUER`. Works with WorkOS, Auth0, Clerk,
+  Keycloak, or any OIDC issuer that exposes JWKS.
+- `multi` — accept either credential.
+
+Identity propagates to the audit log via a `ContextVar`: whenever a
+route handler is reached, `Action.user` and `Action.tenant_id` are
+populated from the authenticated identity without threading the user
+through every kernel call.
+
+### MCP authentication (stdio vs HTTP/SSE)
+
+The MCP server in `memograph/mcp/` runs over **stdio** today. That
+transport is process-to-process and inherits the trust boundary of
+the parent (Claude Desktop, Cline, etc.) — no separate authentication
+is meaningful.
+
+If/when HTTP/SSE transport is exposed (e.g. a remote MCP gateway), it
+must sit behind the same OIDC/API-key gate as the FastAPI server. The
+auth module is provider-neutral by design so the same env vars work.
+Phase 3 will add per-tenant tool authorisation; until then,
+HTTP/SSE-exposed MCP should be considered as privileged as the
+`[web]` API.
+
 ## Public API surface
 
 The public API is what `memograph/__init__.py` re-exports. Anything else

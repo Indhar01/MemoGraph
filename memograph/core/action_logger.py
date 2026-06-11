@@ -34,9 +34,33 @@ logger = logging.getLogger("memograph.action_logger")
 ActionType = Literal["create", "update", "delete", "boost", "link", "merge", "tag"]
 
 
+def _identity_from_context() -> tuple[str | None, str | None]:
+    """Look up the authenticated user from the web auth context, if any.
+
+    Returns ``(user_id, tenant_id)`` — both ``None`` when called outside
+    a web request, when auth is disabled, or when the auth module isn't
+    importable (e.g. minimal install without the ``[web]`` extra).
+    """
+    try:
+        from memograph.web.backend.auth import current_user
+    except ImportError:
+        return (None, None)
+    user = current_user.get()
+    if user is None or user.id == "anonymous":
+        return (None, None)
+    return (user.id, user.organization_id or None)
+
+
 @dataclass
 class Action:
-    """Represents a single action in the history."""
+    """Represents a single action in the history.
+
+    ``user`` is populated from the authenticated request context when
+    the action happens inside a web/MCP call. ``tenant_id`` is reserved
+    for the Phase 3 multi-tenancy work — it's already in the schema so
+    audit-log files written today are forward-compatible with tenancy
+    once the kernel learns to scope.
+    """
 
     memory_id: str
     action_type: ActionType
@@ -45,6 +69,7 @@ class Action:
     timestamp_ns: int | None = None
     metadata: dict[str, Any] | None = None
     user: str | None = None
+    tenant_id: str | None = None
 
     def __post_init__(self):
         if self.metadata is None:
@@ -79,6 +104,7 @@ class ActionLogger:
         summary: str,
         metadata: dict[str, Any] | None = None,
         user: str | None = None,
+        tenant_id: str | None = None,
     ) -> Action:
         """Log a memory action.
 
@@ -101,6 +127,17 @@ class ActionLogger:
             ...     metadata={"added_tags": ["python"], "removed_tags": ["general"]}
             ... )
         """
+        # If the caller didn't pass identity, read it from the request
+        # context populated by the auth dependency. Falls back to None
+        # in non-web codepaths (tests, CLI) so the audit log there
+        # records "no identity" rather than guessing.
+        if user is None or tenant_id is None:
+            ctx_user, ctx_tenant = _identity_from_context()
+            if user is None:
+                user = ctx_user
+            if tenant_id is None:
+                tenant_id = ctx_tenant
+
         action = Action(
             memory_id=memory_id,
             action_type=action_type,
@@ -109,6 +146,7 @@ class ActionLogger:
             timestamp_ns=time.time_ns(),
             metadata=metadata or {},
             user=user,
+            tenant_id=tenant_id,
         )
 
         with self._lock:
