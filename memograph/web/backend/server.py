@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from ...core.kernel import MemoryKernel
-from .auth import AuthProvider, require_user
+from .auth import AuthProvider, require_scope, require_user
 from .middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from .observability import init_telemetry, metrics_endpoint, record_request
 from .rate_limit import limiter, rate_limit_exceeded_handler
@@ -36,6 +36,17 @@ _DEBUG_ENABLED = os.environ.get("MEMOGRAPH_DEBUG", "").lower() in {"1", "true", 
 # formatter (request_id is propagated via the RequestIdMiddleware on the
 # request scope; access-log JSON shipping is the operator's job).
 _LOG_JSON = os.environ.get("MEMOGRAPH_LOG_JSON", "").lower() in {"1", "true", "yes"}
+
+# Phase 3 multi-tenancy gate. When MEMOGRAPH_TENANCY_ENABLED=1, the server
+# constructs a TenantRegistry rooted at MEMOGRAPH_GLOBAL_ROOT (or the
+# vault path if unset, treated as the global root) and mounts the admin
+# router. Default off — single-tenant deployments need no registry and
+# the admin routes 503 cleanly until the operator opts in.
+_TENANCY_ENABLED = os.environ.get("MEMOGRAPH_TENANCY_ENABLED", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 
 def _configure_logging() -> None:
@@ -71,6 +82,18 @@ def _configure_logging() -> None:
 
 _configure_logging()
 logger = logging.getLogger(__name__)
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read an env var as an int; fall back to default on garbage."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid int for %s=%r; using default %d", name, raw, default)
+        return default
 
 
 def _cors_origins() -> list[str]:
@@ -188,6 +211,33 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     app.state.use_gam = use_gam
     app.state.is_ready = False
 
+    # Phase 3 multi-tenancy: build a registry that materializes one
+    # MemoryKernel per tenant under the global root. The single-tenant
+    # `kernel` above remains in place during the v0.x → v1.0 transition;
+    # the registry is opt-in via MEMOGRAPH_TENANCY_ENABLED. When disabled,
+    # admin routes are still mounted but return 503 (see admin._registry).
+    app.state.tenant_registry = None
+    if _TENANCY_ENABLED:
+        from ...core.tenant_registry import TenantRegistry
+        from ...storage.tenant_storage import TenantStorage
+
+        global_root = os.environ.get("MEMOGRAPH_GLOBAL_ROOT", str(vault_path_obj))
+
+        def _kernel_factory(tenant_vault_path: str) -> MemoryKernel:
+            return MemoryKernel(vault_path=tenant_vault_path, use_gam=use_gam)
+
+        max_warm = _env_int("MEMOGRAPH_TENANT_MAX_WARM", 64)
+        app.state.tenant_registry = TenantRegistry(
+            storage=TenantStorage(global_root=global_root),
+            kernel_factory=_kernel_factory,
+            max_warm=max_warm,
+        )
+        logger.info(
+            "Multi-tenancy enabled: global_root=%s max_warm=%d",
+            global_root,
+            max_warm,
+        )
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         return JSONResponse(
@@ -253,9 +303,14 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # mount time so individual route bodies don't have to remember. When
     # MEMOGRAPH_AUTH_PROVIDER=none, require_user returns an anonymous
     # user rather than 401-ing — preserves local-dev workflows.
-    from .routes import ai, analytics, graph, memories, search
+    from .routes import admin, ai, analytics, graph, memories, search
 
     auth_dep = [Depends(require_user)]
+    # Admin router is gated by an additional `admin` scope. The scope
+    # claim is supplied by the auth provider (custom claim on the JWT or
+    # a dedicated API key with the scope encoded). require_scope first
+    # invokes require_user, so unauthenticated callers see 401, not 403.
+    admin_dep = [Depends(require_scope("admin"))]
     for prefix in ("/api/v1", "/api"):
         app.include_router(
             memories.router, prefix=prefix, tags=["memories"], dependencies=auth_dep
@@ -270,6 +325,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             analytics.router, prefix=prefix, tags=["analytics"], dependencies=auth_dep
         )
         app.include_router(ai.router, prefix=prefix, tags=["ai"], dependencies=auth_dep)
+        app.include_router(admin.router, prefix=prefix, dependencies=admin_dep)
 
     if _METRICS_ENABLED:
 

@@ -1,6 +1,10 @@
 {
   "routes": [
+    "DELETE /api/v1/admin/tenants/{tenant_id}",
     "DELETE /api/v1/memories/{memory_id}",
+    "GET /api/v1/admin/tenants",
+    "GET /api/v1/admin/tenants/{tenant_id}",
+    "GET /api/v1/admin/tenants/{tenant_id}/usage",
     "GET /api/v1/ai/analyze-kb",
     "GET /api/v1/ai/detect-gaps",
     "GET /api/v1/analytics",
@@ -11,6 +15,7 @@
     "GET /api/v1/memories",
     "GET /api/v1/memories/{memory_id}",
     "GET /api/v1/search/autocomplete",
+    "POST /api/v1/admin/tenants",
     "POST /api/v1/ai/feedback",
     "POST /api/v1/ai/suggest-links",
     "POST /api/v1/ai/suggest-tags",

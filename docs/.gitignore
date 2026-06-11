@@ -5,3 +5,5 @@
 !MCP_REGISTRY_GUIDE.md
 !ARCHITECTURE.md
 !CONCURRENCY.md
+!adr/
+!adr/*.md
