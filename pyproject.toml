@@ -243,14 +243,6 @@ module = "memograph.core.indexer"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.core.logging_config"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "memograph.core.kernel_gam_async"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = "memograph.mcp.conversation_monitor"
 ignore_errors = true
 
@@ -268,10 +260,6 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = "memograph.ai.auto_tagger"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "memograph.adapters.embeddings.openai"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
