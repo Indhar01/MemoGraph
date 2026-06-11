@@ -104,6 +104,17 @@ integrations = [
     "watchdog>=3.0.0,<7",
     "python-frontmatter>=1.0.0,<2",
 ]
+observability = [
+    # OpenTelemetry (traces + metrics over OTLP/HTTP). Pinning to a single
+    # release line because OTel still ships breaking changes on the SDK.
+    "opentelemetry-api>=1.27.0,<2",
+    "opentelemetry-sdk>=1.27.0,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0,<2",
+    "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
+    # Prometheus exposition format for /metrics scrapers that don't
+    # speak OTLP.
+    "prometheus-client>=0.20.0,<1",
+]
 all = [
     "memograph[openai,anthropic,ollama,litellm,embeddings,integrations]",
 ]

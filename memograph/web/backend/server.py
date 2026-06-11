@@ -18,7 +18,14 @@ from slowapi.middleware import SlowAPIMiddleware
 from ...core.kernel import MemoryKernel
 from .auth import AuthProvider, require_user
 from .middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from .observability import init_telemetry, metrics_endpoint, record_request
 from .rate_limit import limiter, rate_limit_exceeded_handler
+
+_METRICS_ENABLED = os.environ.get("MEMOGRAPH_METRICS_ENABLED", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 # When MEMOGRAPH_DEBUG=1, the 500 handler echoes the exception string and
 # /api/health returns the vault path. In production this leaks internals
@@ -211,7 +218,8 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
 
     @app.middleware("http")
     async def add_process_time_header(request: Request, call_next):
-        """Stamp X-Process-Time on every response and tag legacy /api/ paths."""
+        """Stamp X-Process-Time on every response, tag legacy /api/ paths,
+        and feed Prometheus per-request metrics if enabled."""
         start_time = time.time()
         response = await call_next(request)
         process_time = time.time() - start_time
@@ -224,6 +232,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             response.headers["Deprecation"] = "true"
             response.headers["Sunset"] = "v0.5.0"
             response.headers["Link"] = '</api/v1/>; rel="successor-version"'
+        # Use the route's path *template* (e.g. "/api/v1/memories/{memory_id}")
+        # rather than the concrete URL so memory_id values don't explode the
+        # cardinality of the Prometheus label set.
+        if _METRICS_ENABLED:
+            route = getattr(request.scope.get("route"), "path", path)
+            record_request(
+                route=route,
+                method=request.method,
+                status=response.status_code,
+                duration_seconds=process_time,
+            )
         return response
 
     # Import and register routes. Mount under both /api/v1/ (canonical
@@ -251,6 +270,22 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             analytics.router, prefix=prefix, tags=["analytics"], dependencies=auth_dep
         )
         app.include_router(ai.router, prefix=prefix, tags=["ai"], dependencies=auth_dep)
+
+    if _METRICS_ENABLED:
+
+        @app.get("/metrics", include_in_schema=False)
+        async def metrics():
+            """Prometheus exposition. Enabled by MEMOGRAPH_METRICS_ENABLED=1.
+
+            Intentionally not gated by auth — most Prometheus scrapers can't
+            send headers; protect this with a network-level allowlist (only
+            reachable from the metrics-collector pod/host) instead.
+            """
+            return metrics_endpoint()
+
+    # Wire OpenTelemetry exporter if configured. No-op when env vars aren't
+    # set, so the [observability] extra is genuinely optional.
+    init_telemetry(app)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
