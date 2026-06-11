@@ -1,0 +1,67 @@
+# Build / cache artefacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+coverage.xml
+.coverage
+.coverage.*
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Node / frontend (frontend is built separately, not into the Python image)
+memograph/web/frontend/node_modules/
+memograph/web/frontend/dist/
+memograph/web/frontend/.vite/
+
+# IDE / OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Local user data — must never enter the image
+*.env
+.env*
+!.env.example
+test_vault/
+test_data/
+*.log
+**/.memograph_cache.json
+**/.memograph_graph.json
+**/.memograph_embeddings.json
+
+# Docs and dev-only files
+docs/
+paper/
+archive_planning_docs/
+htmlcov/
+*.md
+!README.md
+LICENSE
+!LICENSE
+CITATION.cff
+obsidian-plugin/
+
+# Packaged distributions and registry artefacts
+smithery.yaml
+server.json
+run_memograph_mcp.bat
