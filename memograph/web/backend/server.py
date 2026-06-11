@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from ...core.kernel import MemoryKernel
 from .middleware import BodySizeLimitMiddleware, RequestIdMiddleware
@@ -130,11 +131,15 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # applies middleware in reverse-add order, so add them in reverse here.
     app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-    # Rate limiter wiring: install slowapi's middleware + exception handler.
+    # Rate limiter wiring: state, exception handler, and the middleware
+    # that actually enforces default_limits on every route. Without
+    # SlowAPIMiddleware, default_limits are inert (they apply only to
+    # routes decorated explicitly with @limiter.limit(...)).
     app.state.limiter = limiter
     # Starlette types the handler arg as Exception; slowapi's signature is
     # already correct at runtime — narrowing happens via the dispatch table.
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
+    app.add_middleware(SlowAPIMiddleware)
 
     cors_origins = _cors_origins()
     if cors_origins:
