@@ -33,6 +33,7 @@ from typing import cast
 from fastapi import Depends, HTTPException, Request, status
 
 from memograph.core.kernel import MemoryKernel
+from memograph.storage.tombstone import is_tombstoned
 from memograph.web.backend.auth import User, require_user
 
 
@@ -92,6 +93,17 @@ def kernel_for_request(
 
     registry = getattr(request.app.state, "tenant_registry", None)
     if registry is not None:
+        # Phase 3.7: a tombstoned tenant is in the grace-period
+        # window before the reaper destroys it. Non-admin callers
+        # receive 410 Gone — the tenant is intentionally unreachable.
+        # Admin routes do their own tombstone-aware lookups and
+        # bypass this dependency.
+        tenant_dir = registry.storage.tenant_path(tid)
+        if is_tombstoned(tenant_dir):
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="tenant is scheduled for deletion",
+            )
         return cast(MemoryKernel, registry.for_tenant(tid))
 
     kernel = getattr(request.app.state, "kernel", None)

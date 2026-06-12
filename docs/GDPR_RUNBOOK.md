@@ -77,11 +77,93 @@ proprietary format.
 
 ## Right to erasure (Art. 17)
 
-The destructive primitive is the admin offboard route. In v1.0 it's
-immediate; in v1.1 (Phase 3.7) it becomes a scheduled deletion with
-a configurable grace period.
+Two paths exist:
 
-### Today (immediate deletion)
+- **Scheduled deletion (preferred).** Schedule a deletion with a
+  grace period; the reaper script destroys the tenant after the
+  grace expires, taking a final backup automatically. Survives a
+  mistaken request and is the standard GDPR flow.
+- **Immediate deletion (emergency).** A single destructive call
+  with no recovery window. Use only when the operator has already
+  taken the final backup out-of-band and accepts the irreversibility.
+
+### Scheduled deletion (preferred)
+
+```bash
+TENANT_ID=acme
+ADMIN_JWT=...
+
+# 1. Schedule the deletion. Grace period defaults to 7 days; pass
+# grace_days=N to override. The reason is recorded on the tombstone
+# for audit.
+curl -fsS -X POST \
+  https://memograph.example.com/api/v1/admin/tenants/$TENANT_ID/schedule-delete \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"grace_days": 7, "reason": "GDPR Art. 17 ticket #4242"}'
+# Expect 202 Accepted with the scheduled_at / delete_after timestamps.
+
+# 2. The tenant is now tombstoned. Non-admin requests return 410:
+curl -i https://memograph.example.com/api/v1/memories \
+  -H "X-API-Key: $TENANT_API_KEY"
+# Expect: HTTP/1.1 410 Gone
+
+# 3. Admin status check still works — the tombstone metadata is
+# visible on the tenant record:
+curl -fsS https://memograph.example.com/api/v1/admin/tenants/$TENANT_ID \
+  -H "Authorization: Bearer $ADMIN_JWT" | jq
+# Expect: {"tenant_id": "acme", "tombstoned": true,
+#          "tombstone_scheduled_at": "...", "tombstone_delete_after": "..."}
+
+# 4. The reaper runs daily (cron) and destroys expired tombstones.
+# It writes a final backup to <global_root>/.tombstoned-exports/
+# before destroying the tenant. To trigger manually:
+docker exec memograph-api python -m memograph.scripts.run_reaper \
+  /srv/memograph/tenants
+# Stdout is JSON Lines; one event per tenant action. Pipe into your
+# log aggregator.
+
+# 5. Verify destruction.
+test ! -d /srv/memograph/tenants/$TENANT_ID && echo "ok: directory removed"
+ls /srv/memograph/tenants/.tombstoned-exports/${TENANT_ID}-*.tar.gz
+# Expect: a tarball matching <tenant_id>-<UTC timestamp>.tar.gz.
+```
+
+#### Cancelling a scheduled deletion
+
+If a customer requests cancellation before the grace expires (mistake,
+legal hold, change of heart), clear the tombstone:
+
+```bash
+curl -fsS -X DELETE \
+  https://memograph.example.com/api/v1/admin/tenants/$TENANT_ID/schedule-delete \
+  -H "Authorization: Bearer $ADMIN_JWT"
+# Expect: 204 No Content.
+```
+
+The tenant immediately resumes serving non-admin requests. No data
+was lost; the kernel was warm in the LRU the whole time.
+
+#### Reaper cron schedule
+
+```cron
+# /etc/cron.d/memograph-reaper
+15 3 * * * memograph-ops /usr/local/bin/python -m memograph.scripts.run_reaper /srv/memograph/tenants >> /var/log/memograph/reaper.jsonl 2>&1
+```
+
+#### Reaper dry-run
+
+Use `--dry-run` to audit what *would* be destroyed without doing it.
+Useful in CI and during operator training:
+
+```bash
+python -m memograph.scripts.run_reaper /srv/memograph/tenants --dry-run
+```
+
+Stdout will contain `would_destroy` events for each tenant whose
+grace has expired; nothing on disk is changed.
+
+### Immediate deletion (emergency)
 
 ```bash
 TENANT_ID=acme
@@ -144,7 +226,7 @@ print(registry.known_tenants())
 
 For your records, after each erasure:
 
-```
+```text
 Subject: Confirmation of data erasure
 
 Per your request dated <date>, MemoGraph data associated with
@@ -164,29 +246,14 @@ Backup tarballs older than <date - retention_days> have been
 purged on schedule.
 ```
 
-## Pending Phase 3.7: scheduled deletion
+## Future work
 
-The current immediate-delete behavior is operationally fine but
-has two failure modes the customer's legal team will eventually ask
-about:
-
-1. **Mistaken request.** No grace period to recover.
-2. **Atomic guarantee.** A crash mid-`offboard` could leave a
-   half-deleted tenant. The current implementation is robust
-   against this (`shutil.rmtree` retries; the warm-cache eviction
-   is independent of the disk operation), but there is no
-   end-of-deletion sentinel.
-
-Phase 3.7 adds:
-
-- `POST /api/v1/admin/tenants/{id}/schedule-delete` with a
-  configurable grace period (default 7 days).
-- A `deleted_at` field on the tenant record that turns the
-  tenant into "tombstoned" — non-admin routes 410 Gone.
-- A daily reaper that runs the destructive primitive on tombstoned
-  tenants past grace.
-- Deletion sentinel files written before and after the destructive
-  step so the operator can audit the half-state.
-
-When that lands, this runbook will be updated to call the scheduled
-endpoint instead of the immediate one.
+- Per-data-subject erasure within a shared corporate vault. Today
+  the runbook is tenant-scoped (one tenant = one DSR target). When
+  multiple natural persons share a tenant, content-level erasure
+  is a manual markdown-editing job. A future runbook will document
+  a tooling-assisted flow.
+- Deletion-receipt signing. The reaper currently emits a JSON event;
+  a future enhancement will sign each receipt with a deployment-side
+  key so the operator can hand customers a cryptographically
+  verifiable proof of erasure.
