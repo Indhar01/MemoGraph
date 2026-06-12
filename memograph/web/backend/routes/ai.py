@@ -15,12 +15,12 @@ and actionable suggestions for resolution.
 import logging
 import time
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query
 
+from ....core.kernel import MemoryKernel
 from ..errors import (
     ErrorCode,
     MemoGraphError,
-    kernel_not_initialized_error,
 )
 from ..models import (
     FeedbackRequest,
@@ -34,6 +34,7 @@ from ..models import (
     TagSuggestionRequest,
     TagSuggestionResponse,
 )
+from ..tenant_resolver import kernel_for_request
 
 # Initialize logger for this module
 logger = logging.getLogger("memograph.api.ai")
@@ -43,7 +44,10 @@ router = APIRouter()
 
 
 @router.post("/ai/suggest-tags", response_model=TagSuggestionResponse)
-async def suggest_tags(tag_req: TagSuggestionRequest, request: Request):
+async def suggest_tags(
+    tag_req: TagSuggestionRequest,
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """
     Suggest tags for content using AI analysis.
 
@@ -73,10 +77,6 @@ async def suggest_tags(tag_req: TagSuggestionRequest, request: Request):
             "max_suggestions": 5
         }
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     start_time = time.time()
 
@@ -145,7 +145,10 @@ async def suggest_tags(tag_req: TagSuggestionRequest, request: Request):
 
 
 @router.post("/ai/suggest-links", response_model=LinkSuggestionResponse)
-async def suggest_links(link_req: LinkSuggestionRequest, request: Request):
+async def suggest_links(
+    link_req: LinkSuggestionRequest,
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """
     Suggest wikilinks for content using AI analysis.
 
@@ -176,10 +179,6 @@ async def suggest_links(link_req: LinkSuggestionRequest, request: Request):
             "max_suggestions": 10
         }
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     start_time = time.time()
 
@@ -253,13 +252,13 @@ async def suggest_links(link_req: LinkSuggestionRequest, request: Request):
 
 @router.get("/ai/detect-gaps", response_model=GapDetectionResponse)
 async def detect_gaps(
-    request: Request,
     min_severity: float = Query(
         0.3, ge=0.0, le=1.0, description="Minimum severity threshold (0.0-1.0)"
     ),
     max_gaps: int = Query(
         20, ge=1, le=100, description="Maximum number of gaps to return"
     ),
+    kernel: MemoryKernel = Depends(kernel_for_request),
 ):
     """
     Detect knowledge gaps in the vault.
@@ -301,10 +300,6 @@ async def detect_gaps(
             "avg_severity": 0.65
         }
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     start_time = time.time()
 
@@ -378,7 +373,9 @@ async def detect_gaps(
 
 
 @router.get("/ai/analyze-kb", response_model=KnowledgeBaseAnalysisResponse)
-async def analyze_knowledge_base(request: Request):
+async def analyze_knowledge_base(
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """
     Perform comprehensive knowledge base analysis.
 
@@ -414,10 +411,6 @@ async def analyze_knowledge_base(request: Request):
             "learning_paths": [...]
         }
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     start_time = time.time()
 
@@ -469,7 +462,10 @@ async def analyze_knowledge_base(request: Request):
 
 
 @router.post("/ai/feedback")
-async def record_feedback(feedback_req: FeedbackRequest, request: Request):
+async def record_feedback(
+    feedback_req: FeedbackRequest,
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """
     Record user feedback on AI suggestions.
 
@@ -499,10 +495,6 @@ async def record_feedback(feedback_req: FeedbackRequest, request: Request):
             "accepted": true
         }
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     try:
         logger.info(

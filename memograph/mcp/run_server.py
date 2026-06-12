@@ -685,6 +685,28 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
                 await memograph_server.stop_monitor()
 
 
+def _resolve_vault_default() -> str:
+    """Resolve the default vault path with optional multi-tenant resolution.
+
+    Precedence:
+      1. ``MEMOGRAPH_GLOBAL_ROOT`` + ``MEMOGRAPH_DEFAULT_TENANT_ID``
+         -> ``<global_root>/<tenant_id>/`` (Phase 3.5: stdio MCP runs as
+         a single configured tenant against the per-tenant directory
+         layout).
+      2. ``MEMOGRAPH_VAULT`` -> single-tenant path.
+      3. ``~/my-vault`` -> back-compat default.
+
+    Per-request token-derived tenant_id for HTTP/SSE MCP transport is
+    a Phase 3.5.b follow-up; stdio mode is single-tenant by design.
+    """
+    global_root = os.environ.get("MEMOGRAPH_GLOBAL_ROOT")
+    if global_root:
+        tid = os.environ.get("MEMOGRAPH_DEFAULT_TENANT_ID", "default").strip()
+        if tid:
+            return str(Path(global_root).expanduser() / tid)
+    return os.environ.get("MEMOGRAPH_VAULT", "~/my-vault")
+
+
 def main():
     """Main entry point for MCP server."""
     parser = argparse.ArgumentParser(
@@ -692,8 +714,13 @@ def main():
     )
     parser.add_argument(
         "--vault",
-        default=os.environ.get("MEMOGRAPH_VAULT", "~/my-vault"),
-        help="Path to MemoGraph vault (default: $MEMOGRAPH_VAULT or ~/my-vault)",
+        default=_resolve_vault_default(),
+        help=(
+            "Path to MemoGraph vault. Defaults to "
+            "$MEMOGRAPH_GLOBAL_ROOT/$MEMOGRAPH_DEFAULT_TENANT_ID when both "
+            "are set (multi-tenant), $MEMOGRAPH_VAULT otherwise, or "
+            "~/my-vault as a final fallback."
+        ),
     )
     parser.add_argument(
         "--provider",

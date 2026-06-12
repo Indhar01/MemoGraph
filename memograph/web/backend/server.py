@@ -124,9 +124,24 @@ async def lifespan(app: FastAPI):
     """Handle startup and shutdown events."""
     logger.info("Starting MemoGraph server...")
     app.state.is_ready = False
-    # Startup: ingest vault if not already done
+    # Startup: ingest vaults if not already done.
+    #
+    # Single-tenant mode: ingest the one process-wide kernel.
+    # Multi-tenant mode: warm + ingest each tenant whose directory
+    # already exists on disk. Tenants created at runtime via the admin
+    # API will be ingested lazily by their first request through
+    # ``kernel_for_request`` (the registry's factory builds a kernel
+    # whose constructor scans the vault).
     try:
-        if app.state.kernel:
+        registry = getattr(app.state, "tenant_registry", None)
+        if registry is not None:
+            known = registry.known_tenants()
+            logger.info(f"Multi-tenancy enabled; warming {len(known)} tenants")
+            for tid in known:
+                kernel = registry.for_tenant(tid)
+                stats = await kernel.ingest_async(force=False)
+                logger.info(f"Tenant {tid}: ingested {stats['total']} memories")
+        elif app.state.kernel:
             logger.info("Ingesting vault on startup...")
             stats = await app.state.kernel.ingest_async(force=False)
             logger.info(f"Vault ingested: {stats['total']} memories loaded")
@@ -396,16 +411,21 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             "timestamp": time.time(),
         }
         if _DEBUG_ENABLED:
-            kernel = request.app.state.kernel
-            body.update(
-                {
-                    "version": "1.0.0",
-                    "vault_path": request.app.state.vault_path,
-                    "total_memories": len(kernel.graph.all_nodes()),
-                    "total_entities": len(kernel.graph.all_entities()),
-                    "gam_enabled": request.app.state.use_gam,
-                }
-            )
+            registry = getattr(request.app.state, "tenant_registry", None)
+            body["version"] = "1.0.0"
+            body["gam_enabled"] = request.app.state.use_gam
+            if registry is not None:
+                # Multi-tenant: report tenant cardinality, not per-tenant
+                # vault contents. The admin API serves per-tenant detail.
+                body["multi_tenant"] = True
+                body["warm_tenants"] = len(registry.warm_tenants())
+                body["known_tenants"] = len(registry.known_tenants())
+            else:
+                kernel = getattr(request.app.state, "kernel", None)
+                body["vault_path"] = request.app.state.vault_path
+                if kernel is not None:
+                    body["total_memories"] = len(kernel.graph.all_nodes())
+                    body["total_entities"] = len(kernel.graph.all_entities())
         return body
 
     @app.get("/")

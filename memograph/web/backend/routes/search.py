@@ -11,19 +11,21 @@ and actionable suggestions for resolution.
 
 import logging
 import time
+from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query
 
+from ....core.kernel import MemoryKernel
 from ..errors import (
     ErrorCode,
     MemoGraphError,
     invalid_query_error,
-    kernel_not_initialized_error,
     search_timeout_error,
     validate_query,
     validate_salience,
 )
 from ..models import MemoryResponse, SearchRequest, SearchResponse
+from ..tenant_resolver import kernel_for_request
 
 # Initialize logger for this module
 logger = logging.getLogger("memograph.api.search")
@@ -36,7 +38,10 @@ SEARCH_TIMEOUT = 30.0
 
 
 @router.post("/search", response_model=SearchResponse)
-async def search_memories(search_req: SearchRequest, request: Request):
+async def search_memories(
+    search_req: SearchRequest,
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """
     Search memories using hybrid retrieval (keyword + semantic + graph).
 
@@ -70,11 +75,6 @@ async def search_memories(search_req: SearchRequest, request: Request):
         validate_query(search_req.query)
     except MemoGraphError:
         raise
-
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     start_time = time.time()
 
@@ -167,9 +167,9 @@ async def search_memories(search_req: SearchRequest, request: Request):
 
 @router.get("/search/autocomplete")
 async def autocomplete(
-    request: Request,
     q: str = Query(..., min_length=1, description="Query string for autocomplete"),
     limit: int = Query(10, ge=1, le=50, description="Maximum number of suggestions"),
+    kernel: MemoryKernel = Depends(kernel_for_request),
 ):
     """
     Autocomplete suggestions based on memory titles and tags.
@@ -211,11 +211,6 @@ async def autocomplete(
     if not q or not q.strip():
         raise invalid_query_error(q, "Autocomplete query cannot be empty")
 
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
-
     try:
         logger.debug(f"Autocomplete request: q='{q}', limit={limit}")
 
@@ -223,7 +218,7 @@ async def autocomplete(
         all_nodes = kernel.graph.all_nodes()
 
         q_lower = q.lower()
-        suggestions = []
+        suggestions: list[dict[str, Any]] = []
 
         # Search in titles
         for node in all_nodes:
@@ -251,7 +246,7 @@ async def autocomplete(
         suggestions.sort(
             key=lambda x: (
                 x["type"] == "tag",  # Tags come after memories
-                -x.get("salience", 0),  # Higher salience first
+                -float(x.get("salience", 0)),  # Higher salience first
             )
         )
 
