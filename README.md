@@ -17,6 +17,23 @@
 
 You write notes the way you already do. MemoGraph indexes them, builds a graph from `[[wikilinks]]`, ranks them by salience, and serves them back to your LLM (or your team) on demand.
 
+## ⚡ Try it in 60 seconds
+
+```bash
+pip install memograph
+memograph quickstart
+```
+
+That's it. The `quickstart` command drops a small, interconnected sample vault on your disk (15 notes about Python development, with real wikilinks between them), ingests it, and runs three live demo queries so you can see the graph + hybrid retrieval working before you decide whether to commit. Try this query in particular:
+
+```bash
+memograph --vault ~/memograph-quickstart search "FastAPI dependency injection"
+```
+
+The vault contains a note titled `FastAPI dependencies` (about `Depends(...)`) — the words "dependency" and "injection" never appear in any note's title. MemoGraph still finds it, because hybrid retrieval understands "dependency injection" semantically and the wikilink graph stitches related notes together. **That's the product, demonstrated in one query.**
+
+Re-run `memograph quickstart --force` any time to reset to a fresh demo. When you're ready, point MemoGraph at your real notes: `memograph --vault ~/your-notes ingest`.
+
 ## What you get
 
 ### As a solo user / knowledge worker

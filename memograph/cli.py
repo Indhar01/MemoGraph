@@ -638,6 +638,24 @@ def main():
         help="Preview files that would be imported without actually importing",
     )
 
+    quickstart_parser = subparsers.add_parser(
+        "quickstart",
+        help=(
+            "Materialise a sample vault, ingest it, run sample queries — "
+            "the fastest way to see what MemoGraph does"
+        ),
+    )
+    quickstart_parser.add_argument(
+        "--target",
+        default="~/memograph-quickstart",
+        help=("Where to create the sample vault " "(default: ~/memograph-quickstart)"),
+    )
+    quickstart_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace the target directory if it already has files in it",
+    )
+
     doctor_parser = subparsers.add_parser(
         "doctor", help="Run environment and integration diagnostics"
     )
@@ -1247,6 +1265,14 @@ def main():
             print(f"\n{'=' * 50}")
             print(f"Remember to run: memograph --vault {args.vault} ingest")
 
+        return
+
+    if args.command == "quickstart":
+        from .quickstart import run_quickstart
+
+        rc = run_quickstart(target=args.target, force=args.force)
+        if rc != 0:
+            sys.exit(rc)
         return
 
     if args.command == "doctor":

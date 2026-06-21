@@ -152,7 +152,7 @@ include = ["memograph*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-memograph = ["py.typed"]
+memograph = ["py.typed", "data/sample_vault/*.md"]
 
 # Ruff configuration
 [tool.ruff]
