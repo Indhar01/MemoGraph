@@ -88,10 +88,79 @@ def materialise_vault(target: Path, *, force: bool = False) -> int:
     return copied
 
 
+def _run_mcp_bridge(vault_path: str, *, apply: bool, out) -> None:
+    """Detect installed MCP clients and wire the quickstart vault.
+
+    Preview-only by default. The user has to explicitly opt-in to
+    writes via ``apply=True`` so the quickstart never silently
+    mutates files outside its own target directory — a property
+    that matters when the user inevitably runs ``--mcp`` to see
+    what *would* happen before deciding.
+    """
+    print("─" * 60, file=out)
+    print("🔌 MCP bridge — wiring this vault into your AI clients\n", file=out)
+    try:
+        from memograph.mcp_setup import MCPSetup
+    except Exception as exc:  # noqa: BLE001
+        print(f"⚠️  MCP setup unavailable: {exc}", file=out)
+        return
+
+    setup = MCPSetup(vault_path=vault_path)
+    result = setup.quickstart_setup(vault_path, apply=apply)
+
+    if not result["detected"]:
+        print(
+            "No MCP clients detected on this machine. Install Claude "
+            "Desktop, Cursor, or Cline, then re-run with --mcp.",
+            file=out,
+        )
+        print(
+            "Manual setup snippets: docs/MCP_CLIENTS.md "
+            "(15+ clients, every config-file path).",
+            file=out,
+        )
+        return
+
+    print(f"Detected: {', '.join(result['detected'])}\n", file=out)
+    for action in result["actions"]:
+        icon = {
+            "would_write": "📝",
+            "written": "✓",
+            "skipped": "·",
+            "error": "❌",
+        }.get(action["status"], "?")
+        print(f"  {icon} {action['client']}", file=out)
+        print(f"     {action['config_path']}", file=out)
+        print(f"     {action['message']}", file=out)
+        print(file=out)
+
+    if not apply:
+        print(
+            "Re-run with --mcp-apply to actually write the configs. "
+            "After applying, restart your AI client.",
+            file=out,
+        )
+    else:
+        print(
+            'All done. Open your AI client and ask: "Search my vault '
+            'for python async."',
+            file=out,
+        )
+
+    not_detected = result.get("not_detected") or []
+    if not_detected:
+        print(
+            f"\nNot detected (skipped): {', '.join(not_detected)}",
+            file=out,
+        )
+
+
 def run_quickstart(
     target: str | Path = "~/memograph-quickstart",
     *,
     force: bool = False,
+    mcp: bool = False,
+    mcp_apply: bool = False,
     out=sys.stdout,
 ) -> int:
     """End-to-end quickstart flow.
@@ -151,17 +220,27 @@ def run_quickstart(
         file=out,
     )
     print(file=out)
+
+    mcp_bullet = (
+        "  • Wire MemoGraph into your AI assistant — re-run with --mcp "
+        "to do this automatically.\n"
+        if not mcp
+        else ""
+    )
     print(
         "Next steps:\n"
         "  • Open the vault directory in any editor — the notes are plain "
         ".md files.\n"
         "  • Add your own notes; MemoGraph picks them up on the next "
         "ingest.\n"
-        "  • Wire MemoGraph into your AI assistant via the MCP server "
-        "— see docs/MCP_USER_GUIDE.md.\n"
+        f"{mcp_bullet}"
         "  • Hosting it for a team? docs/HOSTING_GUIDE.md covers free "
         "options.",
         file=out,
     )
+
+    if mcp:
+        print(file=out)
+        _run_mcp_bridge(str(target_path), apply=mcp_apply, out=out)
 
     return 0

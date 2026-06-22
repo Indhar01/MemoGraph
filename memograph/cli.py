@@ -655,6 +655,24 @@ def main():
         action="store_true",
         help="Replace the target directory if it already has files in it",
     )
+    quickstart_parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help=(
+            "After the demo runs, detect installed MCP clients (Claude "
+            "Desktop, Cursor, Cline) and preview the config snippet that "
+            "would wire the quickstart vault into each. Read-only — pass "
+            "--mcp-apply to actually write the configs."
+        ),
+    )
+    quickstart_parser.add_argument(
+        "--mcp-apply",
+        action="store_true",
+        help=(
+            "Write MCP server configs to detected client config files. "
+            "Implies --mcp. Restart your AI client after."
+        ),
+    )
 
     doctor_parser = subparsers.add_parser(
         "doctor", help="Run environment and integration diagnostics"
@@ -1270,7 +1288,12 @@ def main():
     if args.command == "quickstart":
         from .quickstart import run_quickstart
 
-        rc = run_quickstart(target=args.target, force=args.force)
+        rc = run_quickstart(
+            target=args.target,
+            force=args.force,
+            mcp=args.mcp or args.mcp_apply,
+            mcp_apply=args.mcp_apply,
+        )
         if rc != 0:
             sys.exit(rc)
         return
