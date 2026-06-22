@@ -194,7 +194,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     app.state.limiter = limiter
     # Starlette types the handler arg as Exception; slowapi's signature is
     # already correct at runtime — narrowing happens via the dispatch table.
-    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type, unused-ignore]
     app.add_middleware(SlowAPIMiddleware)
 
     cors_origins = _cors_origins()
