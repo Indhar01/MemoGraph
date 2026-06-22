@@ -1,0 +1,42 @@
+# Local-development compose file.
+#
+# Usage:
+#   docker compose up --build         # build image and start service
+#   docker compose down               # stop
+#   docker compose down -v            # stop and wipe vault volume
+#
+# This is *not* a production compose file. Production should use the Helm
+# chart (Phase 2) or your platform's container orchestrator. CORS, auth,
+# rate limiting, and TLS are not configured here — running this image
+# exposed to a network will work but will be insecure (see Phase 1 work).
+
+services:
+  memograph:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: memograph:dev
+    container_name: memograph
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MEMOGRAPH_VAULT: /data/vault
+      MEMOGRAPH_USE_GAM: "1"
+      # Set MEMOGRAPH_DEBUG=1 to re-enable detailed /api/health and 500
+      # responses. Off by default; do not enable in production.
+      # MEMOGRAPH_DEBUG: "1"
+    volumes:
+      - vault:/data/vault
+    healthcheck:
+      test: >
+        CMD python -c "import urllib.request,sys;
+        sys.exit(0 if urllib.request.urlopen(
+        'http://127.0.0.1:8000/api/health', timeout=3).status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  vault:

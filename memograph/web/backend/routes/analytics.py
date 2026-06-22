@@ -1,18 +1,20 @@
 """Analytics endpoints for MemoGraph API."""
 
 from collections import Counter
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
+from ....core.kernel import MemoryKernel
 from ..models import AnalyticsResponse
+from ..tenant_resolver import kernel_for_request
 
 router = APIRouter()
 
 
 @router.get("/analytics", response_model=AnalyticsResponse)
-async def get_analytics(request: Request):
+async def get_analytics(kernel: MemoryKernel = Depends(kernel_for_request)):
     """Get analytics and statistics about the memory vault."""
-    kernel = request.app.state.kernel
 
     try:
         all_nodes = kernel.graph.all_nodes()
@@ -46,7 +48,7 @@ async def get_analytics(request: Request):
         total_links = sum(len(n.links) for n in all_nodes)
 
         # Most connected nodes
-        nodes_with_connections = [
+        nodes_with_connections: list[dict[str, Any]] = [
             {
                 "id": n.id,
                 "title": n.title,
@@ -55,7 +57,7 @@ async def get_analytics(request: Request):
             }
             for n in all_nodes
         ]
-        nodes_with_connections.sort(key=lambda x: x["connections"], reverse=True)
+        nodes_with_connections.sort(key=lambda x: int(x["connections"]), reverse=True)
         most_connected = nodes_with_connections[:10]
 
         # Recent activity

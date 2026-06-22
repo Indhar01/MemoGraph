@@ -1,5 +1,18 @@
-# Ignore all personal/planning docs in this directory
-# Only MCP_REGISTRY_GUIDE.md is tracked (required by verify_mcp_registry.py)
+# Ignore all personal/planning docs in this directory by default.
+# Whitelist the small set of docs that are part of the public project.
 *
 !.gitignore
 !MCP_REGISTRY_GUIDE.md
+!ARCHITECTURE.md
+!CONCURRENCY.md
+!adr/
+!adr/*.md
+!INSTALL_ENTERPRISE.md
+!SSO_SETUP.md
+!RBAC_GUIDE.md
+!GDPR_RUNBOOK.md
+!BACKUP_RESTORE_RUNBOOK.md
+!OBSERVABILITY_GUIDE.md
+!COMPLIANCE_ROADMAP.md
+!HOSTING_GUIDE.md
+!GOOGLE_WORKSPACE_SETUP.md

@@ -13,31 +13,111 @@
 [![Tests](https://img.shields.io/badge/tests-pytest-orange)](https://docs.pytest.org/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-brightgreen)](https://github.com/Indhar01/MemoGraph)
 
-A graph-based memory system for LLMs with intelligent retrieval. MemoGraph provides a powerful solution to the LLM memory problem by combining knowledge graphs, hybrid retrieval, and semantic search.
+**MemoGraph turns a folder of markdown notes into a queryable, AI-ready knowledge graph.** It solves the LLM memory problem — your AI assistants forget last Tuesday's decision, can't find a related note across two projects, and re-derive the same insight again and again — by giving them a persistent, navigable, attribution-friendly memory layer that lives in plain markdown files you control.
 
-> **📊 Project Status:** MemoGraph is **production-ready**! See [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for current status and [docs/FUTURE_ENHANCEMENTS.md](docs/FUTURE_ENHANCEMENTS.md) for optional improvements.
+You write notes the way you already do. MemoGraph indexes them, builds a graph from `[[wikilinks]]`, ranks them by salience, and serves them back to your LLM (or your team) on demand.
 
-## ✨ Features
+## ⚡ Try it in 60 seconds
 
-- **🤖 Smart Auto-Organization Engine**: Automatically extract structured information from memories using LLMs
-  - Topics, subtopics, and recurring themes
-  - People with roles and organizations
-  - Action items with assignees and deadlines
-  - Decisions, questions, and sentiment analysis
-  - Risks, ideas, and timeline events
-- **🏷️ AI-Powered Tag Suggestions**: Automatically suggest relevant tags using semantic analysis and content structure detection
-- **🔗 AI-Powered Link Suggestions**: Intelligently recommend wikilinks to related notes using semantic similarity and graph analysis
-- **Graph-Based Memory**: Navigate knowledge using bidirectional wikilinks and backlinks
-- **Hybrid Retrieval**: Combines keyword matching, graph traversal, and optional vector embeddings
-- **Markdown-Native**: Human-readable markdown files with YAML frontmatter
-- **Memory Types**: Support for episodic, semantic, procedural, and fact-based memories
-- **Smart Indexing**: Efficient caching system that only re-indexes changed files
-- **CLI & Python API**: Use via command line or integrate into your Python applications
-- **Multiple LLM Providers**: Works with Ollama, Claude, and OpenAI
-- **Context Compression**: Intelligent token budgeting for optimal context windows
-- **Salience Scoring**: Memory importance ranking for better retrieval
+```bash
+pip install memograph
+memograph quickstart
+```
+
+That's it. The `quickstart` command drops a small, interconnected sample vault on your disk (15 notes about Python development, with real wikilinks between them), ingests it, and runs three live demo queries so you can see the graph + hybrid retrieval working before you decide whether to commit. Try this query in particular:
+
+```bash
+memograph --vault ~/memograph-quickstart search "FastAPI dependency injection"
+```
+
+The vault contains a note titled `FastAPI dependencies` (about `Depends(...)`) — the words "dependency" and "injection" never appear in any note's title. MemoGraph still finds it, because hybrid retrieval understands "dependency injection" semantically and the wikilink graph stitches related notes together. **That's the product, demonstrated in one query.**
+
+Re-run `memograph quickstart --force` any time to reset to a fresh demo. When you're ready, point MemoGraph at your real notes: `memograph --vault ~/your-notes ingest`.
+
+## What you get
+
+### As a solo user / knowledge worker
+
+- A vault of human-readable markdown files — nothing proprietary, no lock-in. Your notes outlive any tool.
+- Hybrid retrieval that combines keyword search, semantic similarity, and graph traversal so you find the right note even when you don't remember the exact words.
+- AI-assisted tagging, link suggestions, and gap detection that grow your knowledge base instead of letting it rot.
+- A CLI and a web UI for browsing, editing, and visualizing the graph.
+
+### As an AI agent / IDE user
+
+- A first-class **Model Context Protocol (MCP) server** with 30+ tools, working out of the box with Claude Desktop, Claude Code, Cursor, Cline, Windsurf, Continue, Zed, VS Code, Goose, Gemini CLI, OpenAI Codex CLI, and others.
+- Autonomous "auto-save" hooks that capture decisions and context from your AI conversations into the vault automatically.
+- Per-conversation memory recall — your assistant can pull "what did we decide last week about X" without you copy-pasting context every time.
+
+### As an enterprise / SaaS operator
+
+- **Multi-tenant deployment** with filesystem-level isolation per tenant, end-to-end isolation tests, and a warm-LRU kernel cache.
+- **OIDC + API-key authentication** with JWKS support (Auth0, Clerk, WorkOS, Keycloak, Azure AD, Okta), restrictive CORS, request-size caps, and rate limiting.
+- **GDPR-compliant scheduled deletion**: tombstone-with-grace-period flow, automatic final backups, daily reaper, and an audit log of every deletion.
+- **Observability built in**: OpenTelemetry traces + Prometheus `/metrics`, structured JSON logging with request IDs, and a separate `/healthz` / `/readyz` for orchestration.
+- **Operations runbooks** shipped with the code: install, SSO setup, RBAC, backup-restore, and GDPR procedures.
+
+## How consumers benefit
+
+| You want to… | MemoGraph gives you… |
+|---|---|
+| Stop your AI assistant from forgetting context across conversations | Persistent vault + MCP server, plus optional auto-save hooks |
+| Find a note across thousands when you only half-remember it | Hybrid retrieval (keyword + semantic + graph) with salience ranking |
+| Connect related ideas without manual cross-linking | AI link suggestions, backlink graph, BFS traversal |
+| Discover what's missing in your knowledge base | Gap detector + topic clustering + learning-path suggestions |
+| Self-host a memory backend for a team or product | Web UI, FastAPI HTTP API, OpenAPI v1 contract, Docker compose |
+| Ship MemoGraph to multiple paying customers | Multi-tenant kernel registry, OIDC, quotas (roadmap), GDPR runbook |
+| Survive an SOC 2 audit conversation | Audit log with user + tenant binding, observability, security workflow, compliance roadmap doc |
+
+## ✨ Capabilities at a glance
+
+### Core memory engine
+
+- **Graph-based memory** — bidirectional `[[wikilinks]]` build a navigable knowledge graph automatically.
+- **Hybrid retrieval** — keyword + semantic embeddings + graph traversal, combined and re-ranked.
+- **Memory types** inspired by cognitive science: episodic, semantic, procedural, fact.
+- **Salience scoring** (0–1) that decays over time and boosts on access.
+- **Smart indexing** — mtime-cached, only re-parses changed files.
+- **Context compression** — token-budget-aware windowing for LLM prompts.
+- **Markdown-native vault** — every memory is a `.md` file with YAML frontmatter; no proprietary format.
+
+### AI features
+
+- **Smart Auto-Organization Engine** — extract topics, people, action items, decisions, questions, sentiment, risks, ideas, and timeline events from memories.
+- **AutoTagger** — suggest tags via semantic analysis, structure detection, and pattern learning.
+- **LinkSuggester** — propose `[[wikilinks]]` to related notes; bidirectional opportunities included.
+- **GapDetector** — surface missing topics, weak coverage, isolated notes, and unmade links.
+- **Knowledge analysis** — vault stats, topic clustering, learning paths, connection analysis.
+
+### Interfaces
+
+- **Python API** — `MemoryKernel` with sync, async, and batch variants.
+- **CLI** — 24+ commands for ingest, search, batch ops, import, export, backup, and AI features.
+- **MCP server** — 30+ tools, stdio transport, drop-in for any MCP-compatible client.
+- **Web UI** — React + D3 graph visualization, search, and editing (FastAPI backend + Vite frontend).
+- **HTTP API** — versioned `/api/v1/`, OpenAPI snapshot in CI, ready for service-to-service integration.
+
+### Enterprise & SaaS readiness
+
+- **Multi-tenancy** with filesystem-isolated tenants, an LRU registry of warm kernels, per-tenant audit logs, and end-to-end isolation tests gating release.
+- **Authentication** via OIDC (JWKS) or hashed API keys; per-route auth scope; identity bound into the audit log.
+- **Web hardening** — restrictive CORS, slowapi rate limiting, request-size caps, structured JSON logging with request IDs, info-leak-free 500 handler.
+- **Storage hardening** — path-traversal-safe vault writes, vault size soft/hard caps, schema-versioned cache files.
+- **Scheduled deletion** for GDPR Art. 17: tombstone with configurable grace period, automatic final backup, daily reaper script, cancel-before-grace endpoint.
+- **Observability** — OpenTelemetry FastAPI/asyncio auto-instrumentation, Prometheus `/metrics`, OTLP export.
+- **Reliability** — concurrency audit, stress tests for concurrent writes, versioned backup format with integrity checks.
+- **Distribution** — pinned-and-locked dependencies, Docker compose for self-host, security workflow (`bandit` + `pip-audit`).
+
+> See [docs/INSTALL_ENTERPRISE.md](docs/INSTALL_ENTERPRISE.md), [docs/SSO_SETUP.md](docs/SSO_SETUP.md), [docs/GDPR_RUNBOOK.md](docs/GDPR_RUNBOOK.md), [docs/BACKUP_RESTORE_RUNBOOK.md](docs/BACKUP_RESTORE_RUNBOOK.md), [docs/OBSERVABILITY_GUIDE.md](docs/OBSERVABILITY_GUIDE.md), and [docs/RBAC_GUIDE.md](docs/RBAC_GUIDE.md) for the operator-facing details.
 
 ## 🚀 Quick Start
+
+> **Hosting it yourself?** [docs/HOSTING_GUIDE.md](docs/HOSTING_GUIDE.md)
+> covers four genuinely-free paths — Oracle Free Tier, Cloudflare
+> Tunnel + your hardware (recommended for most), GCP always-free
+> stitch, and GitHub-repo-as-vault. Workspace identity via OIDC and
+> Drive-as-portability-backup are documented in
+> [docs/GOOGLE_WORKSPACE_SETUP.md](docs/GOOGLE_WORKSPACE_SETUP.md).
 
 ### Installation
 
@@ -118,6 +198,46 @@ MemoGraph includes a full-featured MCP server for seamless integration with AI a
 | **Graph** | `relate_memories`, `search_by_graph`, `find_path` | Graph-native linking and traversal |
 | **Bulk** | `bulk_create` | Create multiple memories in one call |
 
+### Supported Clients
+
+MemoGraph's MCP server is a stdio server — it runs alongside any MCP-compatible agentic CLI or editor. The full setup cookbook (config-file paths, format quirks, verification steps) lives in **[docs/MCP_CLIENTS.md](docs/MCP_CLIENTS.md)**:
+
+| Client | Format | Quick reference |
+|---|---|---|
+| Claude Code (CLI) | `mcpServers` | [`claude_code_config.json`](memograph/mcp/claude_code_config.json) |
+| Claude Desktop | `mcpServers` | [`claude_desktop_config.json`](memograph/mcp/claude_desktop_config.json) |
+| Cline | `mcp.servers` | [`cline_config.json`](memograph/mcp/cline_config.json) |
+| Cursor | `mcpServers` | [`cursor_config.json`](memograph/mcp/cursor_config.json) |
+| Windsurf | `mcpServers` | [`windsurf_config.json`](memograph/mcp/windsurf_config.json) |
+| Continue.dev | `experimental.modelContextProtocolServers` | [`continue_config.json`](memograph/mcp/continue_config.json) |
+| Zed | `context_servers` | [`zed_config.json`](memograph/mcp/zed_config.json) |
+| VS Code (1.99+) | `servers` | [`vscode_config.json`](memograph/mcp/vscode_config.json) |
+| Goose (Block) | YAML `extensions` | [`goose_config.yaml`](memograph/mcp/goose_config.yaml) |
+| Roo Code | `mcpServers` | [`roo_code_config.json`](memograph/mcp/roo_code_config.json) |
+| Gemini CLI | `mcpServers` | [`gemini_cli_config.json`](memograph/mcp/gemini_cli_config.json) |
+| OpenAI Codex CLI | TOML `mcp_servers.<name>` | [`codex_config.toml`](memograph/mcp/codex_config.toml) |
+| LM Studio | `mcpServers` | [`lm_studio_config.json`](memograph/mcp/lm_studio_config.json) |
+| Cherry Studio | UI form | [`cherry_studio_config.json`](memograph/mcp/cherry_studio_config.json) |
+| IBM Bob Shell | `mcpServers` | [`bob_shell_config.json`](memograph/mcp/bob_shell_config.json) |
+
+### Quick Setup for Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      }
+    }
+  }
+}
+```
+
 ### Quick Setup for Cline
 
 Add to your `~/.cline/mcp_settings.json`:
@@ -138,20 +258,7 @@ Add to your `~/.cline/mcp_settings.json`:
 }
 ```
 
-### Quick Setup for Claude Desktop
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "memograph": {
-      "command": "python",
-      "args": ["-m", "memograph.mcp.run_server", "--vault", "/path/to/your/vault"]
-    }
-  }
-}
-```
+For **Claude Code, Cursor, Windsurf, Continue, Zed, VS Code, Goose, Gemini CLI, Codex CLI, LM Studio, Cherry Studio, and Bob Shell**, see **[docs/MCP_CLIENTS.md](docs/MCP_CLIENTS.md)**.
 
 ### Install from MCP Registry
 
@@ -159,49 +266,11 @@ Add to your `claude_desktop_config.json`:
 
 **Registry URL**: [https://github.com/modelcontextprotocol/servers/tree/main/src/memograph](https://github.com/modelcontextprotocol/servers)
 
-#### Step 1: Install MemoGraph
-
-First, install the Python package:
-
 ```bash
 pip install memograph
 ```
 
-#### Step 2: Configure in Your MCP Client
-
-The MCP Registry provides the configuration template. Add to your client's config file:
-
-**For Cline** (`~/.cline/mcp_settings.json`):
-```json
-{
-  "mcp": {
-    "servers": {
-      "memograph": {
-        "command": "python",
-        "args": ["-m", "memograph.mcp.run_server"],
-        "env": {
-          "MEMOGRAPH_VAULT": "/path/to/your/vault"
-        }
-      }
-    }
-  }
-}
-```
-
-**For Claude Desktop** (`claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "memograph": {
-      "command": "python",
-      "args": ["-m", "memograph.mcp.run_server"],
-      "env": {
-        "MEMOGRAPH_VAULT": "/path/to/your/vault"
-      }
-    }
-  }
-}
-```
+Then drop the snippet for your client into its config file (see the table above or [docs/MCP_CLIENTS.md](docs/MCP_CLIENTS.md)).
 
 **Benefits of MCP Registry Listing:**
 - ✅ Official registry backed by Anthropic, GitHub, and Microsoft
@@ -598,6 +667,10 @@ We maintain high code quality standards:
 ## 📚 Documentation
 
 ### Getting Started
+
+- **[Hosting Guide](docs/HOSTING_GUIDE.md)** - 💸 **Free hosting options** (Oracle Free Tier, Cloudflare Tunnel, GCP, GitHub-vault) with hardening checklist
+- **[Google Workspace Setup](docs/GOOGLE_WORKSPACE_SETUP.md)** - 🔐 OIDC identity + Drive portability backup
+- **[MCP Clients Guide](docs/MCP_CLIENTS.md)** - 🔌 **Setup snippets for 15+ agentic CLIs/editors** (Claude Code, Cursor, Windsurf, Continue, Zed, VS Code, Goose, Gemini CLI, Codex CLI, LM Studio, …)
 - **[MCP User Guide](docs/MCP_USER_GUIDE.md)** - ⭐ **Start here!** Complete guide for using MemoGraph MCP
 - **[Setup & Troubleshooting](docs/MCP_SETUP_TROUBLESHOOTING.md)** - 🚨 **Can't connect?** Step-by-step fixes for connection issues
 - **[MCP Testing Guide](docs/MCP_TESTING_GUIDE.md)** - Testing your MCP server after setup
@@ -661,27 +734,28 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for deta
 
 ## 🚦 Status
 
-**Current Version**: 0.1.1 (Alpha - Marketplace Ready)
+**Current version**: 0.3.0
 
-This project is in active development with a focus on code quality and stability:
+Single-tenant deployments are stable and recommended for production use.
+Multi-tenant deployments are feature-complete with end-to-end isolation
+tests gating the release; the public API will stabilise at v1.0.
 
-- ✅ Core functionality is stable and tested
-- ✅ All linter checks passing (Ruff)
-- ✅ Type checking configured (MyPy)
-- ✅ Pre-commit hooks enabled
-- ✅ Comprehensive test suite
-- ⚠️ API may change in minor versions until v1.0.0
+- ✅ Core functionality stable and tested (172+ tests across security, contract, and tenancy suites)
+- ✅ Whole-package type-checked with MyPy
+- ✅ Ruff lint + format + pre-commit hooks
+- ✅ OpenAPI v1 contract snapshot in CI
+- ✅ Multi-tenant isolation invariants verified by an e2e test suite
+- ⚠️ Public API may change in minor versions until v1.0.0
 
-**Recent Improvements**:
-- 🎉 **Published to official MCP Registry** ([io.github.indhar01/memograph](https://github.com/modelcontextprotocol/servers/tree/main/src/memograph))
-- 📦 **Version 0.1.1 Released** with registry integration improvements
-- Enhanced code quality with Ruff linting and formatting
-- Added comprehensive type checking with MyPy
-- Improved project structure and organization
-- Updated MCP server with 19 tools including autonomous features and graph operations
-- Added AGENTS.md for AI assistant integration
-- Created comprehensive MCP Registry submission guide
-- Improved documentation with accurate installation instructions
+### What landed recently
+
+- **Phase 3.7** — GDPR-compliant scheduled tenant deletion: tombstone-with-grace-period, daily reaper, automatic final backups.
+- **Phase 3.5** — `TenantRegistry` wired into the request path; non-admin routes resolve their kernel per-tenant.
+- **Phase 3 scaffold** — multi-tenancy ADR, `TenantStorage`, `TenantRegistry`, admin routes for tenant lifecycle.
+- **Phase 2** — OpenTelemetry + Prometheus, structured JSON logging, concurrency audit, stress tests.
+- **Phase 1** — OIDC + API-key auth, slowapi rate limiting, restrictive CORS, request-size caps, vault size caps, schema-versioned caches, OpenAPI v1 contract, security test suite.
+- **Phase 0** — path-traversal-safe vault writes, info-leak-free error handlers, pinned dependencies, Docker compose, security CI workflow.
+- 📦 **Published to the official MCP Registry** ([io.github.indhar01/memograph](https://github.com/modelcontextprotocol/servers/tree/main/src/memograph))
 
 ---
 

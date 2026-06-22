@@ -1,0 +1,4 @@
+# Local secrets and TLS material — never committed.
+.env
+tls/
+backups/

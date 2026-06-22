@@ -54,7 +54,7 @@ class GAMAsyncKernel(MemoryKernel):
         else:
             self.access_tracker = None
             self.gam_scorer = None
-            self.gam_retriever = None
+            self.gam_retriever = None  # type: ignore[assignment]
 
 
 async def create_gam_async_kernel(
