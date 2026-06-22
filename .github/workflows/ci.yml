@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop, dev]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop, dev]
 
 jobs:
   lint:
@@ -200,6 +200,48 @@ jobs:
           pytest tests/test_kernel_enhanced.py::TestRememberWithValidation -v
           pytest tests/test_kernel_enhanced.py::TestRetrieveWithCaching -v
 
+  helm-lint:
+    name: Helm chart lint + render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.0
+
+      - name: Lint chart
+        run: helm lint deploy/helm/memograph
+
+      - name: Render default values
+        # Catches Go-template bugs that lint can miss (e.g. typos in
+        # field references that only show up at render time).
+        run: helm template memograph deploy/helm/memograph > /tmp/rendered-default.yaml
+
+      - name: Render multi-tenant + OIDC values
+        run: |
+          helm template memograph deploy/helm/memograph \
+            --set memograph.tenancyEnabled=true \
+            --set auth.provider=oidc \
+            --set auth.oidc.jwksUrl=https://example.com/.well-known/jwks.json \
+            --set auth.oidc.issuer=https://example.com/ \
+            --set auth.oidc.audience=memograph-api \
+            --set ingress.enabled=true \
+            --set ingress.hosts[0].host=memograph.example.com \
+            --set ingress.hosts[0].paths[0].path=/ \
+            --set ingress.hosts[0].paths[0].pathType=Prefix \
+            --set networkPolicy.enabled=true \
+            > /tmp/rendered-mt.yaml
+
+      - name: Validate rendered manifests against k8s API
+        # kubeconform parses each doc and validates schema; catches typos
+        # in apiVersion/kind/fields that helm itself never checks.
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /tmp kubeconform
+          /tmp/kubeconform -strict -summary -ignore-missing-schemas /tmp/rendered-default.yaml /tmp/rendered-mt.yaml
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:
@@ -223,7 +265,7 @@ jobs:
   quality-gates:
     name: Code Quality Gates
     runs-on: ubuntu-latest
-    needs: [lint, test, test-enhanced, performance, integration]
+    needs: [lint, test, test-enhanced, performance, integration, helm-lint]
     steps:
       - uses: actions/checkout@v4
 
