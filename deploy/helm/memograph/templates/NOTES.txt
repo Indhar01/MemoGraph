@@ -1,0 +1,43 @@
+MemoGraph {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}".
+
+1. Wait for the pod to become ready:
+   kubectl --namespace {{ .Release.Namespace }} rollout status \
+     deployment/{{ include "memograph.fullname" . }}
+
+2. Reach the API:
+{{- if .Values.ingress.enabled }}
+   {{- range .Values.ingress.hosts }}
+   {{- range .paths }}
+   https://{{ $.Values.ingress.hosts | first | get "host" }}{{ .path }}
+   {{- end }}
+   {{- end }}
+{{- else if contains "LoadBalancer" .Values.service.type }}
+   Wait for the external IP:
+   kubectl --namespace {{ .Release.Namespace }} get svc -w {{ include "memograph.fullname" . }}
+{{- else }}
+   Port-forward to the cluster service:
+   kubectl --namespace {{ .Release.Namespace }} port-forward \
+     svc/{{ include "memograph.fullname" . }} 8000:{{ .Values.service.port }}
+   Then curl http://127.0.0.1:8000/healthz
+{{- end }}
+
+{{- if eq .Values.auth.provider "none" }}
+
+WARNING: auth.provider is "none". The API is open to any caller that
+can reach the Service. Set auth.provider=oidc or api_key before
+exposing this beyond your cluster.
+{{- end }}
+
+{{- if .Values.memograph.debug }}
+
+WARNING: memograph.debug=true. /api/health leaks vault path; the 500
+handler echoes raw exception strings. Disable before going live.
+{{- end }}
+
+{{- if and (gt (int .Values.replicaCount) 1) (not (hasKey .Values.extraEnv "MEMOGRAPH_RATELIMIT_STORAGE")) }}
+
+WARNING: replicaCount > 1 with the default in-memory rate limiter.
+Each replica enforces its own counter, so the effective limit is N×
+the configured limit. Set MEMOGRAPH_RATELIMIT_STORAGE=redis://... via
+extraEnv to coordinate across replicas.
+{{- end }}

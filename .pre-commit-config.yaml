@@ -23,6 +23,9 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        # Helm templates contain Go template directives that aren't
+        # valid YAML standalone; lint them with `helm lint` instead.
+        exclude: ^deploy/helm/.*/templates/.*\.(yaml|tpl)$
       - id: check-added-large-files
         args: ['--maxkb=1000']
       - id: check-json

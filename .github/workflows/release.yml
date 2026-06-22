@@ -1,0 +1,127 @@
+name: Release container image
+
+# Build, push, and sign the MemoGraph container image whenever a release
+# tag (v*.*.*) is pushed. The PyPI publish lives in publish.yml — this
+# workflow handles GHCR + cosign + SBOM only so the two release paths
+# are independently revertable.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.3.0). Required for manual runs."
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # Push to GHCR.
+      packages: write
+      # OIDC token for keyless cosign signing.
+      id-token: write
+      # Read repo for checkout.
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Tags carry signed metadata when present; fetch the full history
+          # so the workflow can read them.
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Tag the image with the semver tag, the major.minor alias, and
+          # `latest` for the most recent stable release. The semver matcher
+          # only fires on tags pushed to the default branch's history.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+          labels: |
+            org.opencontainers.image.title=MemoGraph
+            org.opencontainers.image.description=Graph-based memory system for LLMs
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push (linux/amd64, linux/arm64)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Buildx cache via GitHub Actions cache backend keeps incremental
+          # rebuilds under ~3 minutes on the hosted runners.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Emit a provenance attestation (SLSA build provenance v1) and an
+          # SBOM at the image manifest; both are pulled by cosign below.
+          provenance: mode=max
+          sbom: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign the image (keyless, OIDC)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        # cosign signs each tag by digest. Keyless mode anchors the
+        # signature to the GitHub OIDC identity of this workflow run —
+        # downstream consumers verify against the workflow path.
+        run: |
+          set -euo pipefail
+          for tag in $TAGS; do
+            cosign sign --yes "${tag}@${DIGEST}"
+          done
+
+      - name: Generate SBOM (CycloneDX)
+        # Builds an SBOM from the local source tree (Python deps via
+        # pyproject) and uploads it as a workflow artifact alongside the
+        # one already embedded in the image manifest. The artifact is
+        # consumable by scanners that don't read OCI referrers.
+        run: |
+          pip install --quiet cyclonedx-bom
+          cyclonedx-py environment -o sbom-source.cdx.json || \
+            cyclonedx-py requirements -o sbom-source.cdx.json -i pyproject.toml
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.ref_name }}
+          path: sbom-source.cdx.json
+          if-no-files-found: warn

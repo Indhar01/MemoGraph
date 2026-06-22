@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: memograph
+  labels:
+    app.kubernetes.io/name: memograph
+    app.kubernetes.io/part-of: memograph

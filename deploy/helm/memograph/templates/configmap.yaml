@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "memograph.fullname" . }}-env
+  labels:
+    {{- include "memograph.labels" . | nindent 4 }}
+data:
+  # Non-secret env. Anything sensitive (API keys, OIDC client secrets)
+  # belongs in the Secret rendered by secret.yaml — never here.
+  MEMOGRAPH_VAULT: {{ .Values.memograph.vaultPath | quote }}
+  MEMOGRAPH_LOG_LEVEL: {{ .Values.memograph.logLevel | quote }}
+  MEMOGRAPH_LOG_JSON: {{ ternary "1" "0" .Values.memograph.logJson | quote }}
+  MEMOGRAPH_DEBUG: {{ ternary "1" "0" .Values.memograph.debug | quote }}
+  MEMOGRAPH_TENANCY_ENABLED: {{ ternary "1" "0" .Values.memograph.tenancyEnabled | quote }}
+  {{- if .Values.memograph.tenancyEnabled }}
+  MEMOGRAPH_GLOBAL_ROOT: {{ .Values.memograph.vaultPath | quote }}
+  MEMOGRAPH_TENANT_MAX_WARM: {{ .Values.memograph.tenantMaxWarm | quote }}
+  {{- end }}
+  MEMOGRAPH_METRICS_ENABLED: {{ ternary "1" "0" .Values.memograph.metricsEnabled | quote }}
+  {{- with .Values.memograph.corsOrigins }}
+  MEMOGRAPH_CORS_ORIGINS: {{ join "," . | quote }}
+  {{- end }}
+  MEMOGRAPH_AUTH_PROVIDER: {{ .Values.auth.provider | quote }}
+  {{- if eq .Values.auth.provider "oidc" }}
+  MEMOGRAPH_OIDC_JWKS_URL: {{ .Values.auth.oidc.jwksUrl | quote }}
+  MEMOGRAPH_OIDC_ISSUER: {{ .Values.auth.oidc.issuer | quote }}
+  MEMOGRAPH_OIDC_AUDIENCE: {{ .Values.auth.oidc.audience | quote }}
+  {{- end }}

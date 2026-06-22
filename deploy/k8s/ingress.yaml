@@ -1,0 +1,30 @@
+# Public entrypoint. Edit `host` and `secretName` for your domain. The
+# annotations below assume nginx + cert-manager; swap to whatever your
+# cluster runs.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: memograph
+  namespace: memograph
+  labels:
+    app.kubernetes.io/name: memograph
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - memograph.example.com
+      secretName: memograph-tls
+  rules:
+    - host: memograph.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: memograph
+                port:
+                  number: 80

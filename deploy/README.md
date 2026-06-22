@@ -1,22 +1,60 @@
-# MemoGraph production deployment (single-tenant VPS)
+# MemoGraph production deployment
 
-This directory contains everything needed to run MemoGraph behind nginx
-on a single VPS, with TLS, rate limiting, structured JSON logs,
-Prometheus metrics, and a nightly backup sidecar.
+This directory carries three deployment options. Pick the one that
+matches the cluster you already operate; they're maintained side-by-side
+so you don't have to translate from one to another.
 
-If you want multi-tenancy, scale-out, or Kubernetes, this is **not**
-the layout for you — those are Phase 3+ deliverables.
+| Layout | Best for | Multi-tenant | Scale-out |
+| --- | --- | --- | --- |
+| `docker-compose.production.yml` + `nginx.conf` | Single VPS, one operator, fastest bring-up | ✅ (opt-in) | ❌ |
+| `helm/memograph/` | Existing Kubernetes cluster, Helm-shop | ✅ | ✅ (after Redis) |
+| `k8s/` (raw + Kustomize) | Kubernetes without Helm, GitOps via Flux/ArgoCD | ✅ | ✅ (after Redis) |
 
-## What's here
+The Docker Compose stack and the K8s manifests both consume the same
+container image: `ghcr.io/indhar01/memograph:<tag>` (published by
+`.github/workflows/release.yml` on every `v*.*.*` tag, multi-arch,
+cosign-signed). Pull a specific digest in production rather than a
+floating tag.
 
-- `docker-compose.production.yml` — the API container behind an nginx
-  reverse proxy plus an optional backup sidecar.
-- `nginx.conf` — TLS-terminating proxy, security headers, `/metrics`
-  blocked from the public internet.
-- `.env.example` — every env var the stack reads, with safe defaults
-  and pointers to the relevant phase.
-- `tls/` — drop your `fullchain.pem` and `privkey.pem` here (gitignored).
-- `backups/` — host-mounted directory the backup sidecar writes into.
+## What's in each layout
+
+### `helm/memograph/` (recommended for Kubernetes)
+
+```bash
+# Default: single-tenant, API-key auth, ClusterIP service.
+helm install memograph deploy/helm/memograph \
+  --namespace memograph --create-namespace \
+  --set-file auth.apiKey.keys=./keys.txt
+
+# Multi-tenant with OIDC, exposed via Ingress + cert-manager:
+helm install memograph deploy/helm/memograph \
+  --namespace memograph --create-namespace \
+  --set memograph.tenancyEnabled=true \
+  --set auth.provider=oidc \
+  --set auth.oidc.jwksUrl=https://example.auth0.com/.well-known/jwks.json \
+  --set auth.oidc.issuer=https://example.auth0.com/ \
+  --set auth.oidc.audience=memograph-api \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=memograph.example.com \
+  --set ingress.hosts[0].paths[0].path=/ \
+  --set ingress.hosts[0].paths[0].pathType=Prefix
+```
+
+Every supported knob lives in `helm/memograph/values.yaml` with inline
+comments. Keys not in that file aren't promised between chart versions.
+
+### `k8s/` (raw manifests + Kustomize)
+
+```bash
+# Edit the placeholders first — secret.yaml has REPLACE_ME, ingress.yaml
+# has memograph.example.com, deployment.yaml has the image tag.
+kubectl apply -k deploy/k8s/
+```
+
+For GitOps, point Flux/ArgoCD at this directory and overlay env-specific
+patches under `deploy/k8s/overlays/<env>/`.
+
+### `docker-compose.production.yml` + `nginx.conf` (single VPS)
 
 ## First-time bring-up
 
@@ -111,6 +149,28 @@ docker compose -f deploy/docker-compose.production.yml up -d memograph
 # nginx config: only restart if you've edited nginx.conf or rotated certs.
 docker compose -f deploy/docker-compose.production.yml exec nginx nginx -t
 docker compose -f deploy/docker-compose.production.yml exec nginx nginx -s reload
+```
+
+## Image provenance
+
+Every `v*.*.*` git tag triggers `.github/workflows/release.yml`, which:
+
+1. Builds multi-arch (`linux/amd64`, `linux/arm64`) and pushes to
+   `ghcr.io/indhar01/memograph` with tags `vX.Y.Z`, `X.Y`, `X`, and
+   `latest` (the last only on stable, non-prerelease tags).
+2. Signs each tag's digest with **cosign keyless** — the signature is
+   anchored to the GitHub Actions OIDC identity of the run.
+3. Emits a **CycloneDX SBOM** as a workflow artifact and a SLSA-v1
+   build-provenance attestation on the image manifest.
+
+Verify before deploying:
+
+```bash
+# Pin the digest in your manifests/values once verified.
+cosign verify \
+  --certificate-identity-regexp 'https://github.com/Indhar01/MemoGraph/\.github/workflows/release\.yml.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/indhar01/memograph:v0.3.0
 ```
 
 ## What this stack is *not*
