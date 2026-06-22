@@ -1,0 +1,12 @@
+{
+  "_comment": "LM Studio MCP configuration. Open LM Studio -> click the wrench icon (Program tab in the chat sidebar) -> 'Edit mcp.json'. LM Studio uses the flat 'mcpServers' format. After saving, the server entry appears under 'Program' with a toggle to enable it. Replace the vault path before use.",
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      }
+    }
+  }
+}

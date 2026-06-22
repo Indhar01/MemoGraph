@@ -1,0 +1,11 @@
+# OpenAI Codex CLI MCP configuration. Append this block to ~/.codex/config.toml.
+# Codex CLI uses TOML (NOT JSON) and the section name is `mcp_servers.<name>`.
+# Replace the vault path before use. After saving, run `codex` and type /mcp
+# (or check the startup log) to confirm the server is registered.
+
+[mcp_servers.memograph]
+command = "python"
+args = ["-m", "memograph.mcp.run_server"]
+
+[mcp_servers.memograph.env]
+MEMOGRAPH_VAULT = "/path/to/your/vault"
