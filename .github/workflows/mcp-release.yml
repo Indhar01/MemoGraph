@@ -67,19 +67,29 @@ jobs:
 
       - name: Update server.json version
         if: steps.check_version.outputs.needs_update == 'true'
+        # Pass VERSION via the env block so Python reads it from
+        # `os.environ` instead of trying to interpolate `$VERSION` /
+        # `{VERSION}` inside the script — those mix bash and Python
+        # f-string syntax and the f-string form fails with NameError.
+        # Using a single-quoted heredoc (`<<'PY'`) blocks bash from
+        # touching anything inside, so the script is unambiguous.
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
-          python -c "
+          python <<'PY'
           import json
-          with open('server.json', 'r') as f:
+          import os
+
+          version = os.environ["VERSION"]
+          with open("server.json") as f:
               data = json.load(f)
-          data['version'] = '$VERSION'
-          if 'packages' in data and len(data['packages']) > 0:
-              data['packages'][0]['version'] = '$VERSION'
-          with open('server.json', 'w') as f:
+          data["version"] = version
+          if data.get("packages"):
+              data["packages"][0]["version"] = version
+          with open("server.json", "w") as f:
               json.dump(data, f, indent=2)
-          print(f'✅ Updated server.json to version {VERSION}')
-          "
+          print(f"✅ Updated server.json to version {version}")
+          PY
 
       - name: Validate server.json
         run: |

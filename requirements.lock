@@ -4,6 +4,13 @@
 #
 #    pip-compile --extra=web --generate-hashes --output-file=requirements.lock pyproject.toml
 #
+# IMPORTANT — manual edits to preserve across regenerations:
+#   * `pywin32` must carry `; sys_platform == "win32"`. Without the marker,
+#     the Linux Docker build (`pip install --require-hashes`) fails with
+#     `No matching distribution found for pywin32` because pywin32 wheels
+#     are not published for Linux. When you re-run pip-compile (typically
+#     on Windows), re-apply the marker before committing.
+#
 annotated-doc==0.0.4 \
     --hash=sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320 \
     --hash=sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4
@@ -572,7 +579,7 @@ python-multipart==0.0.32 \
     --hash=sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e \
     --hash=sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23
     # via mcp
-pywin32==312 \
+pywin32==312 ; sys_platform == "win32" \
     --hash=sha256:02ebca0f0242b75292e218065004310d6a477407c09fa449bfe4f6022bc0c0fc \
     --hash=sha256:17948aeadbdb091f0ced6ef0841620794e68327b94ee415571c1203594b7215c \
     --hash=sha256:3020656e34f1cf7faeb7bccd2b84653a607c6ff0c55ada85e6487d61716deabd \
