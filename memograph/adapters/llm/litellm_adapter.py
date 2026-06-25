@@ -92,8 +92,10 @@ class LiteLLMClient:
 
             self._litellm = litellm
         except ImportError as exc:
-            raise RuntimeError(
-                "LiteLLM is not installed. Install it with: pip install litellm"
+            raise ImportError(
+                "LiteLLM is not installed. Install the optional dependency with: "
+                "pip install 'memograph[litellm]' "
+                "(or pip install 'memograph[all]')."
             ) from exc
 
         self.config = config or LiteLLMConfig()

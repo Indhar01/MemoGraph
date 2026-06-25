@@ -220,9 +220,40 @@ MemoGraph's MCP server is a stdio server — it runs alongside any MCP-compatibl
 | Cherry Studio | UI form | [`cherry_studio_config.json`](memograph/mcp/cherry_studio_config.json) |
 | IBM Bob Shell | `mcpServers` | [`bob_shell_config.json`](memograph/mcp/bob_shell_config.json) |
 
+### Launching the MCP server
+
+After `pip install memograph` (or `uv tool install memograph`), three launch commands are all equivalent:
+
+```bash
+memograph-mcp                              # console script (recommended)
+python -m memograph.mcp.run_server         # module form (works with any Python)
+uvx --from memograph memograph-mcp         # zero-install via uv
+```
+
+`memograph-mcp` and `memograph` are both registered as console scripts: the first starts the MCP server, the second is the CLI. They do not collide.
+
+### Read-only mode
+
+For shared deployments or untrusted clients, set `MEMOGRAPH_READONLY=true`. The server refuses every vault-writing tool — `create_memory`, `import_document`, `update_memory`, `delete_memory`, `relate_memories`, `bulk_create`, `batch_update`, `batch_delete`, `import_backup_tool`, and the auto-save hooks — and returns a structured `{"success": false, "readonly": true, "error": "..."}` payload instead. Read tools (`search_vault`, `query_with_context`, `list_memories`, `get_memory`, analytics, graph traversal) stay fully functional.
+
 ### Quick Setup for Claude Desktop
 
 Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "memograph": {
+      "command": "memograph-mcp",
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      }
+    }
+  }
+}
+```
+
+If the `memograph-mcp` binary isn't on the client's `PATH` (common when the client launches without your shell environment), use the explicit module form instead:
 
 ```json
 {
@@ -247,8 +278,7 @@ Add to your `~/.cline/mcp_settings.json`:
   "mcp": {
     "servers": {
       "memograph": {
-        "command": "python",
-        "args": ["-m", "memograph.mcp.run_server"],
+        "command": "memograph-mcp",
         "env": {
           "MEMOGRAPH_VAULT": "/path/to/your/vault"
         }

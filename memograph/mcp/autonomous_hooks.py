@@ -146,6 +146,12 @@ class AutonomousHooks:
                 else self.auto_save_queries
             )
 
+            if should_save and getattr(self.server, "readonly", False):
+                logger.info(
+                    "auto_hook_query: readonly mode — skipping query save"
+                )
+                should_save = False
+
             if should_save:
                 # Save the query as a memory
                 try:
@@ -224,6 +230,20 @@ class AutonomousHooks:
                     "success": True,
                     "message": "Auto-save disabled",
                     "saved": False,
+                }
+
+            if getattr(self.server, "readonly", False):
+                logger.info(
+                    "auto_hook_response: readonly mode — skipping save"
+                )
+                return {
+                    "success": True,
+                    "message": (
+                        "Server is in read-only mode "
+                        "(MEMOGRAPH_READONLY=true); conversation not saved."
+                    ),
+                    "saved": False,
+                    "readonly": True,
                 }
 
             # Create memory title

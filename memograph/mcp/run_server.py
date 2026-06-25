@@ -235,6 +235,28 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
         result_text = json.dumps(result, indent=2)
         return [TextContent(type="text", text=result_text)]
 
+    except ImportError as e:
+        # An optional extra is missing — surface a structured payload with an
+        # install hint so the client can show it to the user instead of a
+        # bare ModuleNotFoundError.
+        logger.error(f"Tool {name} hit a missing optional dependency: {e}")
+        import json
+
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "missing_dependency": True,
+            "hint": (
+                "This tool needs an optional extra. Install one of: "
+                "pip install 'memograph[embeddings]'   # local embeddings\n"
+                "pip install 'memograph[anthropic]'    # Claude provider\n"
+                "pip install 'memograph[openai]'       # OpenAI embeddings/LLM\n"
+                "pip install 'memograph[ollama]'       # Ollama local LLM\n"
+                "pip install 'memograph[all]'          # everything"
+            ),
+        }
+        return [TextContent(type="text", text=json.dumps(error_result, indent=2))]
+
     except Exception as e:
         logger.error(f"Error executing tool {name}: {e}")
         import json
@@ -680,9 +702,10 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
                 server.create_initialization_options(),
             )
         finally:
-            # Clean up monitor on shutdown
+            # Clean up monitor and release the advisory vault lock on shutdown.
             if memograph_server:
                 await memograph_server.stop_monitor()
+                memograph_server.close()
 
 
 def _resolve_vault_default() -> str:

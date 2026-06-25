@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Indhar01/memograph",
-  "description": "Graph-based memory system for LLMs with knowledge graphs and semantic search",
+  "description": "Graph-based memory system for LLMs with knowledge graphs and semantic search. Setup & troubleshooting: https://github.com/Indhar01/MemoGraph/blob/main/docs/MCP_SETUP_TROUBLESHOOTING.md",
   "repository": {
     "url": "https://github.com/Indhar01/MemoGraph",
     "source": "github"
@@ -12,16 +12,81 @@
       "registryType": "pypi",
       "identifier": "memograph",
       "version": "0.3.0",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--from",
+          "value": "memograph",
+          "description": "Install the memograph package and expose its console scripts."
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "memograph-mcp",
+          "value": "memograph-mcp",
+          "description": "Console script that starts the MemoGraph MCP server (registered by pyproject.toml [project.scripts])."
+        }
+      ],
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
-          "description": "Path to your MemoGraph vault directory",
+          "name": "MEMOGRAPH_VAULT",
+          "description": "Path to your MemoGraph vault directory (created if missing).",
           "isRequired": true,
+          "format": "filepath",
+          "isSecret": false,
+          "placeholder": "~/my-vault"
+        },
+        {
+          "name": "MEMOGRAPH_READONLY",
+          "description": "Set to 'true' to block destructive MCP tools (delete_memory, update_memory, bulk_create, batch_delete, batch_update). Recommended for shared or untrusted clients.",
+          "isRequired": false,
+          "format": "boolean",
+          "isSecret": false,
+          "default": "false",
+          "choices": ["true", "false"]
+        },
+        {
+          "name": "MEMOGRAPH_PROVIDER",
+          "description": "Optional LLM provider for query_with_context tool. Only needed if you want AI-generated answers.",
+          "isRequired": false,
           "format": "string",
           "isSecret": false,
-          "name": "MEMOGRAPH_VAULT"
+          "choices": ["claude", "ollama"]
+        },
+        {
+          "name": "MEMOGRAPH_MODEL",
+          "description": "Optional LLM model name (e.g. 'claude-sonnet-4-6'). Used together with MEMOGRAPH_PROVIDER.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "placeholder": "claude-sonnet-4-6"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "API key for Anthropic Claude. Required when MEMOGRAPH_PROVIDER=claude or when using the [anthropic] extra.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "API key for OpenAI. Required when using the [openai] extra (embeddings or LLM).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "OLLAMA_HOST",
+          "description": "Base URL for a local Ollama server (default http://localhost:11434). Only needed when MEMOGRAPH_PROVIDER=ollama or the [ollama] extra is installed.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "default": "http://localhost:11434"
         }
       ]
     }

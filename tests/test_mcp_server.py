@@ -784,3 +784,174 @@ class TestPhase3ToolCount:
         assert (
             "include_recommendations" in analytics_schema["inputSchema"]["properties"]
         )
+
+
+class TestReadOnlyMode:
+    """MEMOGRAPH_READONLY=true must refuse vault-writing tools but keep reads working."""
+
+    @pytest.fixture
+    def readonly_server(self, temp_vault, monkeypatch):
+        for i, (title, content, tags) in enumerate(
+            [
+                ("Note A", "first note body", ["a"]),
+                ("Note B", "second note body", ["b"]),
+            ]
+        ):
+            slug = title.lower().replace(" ", "-")
+            (temp_vault / f"{slug}.md").write_text(
+                f"---\ntitle: {title}\nmemory_type: semantic\n"
+                f"salience: 0.7\ntags: {tags}\n---\n\n{content}\n",
+                encoding="utf-8",
+            )
+        monkeypatch.setenv("MEMOGRAPH_READONLY", "true")
+        return MemoGraphMCPServer(vault_path=str(temp_vault))
+
+    def test_readonly_flag_is_set(self, readonly_server):
+        assert readonly_server.readonly is True
+
+    @pytest.mark.asyncio
+    async def test_create_memory_refused(self, readonly_server):
+        result = await readonly_server.create_memory(
+            title="blocked", content="should not save"
+        )
+        assert result["success"] is False
+        assert result.get("readonly") is True
+        assert "read-only" in result["error"].lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_memory_refused(self, readonly_server):
+        listed = await readonly_server.list_memories()
+        memory_id = listed["memories"][0]["id"]
+        result = await readonly_server.delete_memory(memory_id=memory_id)
+        assert result["success"] is False
+        assert result.get("readonly") is True
+        # Memory must still exist after the refused delete.
+        assert readonly_server.kernel.graph.get(memory_id) is not None
+
+    @pytest.mark.asyncio
+    async def test_update_memory_refused(self, readonly_server):
+        listed = await readonly_server.list_memories()
+        memory_id = listed["memories"][0]["id"]
+        result = await readonly_server.update_memory(
+            memory_id=memory_id, title="should not change"
+        )
+        assert result["success"] is False
+        assert result.get("readonly") is True
+
+    @pytest.mark.asyncio
+    async def test_bulk_create_refused(self, readonly_server):
+        result = await readonly_server.bulk_create(
+            memories=[{"title": "blocked", "content": "x"}]
+        )
+        assert result["success"] is False
+        assert result.get("readonly") is True
+
+    @pytest.mark.asyncio
+    async def test_batch_delete_refused(self, readonly_server):
+        listed = await readonly_server.list_memories()
+        ids = [m["id"] for m in listed["memories"]]
+        result = await readonly_server.batch_delete(memory_ids=ids)
+        assert result["success"] is False
+        assert result.get("readonly") is True
+        for mid in ids:
+            assert readonly_server.kernel.graph.get(mid) is not None
+
+    @pytest.mark.asyncio
+    async def test_search_still_works(self, readonly_server):
+        result = await readonly_server.search_vault(query="first note", top_k=3)
+        assert result["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_auto_hook_response_refused(self, readonly_server):
+        result = await readonly_server.autonomous_hooks.auto_hook_response(
+            user_query="What was the decision?",
+            ai_response="It was X.",
+            auto_save=True,
+        )
+        assert result["success"] is True
+        assert result.get("saved") is False
+        assert result.get("readonly") is True
+
+
+class TestVaultLock:
+    """Advisory PID lock must block a second writer on the same vault."""
+
+    def test_lock_file_created_on_startup(self, mcp_server, temp_vault):
+        lock_file = temp_vault / ".memograph.lock"
+        assert lock_file.exists()
+        import json
+
+        payload = json.loads(lock_file.read_text(encoding="utf-8"))
+        assert payload["role"] == "mcp-server"
+        assert payload["pid"] > 0
+
+    def test_lock_released_on_close(self, mcp_server, temp_vault):
+        lock_file = temp_vault / ".memograph.lock"
+        assert lock_file.exists()
+        mcp_server.close()
+        assert not lock_file.exists()
+
+    def test_close_is_idempotent(self, mcp_server):
+        mcp_server.close()
+        mcp_server.close()  # must not raise
+
+    def test_second_server_refused(self, mcp_server, temp_vault):
+        # mcp_server already holds the lock for this temp_vault.
+        with pytest.raises(RuntimeError, match="already in use"):
+            MemoGraphMCPServer(vault_path=str(temp_vault))
+
+    def test_readonly_server_skips_lock(self, temp_vault, monkeypatch):
+        # First server: read-write, holds the lock.
+        rw_server = MemoGraphMCPServer(vault_path=str(temp_vault))
+        try:
+            # Second server: read-only — must boot even though RW lock is held.
+            monkeypatch.setenv("MEMOGRAPH_READONLY", "true")
+            ro_server = MemoGraphMCPServer(vault_path=str(temp_vault))
+            try:
+                assert ro_server.readonly is True
+                assert ro_server._vault_lock is None
+            finally:
+                ro_server.close()
+        finally:
+            rw_server.close()
+
+    def test_stale_lock_is_reclaimed(self, temp_vault):
+        # Pre-seed a lock file pointing at a PID that is almost certainly dead
+        # (PID 1 belongs to init/systemd on POSIX and is not callable here;
+        # on Windows it's reserved). We fake host="not-our-host" so the PID
+        # liveness check is bypassed and the file is treated as foreign+stale.
+        import json
+        import socket
+
+        lock_file = temp_vault / ".memograph.lock"
+        lock_file.write_text(
+            json.dumps(
+                {
+                    "pid": 999999,  # almost certainly not alive
+                    "host": socket.gethostname(),  # same host so we hit the alive-check
+                    "role": "mcp-server",
+                    "started_at": "1970-01-01T00:00:00+00:00",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        server = MemoGraphMCPServer(vault_path=str(temp_vault))
+        try:
+            # Server booted because the stale lock was reclaimed; new lock
+            # now belongs to us.
+            payload = json.loads(lock_file.read_text(encoding="utf-8"))
+            import os
+
+            assert payload["pid"] == os.getpid()
+        finally:
+            server.close()
+
+    def test_skip_lock_env_var(self, temp_vault, monkeypatch):
+        monkeypatch.setenv("MEMOGRAPH_SKIP_LOCK", "true")
+        server = MemoGraphMCPServer(vault_path=str(temp_vault))
+        try:
+            assert server._vault_lock is None
+            assert not (temp_vault / ".memograph.lock").exists()
+        finally:
+            server.close()

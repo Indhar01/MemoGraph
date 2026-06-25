@@ -16,8 +16,10 @@ class ClaudeLLMClient:
         try:
             from anthropic import Anthropic
         except ImportError as exc:
-            raise RuntimeError(
-                "Anthropic client not installed. Run: pip install anthropic"
+            raise ImportError(
+                "Anthropic client not installed. Install the optional dependency with: "
+                "pip install 'memograph[anthropic]' "
+                "(or pip install 'memograph[all]')."
             ) from exc
 
         effective_base_url = base_url or os.environ.get("ANTHROPIC_BASE_URL")

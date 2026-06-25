@@ -9,7 +9,9 @@ class OpenAIEmbeddingAdapter(EmbeddingAdapter):
             from openai import OpenAI
         except ImportError as exc:
             raise ImportError(
-                "Install the optional dependency with: pip install openai"
+                "OpenAI client not installed. Install the optional dependency with: "
+                "pip install 'memograph[openai]' "
+                "(or pip install 'memograph[all]')."
             ) from exc
 
         self.client = OpenAI(api_key=api_key)
