@@ -16,6 +16,14 @@ jobs:
   bandit:
     name: Bandit (static security analysis)
     runs-on: ubuntu-latest
+    # SARIF upload writes to the GitHub code-scanning API.
+    # `security-events: write` is required; `contents: read` is inherited
+    # from the workflow-level permissions block. Without this the
+    # `github/codeql-action/upload-sarif` step fails with
+    # "Resource not accessible by integration".
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -75,6 +83,10 @@ jobs:
       - name: Run pip-audit
         # --strict promotes warnings to failures; --desc gives human-readable
         # CVE summaries in the log so triagers don't have to follow links.
+        # --skip-editable skips this package itself (installed editable, not
+        # on PyPI), which otherwise triggers
+        #   "memograph: Dependency not found on PyPI"
+        # and --strict turns that into a hard failure.
         # The --ignore-vuln list is for transitive deps we cannot upgrade
         # from this project (e.g. build-time setuptools). Add new IDs
         # sparingly and only after triage.
@@ -82,7 +94,7 @@ jobs:
         # Ignored:
         #   GHSA-5rjg-fvgr-3xxf  -> setuptools < 78.1.1 (build-time only,
         #                          mitigated by upgrade in install step)
-        run: pip-audit --strict --desc --ignore-vuln GHSA-5rjg-fvgr-3xxf
+        run: pip-audit --strict --desc --skip-editable --ignore-vuln GHSA-5rjg-fvgr-3xxf
 
   ruff:
     name: Ruff (lint + format)
