@@ -127,10 +127,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Buildx cache via GitHub Actions cache backend keeps incremental
-          # rebuilds under ~3 minutes on the hosted runners.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No-cache mode while diagnosing the pywin32-class lockfile failure:
+          # the GHA layer cache was suspected of serving a stale `pip install
+          # --require-hashes` layer from before the lockfile was fixed. Once
+          # we confirm clean builds, restore the two `cache-*` lines below.
+          no-cache: true
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
           # Emit a provenance attestation (SLSA build provenance v1) and an
           # SBOM at the image manifest; both are pulled by cosign below.
           provenance: mode=max
