@@ -1,0 +1,235 @@
+# Default values for MemoGraph.
+#
+# Override with: helm install memograph deploy/helm/memograph -f my-values.yaml
+# Or per-key:    helm install memograph deploy/helm/memograph --set auth.provider=oidc
+#
+# This file is the contract. Every key documented here is supported and
+# tested; keys NOT here are not promised to work between chart versions.
+
+image:
+  repository: ghcr.io/indhar01/memograph
+  # Tag falls back to .Chart.AppVersion when empty. Pin a digest in
+  # production: image.digest: sha256:....
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+# - name: ghcr-pull-secret
+
+# How many API pods. Increase only after switching rate-limit storage to
+# Redis (MEMOGRAPH_RATELIMIT_STORAGE=redis://...) — the default in-memory
+# limiter is per-process and does not coordinate across replicas.
+replicaCount: 1
+
+# ---------- MemoGraph configuration ----------
+memograph:
+  # Vault root inside the container. The PVC is mounted here. For multi-
+  # tenant deployments this becomes the global root and per-tenant
+  # directories materialize underneath it.
+  vaultPath: /data/vault
+
+  # Tenancy toggle. When true, the admin API is live and TenantRegistry
+  # resolves a kernel per request. When false, the chart deploys a
+  # single-tenant API.
+  tenancyEnabled: false
+
+  # Tenant warm-cache size. Higher = more memory used, lower = more cold
+  # starts. 64 is a sane default for a 4Gi pod.
+  tenantMaxWarm: 64
+
+  # Structured JSON access logs. Required if you ship logs to a backend
+  # that expects JSON (ELK, Loki with JSON parser, Datadog).
+  logJson: true
+  logLevel: INFO
+
+  # Debug flips on /api/health diagnostic fields and echoes exception
+  # strings to clients. NEVER enable in production.
+  debug: false
+
+  # CORS allowlist. Empty list = deny all cross-origin requests (the
+  # secure default). Set this if a separate frontend origin needs access.
+  corsOrigins: []
+  # - "https://memo.example.com"
+  # - "https://app.example.com"
+
+  # Prometheus exposition on /metrics. Enable only when a scraper exists
+  # AND a NetworkPolicy restricts /metrics to that scraper (see below).
+  metricsEnabled: true
+
+# ---------- Auth ----------
+# Three modes: oidc (recommended for production), api_key (smaller
+# deployments), none (local dev only — the chart logs a warning).
+auth:
+  provider: oidc  # oidc | api_key | multi | none
+
+  oidc:
+    # JWKS URL of the IDP (WorkOS, Auth0, Clerk, Keycloak, ...). Examples:
+    # https://example.auth0.com/.well-known/jwks.json
+    # https://your-tenant.workos.com/.well-known/jwks.json
+    jwksUrl: ""
+    issuer: ""
+    audience: ""
+
+  apiKey:
+    # Keys are read from the Secret rendered by templates/secret.yaml. To
+    # supply them at install time, use --set-file or a values overlay so
+    # they don't end up in `helm history` plaintext.
+    # Format: comma-separated bearer tokens.
+    existingSecret: ""  # If set, the chart skips creating its own Secret.
+    existingSecretKey: api-keys  # key inside the existing Secret.
+    keys: ""  # Plain string; rendered into a generated Secret when existingSecret is empty.
+
+# ---------- Service ----------
+service:
+  type: ClusterIP
+  port: 80
+  # The container always listens on 8000.
+  targetPort: 8000
+  annotations: {}
+
+# ---------- Ingress ----------
+# Disabled by default. Production deploys typically either use Ingress
+# (this section) or expose Service: LoadBalancer (cloud-managed LB).
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    # cert-manager + Let's Encrypt example. Drop these annotations if
+    # certificates are provisioned elsewhere.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+  hosts:
+    - host: memograph.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: memograph-tls
+      hosts:
+        - memograph.example.com
+
+# ---------- Persistence ----------
+# The vault lives on a PVC by default. If you'd rather mount an existing
+# claim (e.g. an Ops-provisioned EBS/Filestore volume), set
+# persistence.existingClaim. Setting persistence.enabled=false runs with
+# an emptyDir — fine for ephemeral demos, NOT for production.
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""  # Cluster default if empty
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+
+# ---------- Resources ----------
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+# ---------- Pod / container security ----------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# ---------- Probes ----------
+# Liveness: /healthz never touches the kernel — a 200 means the process
+# is alive, nothing more. Readiness: /readyz flips to 200 only after the
+# startup ingest finishes; orchestrators should withhold traffic until
+# it goes green.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 6
+
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  # Large vaults can take a while to ingest. 5 minutes by default; bump
+  # for vaults >1 GB.
+  failureThreshold: 60
+  periodSeconds: 5
+
+# ---------- NetworkPolicy ----------
+# Off by default for compatibility; turn on in any production cluster.
+# Allows ingress only from selected workload labels and only on the API
+# port. /metrics gets its own narrow rule so Prometheus can scrape it
+# without opening the API to the rest of the cluster.
+networkPolicy:
+  enabled: false
+  # Pods allowed to call the API (e.g. your frontend, an ingress
+  # controller). Each entry is a podSelector matchLabels map.
+  ingressFrom: []
+  # - app.kubernetes.io/name: ingress-nginx
+
+  # Pods allowed to scrape /metrics. Typically a single Prometheus pod.
+  metricsScrapers: []
+  # - app.kubernetes.io/name: prometheus
+
+# ---------- Autoscaling ----------
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# ---------- Pod placement ----------
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ---------- ServiceAccount ----------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  # IRSA / Workload Identity goes here:
+  # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/memograph
+  # iam.gke.io/gcp-service-account: memograph@project.iam.gserviceaccount.com
+
+# ---------- Pod annotations / labels ----------
+podAnnotations: {}
+podLabels: {}
+
+# ---------- Extra env / envFrom ----------
+# Surface for env vars not covered by the typed sections above (e.g.
+# OTLP exporter endpoints). Each entry is rendered verbatim into the
+# container spec.
+extraEnv: []
+# - name: OTEL_EXPORTER_OTLP_ENDPOINT
+#   value: "http://otel-collector:4318"
+
+extraEnvFrom: []
+# - secretRef:
+#     name: memograph-extra-secrets

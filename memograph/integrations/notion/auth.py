@@ -105,6 +105,7 @@ class NotionAuth:
                 "redirect_uri": redirect_uri,
             },
             headers={"Content-Type": "application/json"},
+            timeout=30,
         )
 
         if response.status_code != 200:

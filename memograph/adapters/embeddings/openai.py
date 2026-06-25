@@ -9,7 +9,9 @@ class OpenAIEmbeddingAdapter(EmbeddingAdapter):
             from openai import OpenAI
         except ImportError as exc:
             raise ImportError(
-                "Install the optional dependency with: pip install openai"
+                "OpenAI client not installed. Install the optional dependency with: "
+                "pip install 'memograph[openai]' "
+                "(or pip install 'memograph[all]')."
             ) from exc
 
         self.client = OpenAI(api_key=api_key)
@@ -17,4 +19,6 @@ class OpenAIEmbeddingAdapter(EmbeddingAdapter):
 
     def embed(self, text: str) -> list[float]:
         resp = self.client.embeddings.create(input=[text], model=self.model)
-        return resp.data[0].embedding
+        # OpenAI's SDK returns the embedding as a typed list[float] at
+        # runtime but its stubs declare it as Any; cast keeps mypy clean.
+        return list(resp.data[0].embedding)

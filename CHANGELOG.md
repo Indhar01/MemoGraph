@@ -7,6 +7,147 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-23
+
+This release ships everything required for the v1.0 cut: a signed,
+multi-arch container image; a Helm chart and raw K8s manifests; an
+explicit public API surface and deprecation policy; and the full
+Phase 0–3 enterprise readiness work (auth, hardening, multi-tenancy
+scaffold, GDPR scheduled deletion). It is also the first release cut
+through the new `release.yml` + `verify-versions` + cosign pipeline —
+so the version itself is partly a dress rehearsal for v1.0.
+
+### Added — v1.0 release readiness
+
+- `requirements.lock` (pip-compile, hash-pinned, includes `[web]` extras)
+  and Dockerfile install via `--require-hashes` against it.
+- Base image pinned by digest (`python@sha256:...`) instead of tag in
+  Dockerfile.
+- [`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md) — durable,
+  version-agnostic procedure for cutting a release across PyPI, GHCR,
+  and the MCP registry.
+- [`docs/MIGRATION_0.X_TO_1.0.md`](docs/MIGRATION_0.X_TO_1.0.md) —
+  contract for what changes (and what doesn't) at the v1.0 cut.
+- `memograph.scripts.migrate_to_multitenant` — helper that relocates a
+  single-vault 0.x deploy under a 1.0 global root with `--dry-run`.
+- Expanded `memograph.__all__` to declare the 1.0 public Python surface
+  (`MemoryKernel`, `MemoryQuery`, `SearchOptions`, `MemoryNode`,
+  `VaultGraph`, `VaultStorage`, `HybridRetriever`, and the GAM types).
+- `helm lint` + double `helm template` render job in CI to catch chart
+  regressions before they reach Helm users.
+
+### Added — Phase 0–3 enterprise readiness
+
+The work below makes MemoGraph deployable to multiple paying
+tenants with full GDPR procedures, observability, and authentication
+without leaving the alpha branch. None of these change the
+single-tenant developer experience, but they unlock the SaaS path.
+
+#### Authentication & web hardening (Phase 1)
+
+- OIDC bearer-token auth with JWKS support — works with Auth0, Clerk,
+  WorkOS, Keycloak, Azure AD, Okta, Google Workspace.
+- Hashed-API-key auth (`X-API-Key`) for service-to-service callers.
+- `MEMOGRAPH_AUTH_PROVIDER=multi` accepts either credential type.
+- `slowapi` rate limiting (per-key + per-IP, configurable).
+- Restrictive CORS (default-deny, allowlist via `MEMOGRAPH_CORS_ORIGINS`).
+- Request-size cap middleware (default 1 MB).
+- Versioned `/api/v1/` prefix; old `/api/` redirects.
+- Separate `/healthz` (liveness) and `/readyz` (readiness).
+- Structured JSON logging with request-id propagation.
+- Path-traversal-safe `VaultStorage.write` with control-char and
+  reserved-name rejection.
+- Vault size soft + hard caps with graceful error responses.
+- Schema-versioned cache files with migration on load.
+- 16 OWASP-top-10-style security tests under `tests/security/`.
+- OpenAPI snapshot test in CI to catch unintentional contract drift.
+
+#### Observability & reliability (Phase 2)
+
+- OpenTelemetry FastAPI/asyncio auto-instrumentation; OTLP export.
+- Prometheus `/metrics` endpoint as fallback for OTLP-less ops.
+- Manual spans on `kernel.search`, `kernel.remember`, swarm cycles.
+- Concurrency audit doc + targeted stress tests for concurrent
+  reads, writes, deletes.
+- Versioned backup format with sha256 manifest + integrity check
+  on restore.
+- `bandit` + `pip-audit` security workflow on every PR.
+
+#### Multi-tenancy (Phase 3)
+
+- ADR 0001 documenting the kernel-per-tenant + LRU eviction model.
+- `TenantStorage` orchestrator: per-tenant directory layout under
+  `<global_root>/<tenant_id>/`, validated tenant ids, filesystem-level
+  isolation enforced before disk hits.
+- `TenantRegistry`: bounded LRU of warm `MemoryKernel` instances;
+  cold tenants evict cleanly with cache flush + lock release.
+- Admin REST routes for tenant lifecycle: create, list, get, usage,
+  immediate-offboard.
+- `kernel_for_request` FastAPI dependency wires the registry into
+  every non-admin route; per-request kernel resolution from the
+  authenticated user's `org_id` claim. Single-tenant deployments
+  (`MEMOGRAPH_TENANCY_ENABLED` unset) continue to work unchanged.
+- Audit log carries `tenant_id` automatically via the existing
+  `current_user` ContextVar — no kernel changes required.
+- End-to-end isolation test suite (`tests/tenancy/test_isolation_e2e.py`)
+  gating the multi-tenant release: cross-tenant search empty,
+  get-by-id 404, list only own-tenant, admin offboard leaves siblings
+  byte-identical, orphan users 403, single-tenant smoke preserved.
+
+#### GDPR scheduled deletion (Phase 3.7)
+
+- `POST /api/v1/admin/tenants/{id}/schedule-delete` with
+  configurable grace period (default 7 days) and operator reason.
+- `DELETE /api/v1/admin/tenants/{id}/schedule-delete` cancels
+  before the reaper fires.
+- Tombstone schema (`_tombstone.json`, schema-versioned) marks
+  tenants for deletion; refuses overwrite to prevent misclick
+  resets.
+- `python -m memograph.scripts.run_reaper <global_root>` sweeps
+  expired tombstones, takes a final backup tarball under
+  `.tombstoned-exports/`, then destroys. JSON Lines on stdout;
+  `--dry-run` for safe audits.
+- Tombstoned tenants return **410 Gone** to non-admin requests
+  via `tenant_resolver`; admin routes still serve so operators
+  can inspect or cancel.
+- 33 tests across tombstone primitives, admin routes, routing
+  layer, and reaper sweep behaviors.
+- `docs/GDPR_RUNBOOK.md` rewritten to document the scheduled
+  flow as the preferred Art. 17 procedure.
+
+#### Enterprise documentation set
+
+- `docs/INSTALL_ENTERPRISE.md` — multi-tenant on-prem + SaaS install.
+- `docs/SSO_SETUP.md` — provider-neutral OIDC walkthrough.
+- `docs/RBAC_GUIDE.md` — roles and scope mapping.
+- `docs/GDPR_RUNBOOK.md` — Art. 15 / 17 / 20 procedures.
+- `docs/BACKUP_RESTORE_RUNBOOK.md` — versioned-backup operations.
+- `docs/OBSERVABILITY_GUIDE.md` — OTLP/Prometheus dashboards.
+- `docs/COMPLIANCE_ROADMAP.md` — SOC 2 / ISO 27001 plan.
+- `docs/HOSTING_GUIDE.md` — four genuinely-free hosting paths
+  (Oracle Free, Cloudflare Tunnel, GCP, GitHub-vault) with
+  hardening checklist.
+- `docs/GOOGLE_WORKSPACE_SETUP.md` — Workspace OIDC + Drive
+  portability backup walkthrough.
+- `docs/adr/0001-tenancy-model.md`, `docs/adr/0002-storage-adapter-strategy.md`
+  — architectural decision records.
+
+#### Quickstart experience
+
+- `memograph quickstart` — materialises a 15-note interconnected
+  sample vault (Python development knowledge), ingests it, runs
+  three illustrative live queries, prints next-step pointers.
+  Total time from `pip install` to "wow" under 60 seconds.
+- 12 tests covering bundled-vault integrity (every note parses,
+  minimum link count, salience in range), the materialise primitive
+  (idempotent, refuses to clobber non-empty targets without
+  `--force`), and the end-to-end run.
+
+### Tests
+
+- 172+ tests passing across `tests/security/`, `tests/contract/`,
+  `tests/tenancy/`, plus 12 quickstart tests. Whole-package mypy
+  clean.
 
 ## [0.3.0] - 2026-04-21
 

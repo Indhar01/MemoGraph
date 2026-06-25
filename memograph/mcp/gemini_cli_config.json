@@ -1,0 +1,13 @@
+{
+  "_comment": "Gemini CLI MCP configuration. Save to ~/.gemini/settings.json (user-scoped) or .gemini/settings.json in your project root. Gemini CLI uses the flat 'mcpServers' format. After saving, run `gemini` and type /mcp to verify the server is connected. Replace the vault path before use.",
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      },
+      "timeout": 30000
+    }
+  }
+}

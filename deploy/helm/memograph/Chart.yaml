@@ -1,0 +1,35 @@
+apiVersion: v2
+name: memograph
+description: Graph-based memory system for LLMs with multi-tenant API
+type: application
+
+# version is the chart version; bump independently from appVersion when
+# only the chart templates change.
+version: 0.1.0
+
+# appVersion tracks the MemoGraph release this chart was tested against.
+# Helm renders this into the default image tag (.Values.image.tag) when
+# the user does not override it.
+appVersion: "0.4.0"
+
+home: https://github.com/Indhar01/MemoGraph
+sources:
+  - https://github.com/Indhar01/MemoGraph
+icon: https://raw.githubusercontent.com/Indhar01/MemoGraph/main/docs/logo.png
+
+maintainers:
+  - name: Indirakumar
+    email: itsmeindirakumar@gmail.com
+
+keywords:
+  - llm
+  - knowledge-graph
+  - memory
+  - rag
+  - multi-tenant
+
+annotations:
+  # Renders inside Artifact Hub. Keep these short — long strings are
+  # truncated on the listing card.
+  artifacthub.io/category: "ai-machine-learning"
+  artifacthub.io/license: "MIT"

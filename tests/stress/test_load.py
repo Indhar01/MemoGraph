@@ -122,9 +122,9 @@ class TestSustainedLoad:
         logger.info(f"Throughput: {throughput:.1f} ops/s")
 
         min_throughput = 3.5 if is_windows else 5.0
-        assert throughput > min_throughput, (
-            f"Throughput too low: {throughput:.1f} ops/s (min {min_throughput:.1f})"
-        )
+        assert (
+            throughput > min_throughput
+        ), f"Throughput too low: {throughput:.1f} ops/s (min {min_throughput:.1f})"
 
 
 @pytest.mark.stress
@@ -187,9 +187,9 @@ class TestSpikeLoad:
         logger.info(f"Recovery: 10 ops in {recovery_time:.3f}s")
 
         # Recovery should be similar to baseline
-        assert recovery_time < baseline_time * 2, (
-            f"System not recovering: {recovery_time:.3f}s vs {baseline_time:.3f}s baseline"
-        )
+        assert (
+            recovery_time < baseline_time * 2
+        ), f"System not recovering: {recovery_time:.3f}s vs {baseline_time:.3f}s baseline"
 
     @pytest.mark.asyncio
     async def test_query_spike(self, tmp_path: Path):

@@ -115,7 +115,7 @@ class ContextFilter(logging.Filter):
         if not hasattr(record, "extra_fields"):
             record.extra_fields = {}
 
-        record.extra_fields.update(self.context)
+        record.extra_fields.update(self.context)  # type: ignore[attr-defined]
         return True
 
 

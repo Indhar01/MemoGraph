@@ -14,13 +14,13 @@ and actionable suggestions for resolution.
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ....core.enums import MemoryType
+from ....core.kernel import MemoryKernel
 from ..errors import (
     MemoGraphError,
     invalid_memory_type_error,
-    kernel_not_initialized_error,
     validate_pagination,
     validate_salience,
 )
@@ -30,6 +30,7 @@ from ..models import (
     MemoryResponse,
     UpdateMemoryRequest,
 )
+from ..tenant_resolver import kernel_for_request
 
 # Initialize logger for this module
 logger = logging.getLogger("memograph.api.memories")
@@ -40,7 +41,6 @@ router = APIRouter()
 
 @router.get("/memories", response_model=MemoryListResponse)
 async def list_memories(
-    request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     memory_type: str | None = Query(None, description="Filter by memory type"),
@@ -56,6 +56,7 @@ async def list_memories(
     order: str = Query(
         "desc", pattern="^(asc|desc)$", description="Sort order (asc or desc)"
     ),
+    kernel: MemoryKernel = Depends(kernel_for_request),
 ):
     """
     List memories with pagination and filtering.
@@ -88,11 +89,6 @@ async def list_memories(
         validate_pagination(page, page_size)
     except MemoGraphError:
         raise
-
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
 
     try:
         logger.debug(
@@ -200,9 +196,10 @@ async def list_memories(
 
 
 @router.get("/memories/{memory_id}", response_model=MemoryResponse)
-async def get_memory(memory_id: str, request: Request):
+async def get_memory(
+    memory_id: str, kernel: MemoryKernel = Depends(kernel_for_request)
+):
     """Get a specific memory by ID."""
-    kernel = request.app.state.kernel
 
     try:
         node = kernel.graph.get(memory_id)
@@ -237,9 +234,11 @@ async def get_memory(memory_id: str, request: Request):
 
 
 @router.post("/memories", response_model=dict)
-async def create_memory(memory: CreateMemoryRequest, request: Request):
+async def create_memory(
+    memory: CreateMemoryRequest,
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """Create a new memory."""
-    kernel = request.app.state.kernel
 
     try:
         # Convert memory_type string to enum
@@ -276,9 +275,12 @@ async def create_memory(memory: CreateMemoryRequest, request: Request):
 
 
 @router.put("/memories/{memory_id}", response_model=dict)
-async def update_memory(memory_id: str, update: UpdateMemoryRequest, request: Request):
+async def update_memory(
+    memory_id: str,
+    update: UpdateMemoryRequest,
+    kernel: MemoryKernel = Depends(kernel_for_request),
+):
     """Update an existing memory."""
-    kernel = request.app.state.kernel
 
     try:
         # Check if memory exists
@@ -323,9 +325,10 @@ async def update_memory(memory_id: str, update: UpdateMemoryRequest, request: Re
 
 
 @router.delete("/memories/{memory_id}")
-async def delete_memory(memory_id: str, request: Request):
+async def delete_memory(
+    memory_id: str, kernel: MemoryKernel = Depends(kernel_for_request)
+):
     """Delete a memory."""
-    kernel = request.app.state.kernel
 
     try:
         node = kernel.graph.get(memory_id)

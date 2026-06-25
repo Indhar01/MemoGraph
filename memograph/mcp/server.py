@@ -15,6 +15,7 @@ from ..core.enums import MemoryType
 from ..core.kernel import MemoryKernel
 from .autonomous_hooks import AutonomousHooks
 from .conversation_monitor import ConversationMonitor
+from .vault_lock import VaultLock, VaultLockError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -66,6 +67,30 @@ class MemoGraphMCPServer:
             raise PermissionError(f"No write permission for vault: {self.vault_path}")
 
         logger.info(f"✓ Vault validated: {self.vault_path}")
+
+        # Read-only mode: when MEMOGRAPH_READONLY=true, refuse all vault-writing
+        # MCP tools (delete/update/bulk_create/batch_*/import). Read tools stay
+        # functional. Useful for shared deployments or untrusted clients.
+        self.readonly = os.environ.get("MEMOGRAPH_READONLY", "false").lower() == "true"
+        if self.readonly:
+            logger.warning(
+                "⚠️  MEMOGRAPH_READONLY=true — destructive tools (delete, "
+                "update, bulk_create, batch_*, import_backup) will be refused."
+            )
+
+        # Advisory PID lock so a misconfigured second writer (another MCP
+        # server, the Web UI worker, etc.) cannot silently race us on vault
+        # files. Read-only servers skip this — many viewers can safely share
+        # a vault. Set MEMOGRAPH_SKIP_LOCK=true to opt out (e.g. test harness).
+        self._vault_lock: VaultLock | None = None
+        skip_lock = os.environ.get("MEMOGRAPH_SKIP_LOCK", "false").lower() == "true"
+        if not self.readonly and not skip_lock:
+            lock = VaultLock(self.vault_path, role="mcp-server")
+            try:
+                lock.acquire()
+            except VaultLockError as e:
+                raise RuntimeError(str(e)) from e
+            self._vault_lock = lock
 
         # Initialize kernel
         try:
@@ -168,6 +193,34 @@ class MemoGraphMCPServer:
                 f"Server degraded due to ingest failure: {self._ingest_error}\n"
                 f"Fix vault issues and restart server"
             )
+
+    def close(self) -> None:
+        """Release advisory resources (vault lock, monitor task). Idempotent."""
+        if self._vault_lock is not None:
+            try:
+                self._vault_lock.release()
+            except Exception as e:  # pragma: no cover — best-effort cleanup
+                logger.warning("Vault lock release failed: %s", e)
+            self._vault_lock = None
+
+    def _readonly_refusal(self, tool_name: str) -> dict[str, Any]:
+        """Build the standard error payload for a readonly-blocked tool call.
+
+        Returned (not raised) so the MCP client receives a normal tool result
+        and can surface the message to the user instead of seeing a transport
+        error.
+        """
+        return self._add_vault_context(
+            {
+                "success": False,
+                "error": (
+                    f"Tool '{tool_name}' is disabled: server is running in "
+                    "read-only mode (MEMOGRAPH_READONLY=true). Restart the "
+                    "server without that env var to allow writes."
+                ),
+                "readonly": True,
+            }
+        )
 
     def _atomic_write(self, file_path: Path, content: str) -> None:
         """Write file atomically using temp file + rename to prevent corruption.
@@ -401,6 +454,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("create_memory")
             # Create memory
             path = self.kernel.remember(
                 title=title,
@@ -594,6 +649,25 @@ class MemoGraphMCPServer:
 
                 return result
 
+        except ImportError as e:
+            # An optional extra is missing (e.g. memograph[anthropic] for the
+            # claude provider). Surface the install hint in a structured way
+            # so the MCP client can show it to the user.
+            logger.error(f"query_with_context missing optional dependency: {e}")
+            return self._add_vault_context(
+                {
+                    "success": False,
+                    "error": str(e),
+                    "missing_dependency": True,
+                    "hint": (
+                        "Install the matching optional extra, e.g. "
+                        "pip install 'memograph[anthropic]' for "
+                        "MEMOGRAPH_PROVIDER=claude or "
+                        "pip install 'memograph[ollama]' for "
+                        "MEMOGRAPH_PROVIDER=ollama."
+                    ),
+                }
+            )
         except Exception as e:
             logger.error(f"Error querying with context: {e}")
             return self._add_vault_context(
@@ -793,6 +867,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("import_document")
             # Read file content
             import_path = Path(file_path).expanduser()
             if not import_path.exists():
@@ -848,6 +924,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("delete_memory")
             # Find the memory file using graph lookup (much faster than rglob)
             node = self.kernel.graph.get(memory_id)
             if not node or not node.source_path:
@@ -918,6 +996,8 @@ class MemoGraphMCPServer:
             Dictionary with update result
         """
         try:
+            if self.readonly:
+                return self._readonly_refusal("update_memory")
             self._check_server_health()
             import re
             from datetime import datetime, timezone
@@ -1340,6 +1420,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("relate_memories")
             import re
 
             source_node = self.kernel.graph.get(source_id)
@@ -1540,6 +1622,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("bulk_create")
             results, errors = self.kernel.remember_many(
                 memories=memories, continue_on_error=True
             )
@@ -1577,6 +1661,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("batch_update")
 
             # Convert to format expected by kernel.update_many
             update_tuples = [
@@ -1621,6 +1707,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("batch_delete")
 
             deleted_ids = []
             errors = []
@@ -1726,6 +1814,8 @@ class MemoGraphMCPServer:
         """
         try:
             self._check_server_health()
+            if self.readonly:
+                return self._readonly_refusal("import_backup_tool")
 
             stats = self.kernel.import_backup(
                 backup_path=backup_path,

@@ -235,6 +235,28 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
         result_text = json.dumps(result, indent=2)
         return [TextContent(type="text", text=result_text)]
 
+    except ImportError as e:
+        # An optional extra is missing — surface a structured payload with an
+        # install hint so the client can show it to the user instead of a
+        # bare ModuleNotFoundError.
+        logger.error(f"Tool {name} hit a missing optional dependency: {e}")
+        import json
+
+        error_result = {
+            "success": False,
+            "error": str(e),
+            "missing_dependency": True,
+            "hint": (
+                "This tool needs an optional extra. Install one of: "
+                "pip install 'memograph[embeddings]'   # local embeddings\n"
+                "pip install 'memograph[anthropic]'    # Claude provider\n"
+                "pip install 'memograph[openai]'       # OpenAI embeddings/LLM\n"
+                "pip install 'memograph[ollama]'       # Ollama local LLM\n"
+                "pip install 'memograph[all]'          # everything"
+            ),
+        }
+        return [TextContent(type="text", text=json.dumps(error_result, indent=2))]
+
     except Exception as e:
         logger.error(f"Error executing tool {name}: {e}")
         import json
@@ -680,9 +702,32 @@ async def run_server(vault_path: str, llm_provider: str, llm_model: str | None):
                 server.create_initialization_options(),
             )
         finally:
-            # Clean up monitor on shutdown
+            # Clean up monitor and release the advisory vault lock on shutdown.
             if memograph_server:
                 await memograph_server.stop_monitor()
+                memograph_server.close()
+
+
+def _resolve_vault_default() -> str:
+    """Resolve the default vault path with optional multi-tenant resolution.
+
+    Precedence:
+      1. ``MEMOGRAPH_GLOBAL_ROOT`` + ``MEMOGRAPH_DEFAULT_TENANT_ID``
+         -> ``<global_root>/<tenant_id>/`` (Phase 3.5: stdio MCP runs as
+         a single configured tenant against the per-tenant directory
+         layout).
+      2. ``MEMOGRAPH_VAULT`` -> single-tenant path.
+      3. ``~/my-vault`` -> back-compat default.
+
+    Per-request token-derived tenant_id for HTTP/SSE MCP transport is
+    a Phase 3.5.b follow-up; stdio mode is single-tenant by design.
+    """
+    global_root = os.environ.get("MEMOGRAPH_GLOBAL_ROOT")
+    if global_root:
+        tid = os.environ.get("MEMOGRAPH_DEFAULT_TENANT_ID", "default").strip()
+        if tid:
+            return str(Path(global_root).expanduser() / tid)
+    return os.environ.get("MEMOGRAPH_VAULT", "~/my-vault")
 
 
 def main():
@@ -692,8 +737,13 @@ def main():
     )
     parser.add_argument(
         "--vault",
-        default=os.environ.get("MEMOGRAPH_VAULT", "~/my-vault"),
-        help="Path to MemoGraph vault (default: $MEMOGRAPH_VAULT or ~/my-vault)",
+        default=_resolve_vault_default(),
+        help=(
+            "Path to MemoGraph vault. Defaults to "
+            "$MEMOGRAPH_GLOBAL_ROOT/$MEMOGRAPH_DEFAULT_TENANT_ID when both "
+            "are set (multi-tenant), $MEMOGRAPH_VAULT otherwise, or "
+            "~/my-vault as a final fallback."
+        ),
     )
     parser.add_argument(
         "--provider",

@@ -27,6 +27,7 @@ MANIFEST
 docs/_build/
 test_data
 test_vault
+paper/
 
 # Virtual Environment
 .venv/

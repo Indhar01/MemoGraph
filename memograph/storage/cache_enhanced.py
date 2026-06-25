@@ -244,7 +244,7 @@ class DiskCache:
     def _get_cache_file(self, key: str) -> Path:
         """Get cache file path for key."""
         # Hash key to create safe filename
-        key_hash = hashlib.md5(key.encode()).hexdigest()
+        key_hash = hashlib.md5(key.encode(), usedforsecurity=False).hexdigest()
         return self.cache_dir / f"{key_hash}.json"
 
     def _load_metadata(self) -> dict[Any, Any]:

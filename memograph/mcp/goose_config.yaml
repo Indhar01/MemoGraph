@@ -1,0 +1,16 @@
+# Goose (Block) MCP configuration. Save to ~/.config/goose/config.yaml.
+# Goose uses YAML and refers to MCP servers as "extensions". Replace the
+# vault path before use. After saving, run `goose configure` -> "Toggle
+# Extensions" to verify MemoGraph is enabled, then start a session with
+# `goose session` and ask "list available tools".
+extensions:
+  memograph:
+    type: stdio
+    enabled: true
+    cmd: python
+    args:
+      - -m
+      - memograph.mcp.run_server
+    envs:
+      MEMOGRAPH_VAULT: /path/to/your/vault
+    timeout: 300

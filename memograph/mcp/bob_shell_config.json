@@ -1,0 +1,57 @@
+{
+  "_comment": "IBM Bob Shell MCP configuration for MemoGraph. Copy the relevant server block into your ~/.bob/mcp_settings.json under the 'mcpServers' key. Replace vault path with your actual vault directory. Bob Shell uses the flat 'mcpServers' format (same as Claude Desktop). Requires 'python' to be on your system PATH (or replace with the full path to your interpreter).",
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": [
+        "-m",
+        "memograph.mcp.run_server",
+        "--vault",
+        "C:/Users/INDIRAKUMARS/Documents/MemoGraphVault"
+      ],
+      "env": {
+        "MEMOGRAPH_VAULT": "C:/Users/INDIRAKUMARS/Documents/MemoGraphVault",
+        "MEMOGRAPH_LOG_LEVEL": "INFO"
+      },
+      "alwaysAllow": [
+        "create_entity",
+        "create_relation",
+        "add_observations",
+        "delete_entity",
+        "delete_observation",
+        "delete_relation",
+        "read_graph",
+        "search_nodes",
+        "open_nodes"
+      ]
+    },
+    "memograph-enhanced": {
+      "command": "python",
+      "args": [
+        "-m",
+        "memograph.mcp.run_server_enhanced",
+        "--vault",
+        "C:/Users/INDIRAKUMARS/Documents/MemoGraphVault"
+      ],
+      "env": {
+        "MEMOGRAPH_VAULT": "C:/Users/INDIRAKUMARS/Documents/MemoGraphVault",
+        "MEMOGRAPH_AUTONOMOUS_MODE": "true",
+        "MEMOGRAPH_AUTO_SAVE_AFTER_QUERY": "true",
+        "MEMOGRAPH_AUTO_SAVE_MONITOR": "true",
+        "MEMOGRAPH_IDLE_THRESHOLD": "30",
+        "MEMOGRAPH_LOG_LEVEL": "INFO"
+      },
+      "alwaysAllow": [
+        "create_entity",
+        "create_relation",
+        "add_observations",
+        "delete_entity",
+        "delete_observation",
+        "delete_relation",
+        "read_graph",
+        "search_nodes",
+        "open_nodes"
+      ]
+    }
+  }
+}

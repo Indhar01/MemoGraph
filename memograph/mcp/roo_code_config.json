@@ -1,0 +1,21 @@
+{
+  "_comment": "Roo Code (formerly Roo Cline) MCP configuration. Save to the Roo Code MCP settings file — open it via Roo Code's 'MCP Servers' panel -> 'Edit Global MCP' (or 'Edit Project MCP' for .roo/mcp.json). Roo Code uses the flat 'mcpServers' format. The 'alwaysAllow' array auto-approves listed tools so the agent can call them without per-call confirmation. Replace the vault path before use.",
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      },
+      "alwaysAllow": [
+        "search_vault",
+        "list_memories",
+        "get_memory",
+        "get_vault_info",
+        "get_vault_stats",
+        "search_by_graph",
+        "find_path"
+      ]
+    }
+  }
+}

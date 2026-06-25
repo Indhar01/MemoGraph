@@ -1,0 +1,16 @@
+# Vault persistence. Sized for a small-to-medium deployment; resize via
+# `kubectl edit pvc` if your StorageClass supports online expansion.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: memograph-vault
+  namespace: memograph
+  labels:
+    app.kubernetes.io/name: memograph
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: ""    # uncomment to pin to a specific class

@@ -1,0 +1,12 @@
+{
+  "_comment": "Cursor MCP configuration. Save as .cursor/mcp.json in your project root (project-scoped) or ~/.cursor/mcp.json (user-scoped, applies to all projects). Cursor uses the flat 'mcpServers' format (same as Claude Desktop). After saving, open Cursor Settings -> MCP to verify the server status (green dot = connected). Replace the vault path before use.",
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      }
+    }
+  }
+}

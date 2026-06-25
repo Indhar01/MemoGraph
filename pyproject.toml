@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memograph"
-version = "0.3.0"
+version = "0.4.0"
 
 authors = [
   { name="Indirakumar", email="itsmeindirakumar@gmail.com" },
@@ -60,42 +60,75 @@ classifiers = [
 ]
 
 dependencies = [
-    "PyYAML>=6.0",
-    "requests>=2.31.0",
-    "mcp>=1.0.0",
+    # Upper bounds pinned to the next major to prevent surprise breakage
+    # from major-version releases. Lower bounds are floored at the first
+    # release without a known CVE so pip-audit stays green in CI.
+    # Tighten further with a lockfile (requirements.lock) generated via
+    # pip-compile or `uv lock`.
+    "PyYAML>=6.0,<7",
+    # 2.33.0 is the first release without PYSEC-2026-* findings for requests.
+    "requests>=2.33.0,<3",
+    # urllib3 is transitive via requests, but we pin explicitly because
+    # 2.7.0 carries the fix for PYSEC-2026-* and earlier resolutions of
+    # `requests` happily pinned 2.6.x.
+    "urllib3>=2.7.0,<3",
+    "mcp>=1.0.0,<2",
 ]
 
 [project.optional-dependencies]
 openai = [
     "openai>=1.0.0,<2.0.0",
-    "tiktoken>=0.5.0",
+    "tiktoken>=0.5.0,<1",
 ]
 anthropic = [
-    "anthropic>=0.39.0",
+    "anthropic>=0.39.0,<1",
 ]
 ollama = [
-    "ollama>=0.3.0",
+    "ollama>=0.3.0,<1",
 ]
 litellm = [
     "litellm>=1.52.0,<2.0.0",
 ]
 embeddings = [
-    "sentence-transformers>=2.2.0",
-    "numpy>=1.24.0",
+    # sentence-transformers has had quiet API churn between minor versions;
+    # cap to <4 until a contract test exists.
+    "sentence-transformers>=2.2.0,<4",
+    "numpy>=1.24.0,<3",
 ]
 web = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
+    "fastapi>=0.104.0,<1",
+    "uvicorn[standard]>=0.24.0,<1",
+    # Rate limiting (in-memory backend by default; switch to Redis via
+    # MEMOGRAPH_RATELIMIT_STORAGE for multi-instance deployments).
+    "slowapi>=0.1.9,<1",
+    # Structured JSON logging output (env-toggled in server.py).
+    "python-json-logger>=2.0.7,<4",
+    # Provider-neutral OIDC verification (works with WorkOS, Auth0, Clerk,
+    # Keycloak, etc. — picks JWKS URL + audience from env vars at startup).
+    # 2.13.0 is the first release without PYSEC-2026-* findings.
+    "PyJWT[crypto]>=2.13.0,<3",
 ]
 integrations = [
-    "watchdog>=3.0.0",
-    "python-frontmatter>=1.0.0",
+    "watchdog>=3.0.0,<7",
+    "python-frontmatter>=1.0.0,<2",
+]
+observability = [
+    # OpenTelemetry (traces + metrics over OTLP/HTTP). Pinning to a single
+    # release line because OTel still ships breaking changes on the SDK.
+    "opentelemetry-api>=1.27.0,<2",
+    "opentelemetry-sdk>=1.27.0,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0,<2",
+    "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
+    # Prometheus exposition format for /metrics scrapers that don't
+    # speak OTLP.
+    "prometheus-client>=0.20.0,<1",
 ]
 all = [
     "memograph[openai,anthropic,ollama,litellm,embeddings,integrations]",
 ]
 dev = [
-    "pytest>=7.4.0",
+    # 9.0.3 carries the fix for PYSEC-2026-* affecting 9.0.2.
+    "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
     "pytest-benchmark>=4.0.0",
@@ -121,6 +154,7 @@ Changelog = "https://github.com/Indhar01/MemoGraph/blob/main/CHANGELOG.md"
 
 [project.scripts]
 memograph = "memograph.cli:main"
+memograph-mcp = "memograph.mcp.run_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -128,7 +162,7 @@ include = ["memograph*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-memograph = ["py.typed"]
+memograph = ["py.typed", "data/sample_vault/*.md"]
 
 # Ruff configuration
 [tool.ruff]
@@ -203,11 +237,11 @@ module = "memograph.integrations.notion.integration"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.integrations.obsidian.sync_state"
+module = "memograph.integrations.obsidian.sync"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.integrations.obsidian.sync"
+module = "memograph.integrations.obsidian.sync_state"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
@@ -243,14 +277,6 @@ module = "memograph.core.indexer"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.core.logging_config"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "memograph.core.kernel_gam_async"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = "memograph.mcp.conversation_monitor"
 ignore_errors = true
 
@@ -271,15 +297,17 @@ module = "memograph.ai.auto_tagger"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "memograph.adapters.embeddings.openai"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = "memograph.adapters.llm.litellm_adapter"
 ignore_errors = true
 
+# Phase 4.2: removed override for memograph.web.backend.errors — now type-clean.
+
+# Temporary: memograph.swarm.* is in-progress; pre-commit mypy currently
+# blocks unrelated commits because of "Returning Any" warnings in pheromone
+# scoring and agent heuristics. Lift this override once the swarm types
+# stabilise (Phase 4 productization step).
 [[tool.mypy.overrides]]
-module = "memograph.web.backend.errors"
+module = "memograph.swarm.*"
 ignore_errors = true
 
 # Pytest configuration

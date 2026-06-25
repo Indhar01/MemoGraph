@@ -37,12 +37,13 @@ def parse_file(path: Path, vault_root: Path) -> MemoryNode | None:
     # Parse frontmatter with explicit error handling
     if m := FRONTMATTER_RE.match(raw):
         try:
-            frontmatter = yaml.safe_load(m.group(1))
-            if not isinstance(frontmatter, dict):
+            loaded = yaml.safe_load(m.group(1))
+            if not isinstance(loaded, dict):
                 logger.error(
                     f"Invalid frontmatter in {path.name}: not a dict - skipping"
                 )
                 return None
+            frontmatter = loaded
         except yaml.YAMLError as e:
             logger.error(
                 f"Corrupt YAML in {path.name}: {e}\n"

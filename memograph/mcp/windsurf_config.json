@@ -1,0 +1,12 @@
+{
+  "_comment": "Windsurf (Codeium) MCP configuration. Save to ~/.codeium/windsurf/mcp_config.json. Windsurf uses the flat 'mcpServers' format. After saving, open Windsurf -> Cascade panel -> hammer icon -> Configure to verify the server is listed. Replace the vault path before use. On Windows, you may need to use an absolute python path (e.g. C:/Python311/python.exe) if 'python' is not on PATH for GUI-launched apps.",
+  "mcpServers": {
+    "memograph": {
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+# Apply the whole stack with: kubectl apply -k deploy/k8s/
+# Remove a file from `resources` if it doesn't apply to your cluster
+# (e.g. drop ingress.yaml if you front the API with a cloud LB instead).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: memograph
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - secret.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  # Apply this last, after smoke-testing the Deployment.
+  - networkpolicy.yaml
+
+commonLabels:
+  app.kubernetes.io/name: memograph
+  app.kubernetes.io/part-of: memograph
+
+# Image override knob — bump in your overlay rather than editing
+# deployment.yaml directly:
+#   images:
+#     - name: ghcr.io/indhar01/memograph
+#       newTag: 0.4.0
+#       # or pin a digest:
+#       # digest: sha256:abc...

@@ -1,0 +1,27 @@
+# Non-secret runtime config. Edit values to match your deployment.
+# Anything sensitive (API keys, OIDC client secrets) lives in secret.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memograph-env
+  namespace: memograph
+  labels:
+    app.kubernetes.io/name: memograph
+data:
+  MEMOGRAPH_VAULT: "/data/vault"
+  MEMOGRAPH_LOG_LEVEL: "INFO"
+  MEMOGRAPH_LOG_JSON: "1"
+  MEMOGRAPH_DEBUG: "0"
+  # Flip to "1" to enable the admin API and per-tenant kernel routing.
+  # When enabled, set MEMOGRAPH_GLOBAL_ROOT (typically the same as VAULT).
+  MEMOGRAPH_TENANCY_ENABLED: "0"
+  MEMOGRAPH_TENANT_MAX_WARM: "64"
+  MEMOGRAPH_METRICS_ENABLED: "1"
+  # Comma-separated origins. Empty = deny all cross-origin requests.
+  MEMOGRAPH_CORS_ORIGINS: ""
+  # oidc | api_key | multi | none. Don't ship "none" to production.
+  MEMOGRAPH_AUTH_PROVIDER: "api_key"
+  # OIDC: required when AUTH_PROVIDER=oidc.
+  MEMOGRAPH_OIDC_JWKS_URL: ""
+  MEMOGRAPH_OIDC_ISSUER: ""
+  MEMOGRAPH_OIDC_AUDIENCE: ""

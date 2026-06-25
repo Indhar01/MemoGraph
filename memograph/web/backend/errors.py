@@ -140,7 +140,7 @@ class MemoGraphError(Exception):
         Returns:
             Dictionary with error information
         """
-        response = {
+        response: dict[str, Any] = {
             "code": self.code,
             "message": self.message,
             "timestamp": self.timestamp,

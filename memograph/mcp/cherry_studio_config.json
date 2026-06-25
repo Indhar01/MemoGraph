@@ -1,0 +1,13 @@
+{
+  "_comment": "Cherry Studio MCP configuration. Cherry Studio configures MCP via its Settings UI: Settings -> MCP Servers -> Add Server. The fields below mirror that UI — 'name' = memograph, 'type' = stdio, 'command' = python, 'arguments' = the args list (one per line in the UI), and the env vars are added under the Environment Variables section. This JSON is a reference template; copy values into the form. Replace the vault path before use.",
+  "mcpServers": {
+    "memograph": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "memograph.mcp.run_server"],
+      "env": {
+        "MEMOGRAPH_VAULT": "/path/to/your/vault"
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+# Default-deny ingress with narrow allow rules. Apply this AFTER the
+# Deployment is healthy so you can iterate without locking yourself out
+# of debugging.
+#
+# Tighten the `from` selectors to your actual frontend / ingress
+# controller / Prometheus pods. As written, this allows traffic only
+# from pods labelled with app.kubernetes.io/name=ingress-nginx and from
+# Prometheus, and denies everything else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: memograph
+  namespace: memograph
+  labels:
+    app.kubernetes.io/name: memograph
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: memograph
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # DNS + HTTPS only. Drop these rules to deny outbound entirely (the
+    # API does not need outbound for normal operation; JWKS/OIDC/OTel
+    # require it).
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443

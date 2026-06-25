@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "memograph.fullname" . }}
+  labels:
+    {{- include "memograph.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    # Vault PVC is RWO by default — a second pod cannot mount it
+    # concurrently, so rolling-update must drop the old pod before the
+    # new one starts. Switch to RollingUpdate if you've moved the vault
+    # to RWX (NFS, EFS, Filestore-multishare).
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "memograph.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Roll the pods whenever the env-shaped ConfigMap changes; without
+        # this the API keeps reading the old env until the next manual
+        # restart.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and (eq .Values.auth.provider "api_key") (not .Values.auth.apiKey.existingSecret) }}
+        checksum/auth: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "memograph.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "memograph.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: memograph
+          image: {{ include "memograph.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "memograph.fullname" . }}-env
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- if eq .Values.auth.provider "api_key" }}
+            - name: MEMOGRAPH_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "memograph.apiKeySecretName" . }}
+                  key: {{ .Values.auth.apiKey.existingSecretKey | default "api-keys" }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          volumeMounts:
+            - name: vault
+              mountPath: {{ .Values.memograph.vaultPath }}
+            # readOnlyRootFilesystem=true requires writable scratch for
+            # /tmp and the home dir (some pip-installed deps cache to
+            # ~/.cache at import time).
+            - name: tmp
+              mountPath: /tmp
+            - name: home
+              mountPath: /home/memograph
+      volumes:
+        - name: vault
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-vault" (include "memograph.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        - name: home
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

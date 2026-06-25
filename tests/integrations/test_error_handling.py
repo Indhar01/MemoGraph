@@ -574,8 +574,6 @@ class TestErrorMetrics:
             # Batch 2: 5 files, 10 errors total
             # Before Batch 3: check errors (10) >= limit (10), set rate_limited=True, break
             # So should have 10 errors and rate_limited=True
-            assert stats.get("rate_limited", False) or len(stats["errors"]) < len(
-                files
-            ), (
-                f"Expected rate limiting but got {len(stats['errors'])} errors and rate_limited={stats.get('rate_limited', False)}"
-            )
+            assert (
+                stats.get("rate_limited", False) or len(stats["errors"]) < len(files)
+            ), f"Expected rate limiting but got {len(stats['errors'])} errors and rate_limited={stats.get('rate_limited', False)}"

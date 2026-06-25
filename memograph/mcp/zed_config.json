@@ -1,0 +1,15 @@
+{
+  "_comment": "Zed editor MCP configuration. Merge this 'context_servers' block into your Zed settings.json (Cmd+, on macOS / Ctrl+, on Linux/Windows). Zed names MCP servers 'context servers' in its UI. After saving, open the Assistant panel; MemoGraph tools should appear in the tool picker. Replace the vault path before use.",
+  "context_servers": {
+    "memograph": {
+      "command": {
+        "path": "python",
+        "args": ["-m", "memograph.mcp.run_server"],
+        "env": {
+          "MEMOGRAPH_VAULT": "/path/to/your/vault"
+        }
+      },
+      "settings": {}
+    }
+  }
+}

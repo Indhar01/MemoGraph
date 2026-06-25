@@ -344,6 +344,84 @@ for node in nodes:
 | Tests fail with Ollama | Ensure Ollama is running: `ollama serve` |
 | Type errors in editor | Install mypy language server extension |
 
+## Stability and deprecation policy
+
+Starting with 1.0, MemoGraph commits to a **2-minor-version deprecation
+window** on the public surface listed below. Anything deprecated in
+1.x will continue to function until 1.(x+2), with a `DeprecationWarning`
+emitted at runtime and a notice in `CHANGELOG.md` under both
+`[Unreleased]` and the release that first deprecated it.
+
+Pre-1.0 (0.x): no formal stability guarantees. Breaking changes are
+called out in `CHANGELOG.md` but may land in any 0.x release.
+
+### Public surface
+
+| Surface | Contract |
+| --- | --- |
+| Python imports | Names in `memograph.__all__` only. Submodule paths (`memograph.core.kernel`, etc.) still work but are not covered. |
+| HTTP API | Routes mounted under `/api/v1/...`. The unversioned `/api/...` alias is deprecated as of 1.0 and removed in 1.2. |
+| MCP tools | Tool names without a `_internal` suffix. The `_v1` suffix variants are pinned-version aliases for clients that need to survive across major releases. |
+| Environment variables | Anything documented in `deploy/.env.example` and `deploy/helm/memograph/values.yaml`. |
+| CLI | Subcommands listed in `memograph --help`. |
+| On-disk format | The vault directory layout — `.md` files with YAML frontmatter, `[[wikilinks]]`, `.memograph_cache.json`. Migrations are documented in `docs/MIGRATION_*.md`. |
+
+Anything NOT in the table above — internal modules, JSON cache schemas,
+the swarm subsystem, `_enhanced` variants, undocumented env vars — may
+change without a deprecation window.
+
+### What counts as a breaking change
+
+- Removing a name from `__all__`.
+- Removing or renaming a public HTTP route.
+- Changing the response shape of a public HTTP route in a way an
+  existing client wouldn't tolerate. **Adding** a field is not
+  breaking; **removing** or **renaming** is.
+- Changing a public function or method signature in a way that would
+  cause `TypeError` on existing callers.
+- Renaming a documented environment variable without keeping the old
+  name as an alias for the deprecation window.
+- Changing on-disk format in a way that requires manual migration.
+
+Changes that are explicitly **not** breaking:
+
+- Adding new names to `__all__`.
+- Adding new HTTP routes or response fields.
+- Adding new optional parameters with sensible defaults.
+- Performance changes that don't alter behaviour.
+- Internal refactors of unexported modules.
+
+### The deprecation process
+
+1. **In the release that introduces the deprecation:**
+   - Continue supporting the old behaviour.
+   - Emit `DeprecationWarning` at runtime when the deprecated thing is
+     used (Python) or a `Deprecation: true` + `Sunset: vX.Y.Z` header
+     (HTTP routes).
+   - Add an entry under `### Deprecated` in the `[Unreleased]` section
+     of `CHANGELOG.md`, with the planned removal version.
+   - If user-facing migration is non-trivial, write a short section in
+     the relevant `docs/MIGRATION_*.md`.
+
+2. **In subsequent releases during the deprecation window:**
+   - Keep the deprecated thing working. Don't drop the warning.
+   - The `[Unreleased]` deprecation entry rolls into each release until
+     removal.
+
+3. **In the removal release** (≥ 2 minor versions later):
+   - Remove the deprecated thing.
+   - Move the entry from `### Deprecated` to `### Removed` in the
+     release's CHANGELOG section.
+   - Reference the migration doc in the release notes.
+
+### Asking for an exemption
+
+If a deprecation can't wait for the window (security fix, legal
+compliance, vendor-driven SDK change), open an issue with the
+`deprecation-exemption` label describing the constraint. Exemptions
+require a maintainer sign-off and a CHANGELOG entry explaining why
+the window was waived.
+
 ## Getting Help
 
 - Check [existing issues](https://github.com/Indhar01/MemoGraph/issues)

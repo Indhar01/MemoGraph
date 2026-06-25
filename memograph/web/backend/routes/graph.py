@@ -11,16 +11,17 @@ and actionable suggestions for resolution.
 
 import logging
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query
 
+from ....core.kernel import MemoryKernel
 from ..errors import (
     ErrorCode,
     MemoGraphError,
-    kernel_not_initialized_error,
     memory_not_found_error,
     validate_salience,
 )
 from ..models import GraphEdge, GraphNode, GraphResponse
+from ..tenant_resolver import kernel_for_request
 
 # Initialize logger for this module
 logger = logging.getLogger("memograph.api.graph")
@@ -31,7 +32,6 @@ router = APIRouter()
 
 @router.get("/graph", response_model=GraphResponse)
 async def get_graph_data(
-    request: Request,
     limit: int | None = Query(
         None, ge=1, le=500, description="Maximum number of nodes to return"
     ),
@@ -42,6 +42,7 @@ async def get_graph_data(
     focus_node: str | None = Query(
         None, description="Center graph around this node ID"
     ),
+    kernel: MemoryKernel = Depends(kernel_for_request),
 ):
     """
     Get graph data for visualization.
@@ -66,11 +67,6 @@ async def get_graph_data(
     Example:
         GET /api/graph?limit=100&min_salience=0.5&tags=python,coding&focus_node=123
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
-
     try:
         logger.debug(
             f"Graph request: limit={limit}, min_salience={min_salience}, tags={tags}, focus_node={focus_node}"
@@ -195,8 +191,8 @@ async def get_graph_data(
 @router.get("/graph/neighbors/{node_id}")
 async def get_neighbors(
     node_id: str,
-    request: Request,
     depth: int = Query(1, ge=1, le=3, description="Depth of neighbor traversal (1-3)"),
+    kernel: MemoryKernel = Depends(kernel_for_request),
 ):
     """
     Get neighbors of a specific node.
@@ -227,11 +223,6 @@ async def get_neighbors(
             "total": 15
         }
     """
-    # Get kernel instance from app state
-    kernel = getattr(request.app.state, "kernel", None)
-    if not kernel:
-        raise kernel_not_initialized_error()
-
     try:
         logger.debug(f"Neighbors request: node_id={node_id}, depth={depth}")
 

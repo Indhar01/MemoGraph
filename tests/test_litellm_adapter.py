@@ -81,13 +81,15 @@ class TestLiteLLMClient:
         assert client.config.model == "gpt-3.5-turbo"
 
     def test_litellm_import_error(self):
-        """Test error when litellm not installed"""
+        """Missing optional dep should surface the memograph[litellm] install hint."""
         with patch(
             "builtins.__import__", side_effect=ImportError("No module named 'litellm'")
         ):
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(ImportError) as exc_info:
                 LiteLLMClient()
-            assert "LiteLLM is not installed" in str(exc_info.value)
+            msg = str(exc_info.value)
+            assert "LiteLLM is not installed" in msg
+            assert "memograph[litellm]" in msg
 
     @requires_litellm
     @patch("litellm.completion")

@@ -1,0 +1,17 @@
+{
+  "_comment": "Continue.dev MCP configuration. Merge this 'experimental.modelContextProtocolServers' block into ~/.continue/config.json (or .continue/config.json in your project). Continue's MCP support is gated under 'experimental' as of late 2025; once stable, the key may move to a top-level 'mcpServers'. Verify the connection from the Continue chat panel (the wrench/tools icon should list MemoGraph tools). Replace the vault path before use.",
+  "experimental": {
+    "modelContextProtocolServers": [
+      {
+        "transport": {
+          "type": "stdio",
+          "command": "python",
+          "args": ["-m", "memograph.mcp.run_server"],
+          "env": {
+            "MEMOGRAPH_VAULT": "/path/to/your/vault"
+          }
+        }
+      }
+    ]
+  }
+}

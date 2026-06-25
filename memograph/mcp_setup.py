@@ -49,6 +49,17 @@ class MCPSetup:
                 )
             )
 
+        # Detect Cursor (user-scoped config; project-scoped is opt-in)
+        cursor_config = self._get_cursor_config_path()
+        if cursor_config:
+            clients.append(
+                MCPClient(
+                    "Cursor",
+                    cursor_config,
+                    detected=cursor_config.parent.exists(),
+                )
+            )
+
         # Detect Cline CLI
         cline_config = self._get_cline_config_path()
         if cline_config:
@@ -89,6 +100,17 @@ class MCPSetup:
         elif self.system == "Linux":
             return Path.home() / ".config/Claude/claude_desktop_config.json"
         return None
+
+    def _get_cursor_config_path(self) -> Path | None:
+        """Get the user-scoped Cursor MCP config path.
+
+        Cursor reads ``~/.cursor/mcp.json`` for user-scoped MCP
+        servers (the same ``mcpServers`` shape Claude Desktop uses).
+        Project-scoped configs at ``<project>/.cursor/mcp.json``
+        are out of scope here — quickstart targets the global
+        editor, not the project the user happens to be cd'd into.
+        """
+        return Path.home() / ".cursor" / "mcp.json"
 
     def _get_cline_config_path(self) -> Path | None:
         """Get Cline CLI config path."""
@@ -131,6 +153,91 @@ class MCPSetup:
             return result.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return False
+
+    def quickstart_setup(
+        self,
+        vault_path: str,
+        *,
+        apply: bool = False,
+        provider: str = "ollama",
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """Non-interactive wire-up for the quickstart flow.
+
+        Detects installed MCP clients and either previews (default)
+        or writes (``apply=True``) the config snippet to make
+        MemoGraph available to each one. Returns a result dict
+        suitable for printing back to the user.
+
+        Distinct from :meth:`interactive_setup` in three ways:
+
+        1. **No prompts.** Designed to run inline right after
+           ``memograph quickstart`` finishes its demo — every
+           interactive prompt is a new chance for the user to
+           bounce.
+        2. **Detected-only by default.** We only touch clients
+           that already have a config directory on disk. A user
+           who hasn't installed Cursor doesn't get a Cursor
+           config dropped into their home.
+        3. **Preview-first.** Default ``apply=False`` prints what
+           *would* happen and leaves the filesystem alone. The
+           user explicitly opts in with ``--apply``.
+
+        Returns a dict with:
+
+        - ``detected``: list of detected client names
+        - ``actions``: per-client ``{client, config_path, status,
+          message}`` — status is ``"would_write"`` in preview mode
+          or ``"written"`` / ``"skipped"`` / ``"error"`` in apply mode
+        - ``not_detected``: clients we know about that weren't found
+        """
+        if not self.clients:
+            self.detect_clients()
+
+        result: dict[str, Any] = {
+            "detected": [],
+            "actions": [],
+            "not_detected": [],
+        }
+
+        client_config = {
+            "vault_path": vault_path,
+            "provider": provider,
+        }
+        if model:
+            client_config["model"] = model
+
+        for client in self.clients:
+            if not client.detected:
+                result["not_detected"].append(client.name)
+                continue
+            result["detected"].append(client.name)
+            action: dict[str, Any] = {
+                "client": client.name,
+                "config_path": str(client.config_path),
+                "status": "would_write" if not apply else "written",
+                "message": "",
+            }
+            if not apply:
+                action["message"] = (
+                    f"Would write MemoGraph MCP server config to "
+                    f"{client.config_path}. Run with --mcp-apply to do it."
+                )
+                result["actions"].append(action)
+                continue
+
+            try:
+                self._configure_client(client, client_config)
+                action["message"] = (
+                    f"Wired MemoGraph into {client.name}. "
+                    f"Restart {client.name} to pick up the change."
+                )
+            except Exception as exc:  # noqa: BLE001
+                action["status"] = "error"
+                action["message"] = f"Failed to write config: {exc}"
+            result["actions"].append(action)
+
+        return result
 
     def interactive_setup(self) -> dict[str, Any]:
         """Run interactive setup wizard."""
@@ -275,6 +382,29 @@ class MCPSetup:
         model = config.get("model")
 
         # Prepare configuration based on client type
+        if "Cursor" in client.name:
+            # Cursor uses the same ``mcpServers`` shape as Claude Desktop
+            # but its config lives at a different path. Merge so we
+            # don't blow away other servers the user has wired up.
+            cursor_config: dict[str, Any] = {
+                "mcpServers": {
+                    "memograph": {
+                        "command": "python",
+                        "args": ["-m", "memograph.mcp.run_server"],
+                        "env": {
+                            "MEMOGRAPH_VAULT": vault_path,
+                            "MEMOGRAPH_PROVIDER": provider,
+                        },
+                    }
+                }
+            }
+            if model:
+                cursor_config["mcpServers"]["memograph"]["env"]["MEMOGRAPH_MODEL"] = (
+                    model
+                )
+            self._write_config(client.config_path, cursor_config, merge=True)
+            return
+
         if "Claude Desktop" in client.name:
             mcp_config: dict[str, Any] = {
                 "mcpServers": {

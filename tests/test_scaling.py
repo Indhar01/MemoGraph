@@ -151,9 +151,9 @@ class TestQueryPerformance:
         duration = time.time() - start
 
         avg_ms = (duration / 5) * 1000
-        assert avg_ms < 500, (
-            f"Avg query on 100 notes took {avg_ms:.1f}ms (limit: 500ms)"
-        )
+        assert (
+            avg_ms < 500
+        ), f"Avg query on 100 notes took {avg_ms:.1f}ms (limit: 500ms)"
         print(f"\n  Query 100 notes: avg {avg_ms:.1f}ms per query")
 
     @pytest.mark.benchmark
@@ -168,9 +168,9 @@ class TestQueryPerformance:
         duration = time.time() - start
 
         avg_ms = (duration / 5) * 1000
-        assert avg_ms < 2000, (
-            f"Avg query on 1K notes took {avg_ms:.1f}ms (limit: 2000ms)"
-        )
+        assert (
+            avg_ms < 2000
+        ), f"Avg query on 1K notes took {avg_ms:.1f}ms (limit: 2000ms)"
         print(f"\n  Query 1K notes: avg {avg_ms:.1f}ms per query")
 
     @pytest.mark.benchmark
@@ -186,9 +186,9 @@ class TestQueryPerformance:
         duration = time.time() - start
 
         avg_ms = (duration / 5) * 1000
-        assert avg_ms < 10000, (
-            f"Avg query on 10K notes took {avg_ms:.1f}ms (limit: 10s)"
-        )
+        assert (
+            avg_ms < 10000
+        ), f"Avg query on 10K notes took {avg_ms:.1f}ms (limit: 10s)"
         print(f"\n  Query 10K notes: avg {avg_ms:.1f}ms per query")
 
 
