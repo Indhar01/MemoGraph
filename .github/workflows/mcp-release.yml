@@ -103,84 +103,56 @@ jobs:
           git commit -m "chore: sync server.json version to ${{ steps.get_version.outputs.version }}"
           git push
 
-  create-mcp-reminder:
-    name: Create MCP Registry Reminder
+  publish-to-mcp-registry:
+    name: Publish to MCP Registry
     needs: sync-and-validate
     runs-on: ubuntu-latest
-    # Environment: https://modelcontextprotocol.io/registry
+    # Endpoint: https://registry.modelcontextprotocol.io
+    # The namespace `io.github.Indhar01/memograph` is GitHub-bound, so
+    # publishing requires a GitHub OIDC token. No PAT / repo secret is
+    # needed; `id-token: write` is the authoritative grant.
     if: github.event_name == 'release' || github.event_name == 'push'
     permissions:
-      issues: write
+      contents: read
+      id-token: write   # OIDC token issuance for mcp-publisher login
 
     steps:
-      - name: Create Issue for Manual MCP Submission
-        uses: actions/github-script@v7
+      - name: Checkout (so server.json is on disk)
+        uses: actions/checkout@v4
         with:
-          script: |
-            const version = '${{ needs.sync-and-validate.outputs.version }}';
-            const issueTitle = `📋 MCP Registry Submission Required for v${version}`;
-            const issueBody = `
-            ## MCP Registry Submission Checklist
+          # If the version sync step pushed a commit, fetch it so we
+          # publish with the up-to-date server.json.
+          ref: main
+          fetch-depth: 1
 
-            A new version **v${version}** has been released. Please complete the MCP registry submission:
+      - name: Install mcp-publisher
+        # Pull the latest publisher binary for the runner's arch and
+        # extract just the executable into the working dir.
+        run: |
+          curl -L \
+            "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+            | tar xz mcp-publisher
+          chmod +x ./mcp-publisher
+          ./mcp-publisher --help | head -5
 
-            ### Steps:
+      - name: Login to MCP Registry via GitHub OIDC
+        # The `github-oidc` login mode uses the workflow's OIDC token to
+        # claim the `io.github.<owner>` namespace — no secret needed,
+        # which is why `id-token: write` is required at the job level.
+        run: ./mcp-publisher login github-oidc
 
-            1. ✅ **PyPI Publication** - Automated (should be complete)
-               - Check: https://pypi.org/project/memograph/
+      - name: Publish server.json
+        # Reads server.json in the working dir and POSTs it to
+        # registry.modelcontextprotocol.io. Reports the published
+        # name + version on success.
+        run: ./mcp-publisher publish
 
-            2. ✅ **server.json Version** - Automated (synced to ${version})
-
-            3. ⏳ **MCP Registry Submission** - Manual Required
-               - Visit: https://modelcontextprotocol.io/registry
-               - Click "Publish a Server" or "Submit Server"
-               - Authenticate with GitHub (@Indhar01)
-               - Submit namespace: \`io.github.Indhar01/memograph\`
-
-            ### Verification:
-
-            Run verification script:
-            \`\`\`bash
-            python scripts/verify_mcp_registry.py
-            \`\`\`
-
-            ### Documentation:
-            - [MCP Registry Guide](https://github.com/Indhar01/MemoGraph/blob/main/docs/MCP_REGISTRY_GUIDE.md)
-            - [README](https://github.com/Indhar01/MemoGraph/blob/main/README.md)
-
-            ---
-
-            Close this issue once MCP registry submission is complete.
-            `;
-
-            // Check if issue already exists
-            const issues = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'mcp-release'
-            });
-
-            const existingIssue = issues.data.find(issue =>
-              issue.title.includes(version)
-            );
-
-            if (!existingIssue) {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: issueTitle,
-                body: issueBody,
-                labels: ['mcp-release', 'automation', 'release']
-              });
-              console.log('✅ Created MCP submission reminder issue');
-            } else {
-              console.log('ℹ️ Issue already exists for this version');
-            }
+      - name: Verify the publish landed
+        run: python scripts/verify_mcp_registry.py
 
   summary:
     name: Release Summary
-    needs: [sync-and-validate, create-mcp-reminder]
+    needs: [sync-and-validate, publish-to-mcp-registry]
     runs-on: ubuntu-latest
     if: always()
 
@@ -194,12 +166,8 @@ jobs:
           echo "### Automated Tasks:" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Version sync (server.json)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Configuration validation" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ MCP reminder issue created" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Manual Action Required:" >> $GITHUB_STEP_SUMMARY
-          echo "📋 Check the 'mcp-release' issue for MCP registry submission instructions" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Published to MCP Registry via mcp-publisher (OIDC)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Links:" >> $GITHUB_STEP_SUMMARY
           echo "- [PyPI Package](https://pypi.org/project/memograph/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [MCP Registry](https://modelcontextprotocol.io/registry)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Issues](https://github.com/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+label%3Amcp-release)" >> $GITHUB_STEP_SUMMARY
+          echo "- [MCP Registry entry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.Indhar01/memograph)" >> $GITHUB_STEP_SUMMARY
