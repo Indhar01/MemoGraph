@@ -1130,7 +1130,7 @@ class ObsidianSync:
         Returns:
             MD5 hash of the content
         """
-        return hashlib.md5(content.encode()).hexdigest()
+        return hashlib.md5(content.encode(), usedforsecurity=False).hexdigest()
 
     def _write_obsidian_file(self, file_path: Path, data: Dict[str, Any]) -> None:
         """Write data to Obsidian markdown file.

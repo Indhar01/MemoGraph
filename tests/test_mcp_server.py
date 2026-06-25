@@ -98,12 +98,12 @@ class TestToolSchema:
         """Test that all tool schemas have name, description, inputSchema."""
         for schema in mcp_server.get_tools_schema():
             assert "name" in schema, "Missing 'name' in tool schema"
-            assert "description" in schema, (
-                f"Missing 'description' in {schema.get('name')}"
-            )
-            assert "inputSchema" in schema, (
-                f"Missing 'inputSchema' in {schema.get('name')}"
-            )
+            assert (
+                "description" in schema
+            ), f"Missing 'description' in {schema.get('name')}"
+            assert (
+                "inputSchema" in schema
+            ), f"Missing 'inputSchema' in {schema.get('name')}"
             assert schema["inputSchema"]["type"] == "object"
 
     def test_all_tool_names_are_routable(self, mcp_server):
@@ -112,9 +112,9 @@ class TestToolSchema:
         for name in tool_names:
             # Check that the method exists on the server
             method_name = name
-            assert hasattr(mcp_server, method_name), (
-                f"Tool '{name}' has no corresponding method on MemoGraphMCPServer"
-            )
+            assert hasattr(
+                mcp_server, method_name
+            ), f"Tool '{name}' has no corresponding method on MemoGraphMCPServer"
 
 
 class TestSearchTool:

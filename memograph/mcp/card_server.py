@@ -26,7 +26,9 @@ class CardHandler(BaseHTTPRequestHandler):
 
 def start_card_server(port: int = 8080):
     """Start the card server in a background daemon thread."""
-    server = HTTPServer(("0.0.0.0", port), CardHandler)
+    # Smithery and other registry scanners need to reach this endpoint
+    # from outside the host, so binding to all interfaces is intentional.
+    server = HTTPServer(("0.0.0.0", port), CardHandler)  # nosec B104
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server

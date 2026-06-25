@@ -71,9 +71,7 @@ class MemoGraphMCPServer:
         # Read-only mode: when MEMOGRAPH_READONLY=true, refuse all vault-writing
         # MCP tools (delete/update/bulk_create/batch_*/import). Read tools stay
         # functional. Useful for shared deployments or untrusted clients.
-        self.readonly = (
-            os.environ.get("MEMOGRAPH_READONLY", "false").lower() == "true"
-        )
+        self.readonly = os.environ.get("MEMOGRAPH_READONLY", "false").lower() == "true"
         if self.readonly:
             logger.warning(
                 "⚠️  MEMOGRAPH_READONLY=true — destructive tools (delete, "
@@ -85,9 +83,7 @@ class MemoGraphMCPServer:
         # files. Read-only servers skip this — many viewers can safely share
         # a vault. Set MEMOGRAPH_SKIP_LOCK=true to opt out (e.g. test harness).
         self._vault_lock: VaultLock | None = None
-        skip_lock = (
-            os.environ.get("MEMOGRAPH_SKIP_LOCK", "false").lower() == "true"
-        )
+        skip_lock = os.environ.get("MEMOGRAPH_SKIP_LOCK", "false").lower() == "true"
         if not self.readonly and not skip_lock:
             lock = VaultLock(self.vault_path, role="mcp-server")
             try:

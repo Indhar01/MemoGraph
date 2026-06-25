@@ -437,7 +437,8 @@ def _run_doctor(args) -> None:
     tags_url = f"{ollama_url}/api/tags"
     try:
         req = request.Request(tags_url, method="GET")
-        with request.urlopen(req, timeout=5) as resp:
+        # ollama_url is an operator-supplied http(s) URL.
+        with request.urlopen(req, timeout=5) as resp:  # noqa: S310  # nosec B310
             payload = json.loads(resp.read().decode("utf-8"))
         models = payload.get("models", [])
         print(f"ollama: reachable ({len(models)} models) @ {ollama_url}")

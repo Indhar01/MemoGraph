@@ -119,11 +119,7 @@ class VaultLock:
 
             same_host = holder_host == socket.gethostname()
             holder_token = existing.get("token")
-            if (
-                same_host
-                and holder_pid == os.getpid()
-                and holder_token == self._token
-            ):
+            if same_host and holder_pid == os.getpid() and holder_token == self._token:
                 # Same instance re-entering its own lock.
                 self._held = True
                 return

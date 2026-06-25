@@ -88,7 +88,7 @@ def setup_debug_logging(vault_path: Path):
 
 def compute_content_hash(content: str) -> str:
     """Compute MD5 hash of content for deduplication."""
-    return hashlib.md5(content.encode("utf-8")).hexdigest()
+    return hashlib.md5(content.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def is_duplicate(content: str) -> bool:

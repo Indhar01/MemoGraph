@@ -79,7 +79,7 @@ class OllamaLLMClient:
 
     def _generate_non_stream(self, req: request.Request, timeout: int) -> str:
         """Generate response without streaming."""
-        with request.urlopen(req, timeout=timeout) as response:
+        with request.urlopen(req, timeout=timeout) as response:  # noqa: S310  # nosec B310
             body = json.loads(response.read().decode("utf-8"))
         response_text: str = body.get("response", "")
         return response_text.strip()
@@ -90,7 +90,7 @@ class OllamaLLMClient:
         """Generate response with streaming token display."""
         full_response = []
 
-        with request.urlopen(req, timeout=timeout) as response:
+        with request.urlopen(req, timeout=timeout) as response:  # noqa: S310  # nosec B310
             # Read the stream line by line
             for line in response:
                 if not line:

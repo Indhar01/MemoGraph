@@ -248,4 +248,4 @@ class ConflictResolver:
         Returns:
             MD5 hash of the content.
         """
-        return hashlib.md5(content.encode()).hexdigest()
+        return hashlib.md5(content.encode(), usedforsecurity=False).hexdigest()

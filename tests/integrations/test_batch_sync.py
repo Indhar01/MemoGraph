@@ -379,15 +379,15 @@ class TestErrorHandling:
         stats = await obsidian_sync.batch_sync(direction="pull")
 
         # Should have processed valid notes
-        assert stats["pulled"] >= 4, (
-            f"Expected at least 4 pulled but got {stats['pulled']}"
-        )
+        assert (
+            stats["pulled"] >= 4
+        ), f"Expected at least 4 pulled but got {stats['pulled']}"
         # Should have recorded error for invalid note
         assert len(stats["errors"]) > 0, f"Expected errors but got: {stats}"
         # Verify the error message mentions the invalid file
-        assert any("invalid.md" in str(err) for err in stats["errors"]), (
-            f"Expected error about invalid.md but got: {stats['errors']}"
-        )
+        assert any(
+            "invalid.md" in str(err) for err in stats["errors"]
+        ), f"Expected error about invalid.md but got: {stats['errors']}"
 
     @pytest.mark.asyncio
     async def test_batch_sync_handles_permission_errors(

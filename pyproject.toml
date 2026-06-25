@@ -61,10 +61,17 @@ classifiers = [
 
 dependencies = [
     # Upper bounds pinned to the next major to prevent surprise breakage
-    # from major-version releases. Tighten further with a lockfile
-    # (requirements.lock) generated via pip-compile or `uv lock`.
+    # from major-version releases. Lower bounds are floored at the first
+    # release without a known CVE so pip-audit stays green in CI.
+    # Tighten further with a lockfile (requirements.lock) generated via
+    # pip-compile or `uv lock`.
     "PyYAML>=6.0,<7",
-    "requests>=2.31.0,<3",
+    # 2.33.0 is the first release without PYSEC-2026-* findings for requests.
+    "requests>=2.33.0,<3",
+    # urllib3 is transitive via requests, but we pin explicitly because
+    # 2.7.0 carries the fix for PYSEC-2026-* and earlier resolutions of
+    # `requests` happily pinned 2.6.x.
+    "urllib3>=2.7.0,<3",
     "mcp>=1.0.0,<2",
 ]
 
@@ -98,7 +105,8 @@ web = [
     "python-json-logger>=2.0.7,<4",
     # Provider-neutral OIDC verification (works with WorkOS, Auth0, Clerk,
     # Keycloak, etc. — picks JWKS URL + audience from env vars at startup).
-    "PyJWT[crypto]>=2.8.0,<3",
+    # 2.13.0 is the first release without PYSEC-2026-* findings.
+    "PyJWT[crypto]>=2.13.0,<3",
 ]
 integrations = [
     "watchdog>=3.0.0,<7",
@@ -119,7 +127,8 @@ all = [
     "memograph[openai,anthropic,ollama,litellm,embeddings,integrations]",
 ]
 dev = [
-    "pytest>=7.4.0",
+    # 9.0.3 carries the fix for PYSEC-2026-* affecting 9.0.2.
+    "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
     "pytest-benchmark>=4.0.0",

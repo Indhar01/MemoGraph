@@ -147,9 +147,7 @@ class AutonomousHooks:
             )
 
             if should_save and getattr(self.server, "readonly", False):
-                logger.info(
-                    "auto_hook_query: readonly mode — skipping query save"
-                )
+                logger.info("auto_hook_query: readonly mode — skipping query save")
                 should_save = False
 
             if should_save:
@@ -233,9 +231,7 @@ class AutonomousHooks:
                 }
 
             if getattr(self.server, "readonly", False):
-                logger.info(
-                    "auto_hook_response: readonly mode — skipping save"
-                )
+                logger.info("auto_hook_response: readonly mode — skipping save")
                 return {
                     "success": True,
                     "message": (

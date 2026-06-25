@@ -67,9 +67,9 @@ class TestAsyncVsSyncBenchmarks:
 
         # On Windows, async operations may have overhead, so we use a more lenient threshold
         # The benefit of async is in I/O-bound operations, not CPU-bound file creation
-        assert speedup > 0.5 or async_time < 5.0, (
-            f"Async performance acceptable: {speedup:.2f}x, {async_time:.2f}s"
-        )
+        assert (
+            speedup > 0.5 or async_time < 5.0
+        ), f"Async performance acceptable: {speedup:.2f}x, {async_time:.2f}s"
 
     @pytest.mark.asyncio
     async def test_concurrent_queries_speedup(self, tmp_path: Path):
@@ -173,9 +173,9 @@ class TestBatchOperationBenchmarks:
             f"Batch vs Individual ratio: {throughput_batch / throughput_individual:.2f}x"
         )
         # Just ensure batch operations complete successfully
-        assert throughput_batch > 10, (
-            f"Batch throughput too low: {throughput_batch:.1f} ops/s"
-        )
+        assert (
+            throughput_batch > 10
+        ), f"Batch throughput too low: {throughput_batch:.1f} ops/s"
 
 
 @pytest.mark.stress
@@ -252,9 +252,9 @@ class TestGAMPerformanceBenchmarks:
         # GAM adds graph-scoring overhead; allow higher variance on Windows where
         # file I/O and scheduler timing produce noisier micro-benchmarks.
         max_overhead = 3.0 if is_windows else 2.0
-        assert overhead_ratio < max_overhead, (
-            f"GAM overhead too high: {overhead_ratio:.2f}x (limit {max_overhead:.1f}x)"
-        )
+        assert (
+            overhead_ratio < max_overhead
+        ), f"GAM overhead too high: {overhead_ratio:.2f}x (limit {max_overhead:.1f}x)"
 
 
 @pytest.mark.stress
@@ -363,6 +363,6 @@ class TestScalabilityBenchmarks:
                 f"Scaling factor: {scaling_factor:.2f}x for {size_factor:.0f}x size increase"
             )
             # Allow up to linear scaling (10x size = 10x time is acceptable)
-            assert scaling_factor < size_factor * 1.5, (
-                f"Query time scaling too poor: {scaling_factor:.2f}x for {size_factor:.0f}x size"
-            )
+            assert (
+                scaling_factor < size_factor * 1.5
+            ), f"Query time scaling too poor: {scaling_factor:.2f}x for {size_factor:.0f}x size"

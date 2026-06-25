@@ -50,7 +50,13 @@ def main():
     try:
         from memograph.web.backend.server import run_dev_server
 
-        run_dev_server(str(vault_path_obj), host="0.0.0.0", port=8000, use_gam=True)
+        run_dev_server(
+            str(vault_path_obj),
+            # Documented dev-server entry point.
+            host="0.0.0.0",  # nosec B104
+            port=8000,
+            use_gam=True,
+        )
     except KeyboardInterrupt:
         print("\n\n👋 Server stopped by user")
     except Exception as e:

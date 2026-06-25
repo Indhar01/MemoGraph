@@ -19,7 +19,8 @@ class OllamaEmbeddingAdapter(EmbeddingAdapter):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with request.urlopen(req, timeout=30) as response:
+        # base_url is constrained to a configured http(s) Ollama endpoint.
+        with request.urlopen(req, timeout=30) as response:  # noqa: S310  # nosec B310
             body = json.loads(response.read().decode("utf-8"))
         embedding: list[float] = body["embedding"]
         return embedding
