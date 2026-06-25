@@ -7,7 +7,6 @@ on:
     paths:
       - 'pyproject.toml'
       - 'server.json'
-      - 'smithery.yaml'
   release:
     types: [published]
   workflow_dispatch:
@@ -104,44 +103,9 @@ jobs:
           git commit -m "chore: sync server.json version to ${{ steps.get_version.outputs.version }}"
           git push
 
-  publish-smithery:
-    name: Publish to Smithery Marketplace
-    needs: sync-and-validate
-    runs-on: windows-latest
-    # Environment: https://smithery.ai/server/memograph
-    if: github.event_name == 'release' || github.event_name == 'push'
-    continue-on-error: true
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Check if mcp-publisher.exe exists
-        id: check_publisher
-        run: |
-          if (Test-Path "mcp-publisher.exe") {
-            echo "exists=true" >> $env:GITHUB_OUTPUT
-            echo "✅ mcp-publisher.exe found"
-          } else {
-            echo "exists=false" >> $env:GITHUB_OUTPUT
-            echo "⚠️ mcp-publisher.exe not found"
-          }
-
-      - name: Publish to Smithery
-        if: steps.check_publisher.outputs.exists == 'true'
-        run: |
-          # Attempt to publish using mcp-publisher
-          # This assumes the tool accepts arguments like: mcp-publisher.exe publish
-          # Adjust based on actual tool usage
-          ./mcp-publisher.exe --help || echo "Tool usage documentation needed"
-
-          # If the tool supports publishing:
-          # ./mcp-publisher.exe publish --config smithery.yaml --version ${{ needs.sync-and-validate.outputs.version }}
-        continue-on-error: true
-
   create-mcp-reminder:
     name: Create MCP Registry Reminder
-    needs: [sync-and-validate, publish-smithery]
+    needs: sync-and-validate
     runs-on: ubuntu-latest
     # Environment: https://modelcontextprotocol.io/registry
     if: github.event_name == 'release' || github.event_name == 'push'
@@ -172,10 +136,6 @@ jobs:
                - Click "Publish a Server" or "Submit Server"
                - Authenticate with GitHub (@Indhar01)
                - Submit namespace: \`io.github.Indhar01/memograph\`
-
-            4. ⏳ **Smithery Marketplace** (Optional)
-               - Check if automated publish succeeded
-               - If not, manually publish at Smithery
 
             ### Verification:
 
@@ -220,7 +180,7 @@ jobs:
 
   summary:
     name: Release Summary
-    needs: [sync-and-validate, publish-smithery, create-mcp-reminder]
+    needs: [sync-and-validate, create-mcp-reminder]
     runs-on: ubuntu-latest
     if: always()
 
@@ -234,7 +194,6 @@ jobs:
           echo "### Automated Tasks:" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Version sync (server.json)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Configuration validation" >> $GITHUB_STEP_SUMMARY
-          echo "- ⏳ Smithery publish (attempted)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ MCP reminder issue created" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Manual Action Required:" >> $GITHUB_STEP_SUMMARY
