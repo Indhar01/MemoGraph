@@ -244,35 +244,6 @@ jobs:
             | tar -xz -C /tmp kubeconform
           /tmp/kubeconform -strict -summary -ignore-missing-schemas /tmp/rendered-default.yaml /tmp/rendered-mt.yaml
 
-  helm-lint:
-    name: Helm chart lint + render
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
-
-      - name: helm lint
-        run: helm lint deploy/helm/memograph
-
-      - name: helm template (render with defaults)
-        # Catches templating bugs that `lint` alone won't surface — e.g. an
-        # undefined value reference that only blows up at render time.
-        run: helm template memograph deploy/helm/memograph > /tmp/rendered.yaml
-
-      - name: helm template (multi-tenant + ingress overrides)
-        # A second render exercising the non-default toggles so the toggles
-        # don't quietly bitrot.
-        run: |
-          helm template memograph deploy/helm/memograph \
-            --set memograph.tenancyEnabled=true \
-            --set ingress.enabled=true \
-            --set networkPolicy.enabled=true \
-            --set autoscaling.enabled=true > /tmp/rendered-full.yaml
-
   pre-commit:
     runs-on: ubuntu-latest
     steps:
@@ -293,10 +264,35 @@ jobs:
         run: pre-commit run --all-files
         continue-on-error: true
 
+  docker-smoke:
+    name: Docker build smoke test (linux/amd64)
+    runs-on: ubuntu-latest
+    # Catches lockfile / Dockerfile regressions on every PR and push to
+    # main, instead of only when a release tag is cut. v0.4.0 shipped a
+    # broken pywin32 entry in requirements.lock; without this job, the
+    # next class of problem would also only surface during release.
+    # Single-arch (amd64) and no push: ~3 min, no GHCR mutation, no
+    # cosign — release.yml still handles multi-arch + signing on tags.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: memograph:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   quality-gates:
     name: Code Quality Gates
     runs-on: ubuntu-latest
-    needs: [lint, test, test-enhanced, performance, integration, helm-lint]
+    needs: [lint, test, test-enhanced, performance, integration, helm-lint, docker-smoke]
     steps:
       - uses: actions/checkout@v4
 
