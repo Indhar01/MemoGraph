@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-06-25
+
+Polish patch responding to v0.4.0 reviewer feedback. No new features;
+no breaking changes.
+
+### Fixed
+
+- `auto_hook_query` now returns `status="skipped"` with an explicit
+  `reason` field when a query is shorter than `min_query_length`,
+  instead of returning a generic `success=True` that left callers
+  unable to distinguish "no context" from "didn't try."
+- Removed broken references to a never-written `AUTONOMOUS_HOOKS_GUIDE.md`
+  from README, CONFIG_REFERENCE, and the module docstring. Setup
+  instructions now live inline in the README's "Conversation-save
+  hooks" section.
+- Untracked `cline_mcp_settings.json` from the repo root (per-machine
+  config with hardcoded paths) and gitignored future occurrences.
+
+### Changed
+
+- `_calculate_performance_grade` no longer returns an `emoji` field on
+  the API response. Grade letters and status strings remain. UI noise
+  belongs at the UI layer, not in a developer-facing JSON.
+- Module docstring on `memograph/mcp/autonomous_hooks.py` rewritten to
+  be honest about what "autonomous" actually means here (client must
+  call). The module will be renamed `conversation_hooks` in 0.5.0 with
+  a back-compat alias.
+- Default-behaviour asymmetry of `auto_save_queries` (False) vs
+  `auto_save_responses` (True) is now documented in the module
+  docstring with the *why*.
+
+### Deprecated
+
+- `memograph[embeddings]` extras alias. Replaced by a split:
+  - `memograph[embeddings-api]` — numpy only, for callers using a
+    hosted embedding API (OpenAI, Cohere, Voyage). Adds ~10 MB.
+  - `memograph[embeddings-local]` — pulls sentence-transformers and
+    torch (~800 MB) for on-device embeddings.
+  The `[embeddings]` alias still resolves to `[embeddings-local]` for
+  back-compat; it will be removed in 0.6.0.
+- `[all]` now excludes `embeddings-local` so the default fat install
+  no longer carries torch. Use `pip install memograph[all,embeddings-local]`
+  to get the old behaviour.
+
+### Documentation
+
+- README now carries a "Stability promise" callout pointing at
+  `CONTRIBUTING.md#stability-and-deprecation-policy` and
+  `docs/MIGRATION_0.X_TO_1.0.md`. The deprecation policy was added in
+  0.4.0 but wasn't discoverable.
+- CONTRIBUTING.md leads with a TL;DR of the deprecation contract.
+
 ## [0.4.0] — 2026-06-23
 
 This release ships everything required for the v1.0 cut: a signed,

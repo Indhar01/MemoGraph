@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memograph"
-version = "0.4.0"
+version = "0.4.1"
 
 authors = [
   { name="Indirakumar", email="itsmeindirakumar@gmail.com" },
@@ -89,11 +89,28 @@ ollama = [
 litellm = [
     "litellm>=1.52.0,<2.0.0",
 ]
-embeddings = [
+embeddings-api = [
+    # Lean path for callers using a hosted embedding API (OpenAI, Cohere,
+    # Voyage, etc.) — just enough numpy to do vector math locally without
+    # pulling torch or sentence-transformers (~800 MB).
+    "numpy>=1.24.0,<3",
+]
+embeddings-local = [
+    # On-device embeddings via sentence-transformers. Pulls torch as a
+    # transitive dep; the wheel is ~800 MB and the first model download
+    # is another ~100 MB. Only opt into this if you actually need
+    # offline embedding.
+    #
     # sentence-transformers has had quiet API churn between minor versions;
     # cap to <4 until a contract test exists.
     "sentence-transformers>=2.2.0,<4",
     "numpy>=1.24.0,<3",
+]
+# Legacy alias preserved for back-compat with 0.4.0 users who installed
+# `memograph[embeddings]`. Will be removed in 0.6.0 per the deprecation
+# window. Resolves to the local (heavy) flavour to preserve old behavior.
+embeddings = [
+    "memograph[embeddings-local]",
 ]
 web = [
     "fastapi>=0.104.0,<1",
@@ -124,7 +141,10 @@ observability = [
     "prometheus-client>=0.20.0,<1",
 ]
 all = [
-    "memograph[openai,anthropic,ollama,litellm,embeddings,integrations]",
+    # `[all]` deliberately excludes `embeddings-local` (~800 MB torch).
+    # Callers who want offline embeddings should run
+    # `pip install memograph[all,embeddings-local]`.
+    "memograph[openai,anthropic,ollama,litellm,embeddings-api,integrations]",
 ]
 dev = [
     # 9.0.3 carries the fix for PYSEC-2026-* affecting 9.0.2.

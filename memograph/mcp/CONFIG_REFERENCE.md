@@ -347,9 +347,10 @@ Configure autonomous hooks behavior (pre-configure settings for auto-search and 
 4. **If issues persist:** [Troubleshooting Guide](../../docs/AUTONOMOUS_HOOKS_TROUBLESHOOTING.md)
 
 **Related Documentation:**
-- 📚 [Autonomous Hooks Troubleshooting](../../docs/AUTONOMOUS_HOOKS_TROUBLESHOOTING.md) - Detailed problem diagnosis and solutions
-- 📋 [Claude Desktop Custom Instructions Templates](../../docs/CLAUDE_DESKTOP_CUSTOM_INSTRUCTIONS.md) - Ready-to-use templates
-- 📖 [Autonomous Hooks User Guide](../../docs/AUTONOMOUS_HOOKS_GUIDE.md) - Complete user guide
+
+- Conversation-save hooks setup — see the **Conversation-save hooks**
+  section in the [project README](../../README.md#conversation-save-hooks).
+- Troubleshooting — open an issue with the `conversation-hooks` label.
 
 ### `MEMOGRAPH_AUTO_SAVE_MONITOR` (Phase 2)
 

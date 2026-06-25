@@ -69,6 +69,15 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 | Ship MemoGraph to multiple paying customers | Multi-tenant kernel registry, OIDC, quotas (roadmap), GDPR runbook |
 | Survive an SOC 2 audit conversation | Audit log with user + tenant binding, observability, security workflow, compliance roadmap doc |
 
+> **Stability promise.** From 1.0 onwards, anything in
+> `memograph.__all__`, any `/api/v1/...` route, any documented env var,
+> and any CLI subcommand in `--help` is covered by a **2-minor-version
+> deprecation window**. Pre-1.0 (0.x) is still alpha and may break in
+> any minor release. See
+> [CONTRIBUTING.md#stability-and-deprecation-policy](CONTRIBUTING.md#stability-and-deprecation-policy)
+> for the full contract, and [docs/MIGRATION_0.X_TO_1.0.md](docs/MIGRATION_0.X_TO_1.0.md)
+> for what specifically changes at 1.0.
+
 ## ✨ Capabilities at a glance
 
 ### Core memory engine
@@ -137,11 +146,17 @@ pip install memograph[anthropic]
 # For Ollama support
 pip install memograph[ollama]
 
-# For embedding support
-pip install memograph[embeddings]
+# For hosted-API embeddings (OpenAI, Cohere, Voyage etc.) — adds numpy only
+pip install memograph[embeddings-api]
 
-# Install everything
+# For on-device embeddings via sentence-transformers — adds torch (~800 MB)
+pip install memograph[embeddings-local]
+
+# Install everything except torch (recommended starting point)
 pip install memograph[all]
+
+# Install absolutely everything, including torch
+pip install memograph[all,embeddings-local]
 ```
 
 ### Python Usage
@@ -328,15 +343,31 @@ Once configured, use natural language with your AI assistant:
 
 See **[CONFIG_REFERENCE.md](memograph/mcp/CONFIG_REFERENCE.md)** for complete MCP configuration guide.
 
-### Using Auto-Save Hooks
+### Conversation-save hooks
 
-MemoGraph provides autonomous hooks to save conversations automatically:
+MemoGraph exposes `auto_hook_query` and `auto_hook_response` MCP tools
+that save conversation turns into the vault. **These are passive tools,
+not server-side automation** — the AI client (Claude Desktop, Cursor,
+Cline) must call them. To make that happen:
 
-- ⚠️ **Important**: Hooks are passive tools - see [Autonomous Hooks Guide](docs/AUTONOMOUS_HOOKS_GUIDE.md) for setup
-- 📝 Quick fix: Add custom instructions to Claude Desktop (instructions in guide)
-- 🔧 Configure with `MEMOGRAPH_AUTONOMOUS_MODE=true`
+1. **Tell the client to call them.** Add to your Claude Desktop /
+   Cursor / Cline custom instructions:
+   > After each meaningful response, call `auto_hook_response` with the
+   > original user query and your full answer.
+2. **Set the env once** (optional): `MEMOGRAPH_AUTONOMOUS_MODE=true`
+   keeps `auto_save_responses` enabled by default. `auto_save_queries`
+   stays **off** by default to avoid filling the vault with
+   acknowledgements like "ok" or "thanks"; flip it on with
+   `configure_autonomous_mode` if you want every query saved.
+3. **Verify**: ask the client "did you save the last response?", or run
+   `verify_last_save` from the MCP tool list.
 
-[Read the full Autonomous Hooks User Guide →](docs/AUTONOMOUS_HOOKS_GUIDE.md)
+If the client doesn't have custom instructions, the hooks are inert —
+the server can't force a call. This is by design: MCP tools are
+request/response, not event-driven. If you need automatic capture
+without client cooperation, run the optional conversation monitor
+(`MEMOGRAPH_AUTO_SAVE_MONITOR=true`), which tails the client's
+transcript file directly.
 
 ## 🎯 CLI Usage
 

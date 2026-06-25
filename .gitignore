@@ -44,6 +44,16 @@ env/
 *~
 .DS_Store
 
+# Local MCP client configs with hardcoded paths (one per machine).
+# Templates for these live under memograph/mcp/*_config.json.
+cline_mcp_settings.json
+.cline/
+~/
+
+# Cline session logs sometimes land here under "~" on Windows when
+# tools mishandle expanduser; rule above keeps them out, but be
+# explicit so the intent survives gitignore refactors.
+
 # Archived planning documents (completed work)
 archive_planning_docs/
 

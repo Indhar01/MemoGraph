@@ -10,7 +10,7 @@ version: 0.1.0
 # appVersion tracks the MemoGraph release this chart was tested against.
 # Helm renders this into the default image tag (.Values.image.tag) when
 # the user does not override it.
-appVersion: "0.4.0"
+appVersion: "0.4.1"
 
 home: https://github.com/Indhar01/MemoGraph
 sources:

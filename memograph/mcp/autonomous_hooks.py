@@ -1,21 +1,33 @@
-"""Autonomous hooks for MemoGraph MCP Server.
+"""Conversation-save hooks for the MemoGraph MCP server.
 
-⚠️ IMPORTANT: Despite the name "autonomous", these hooks are NOT automatically triggered.
-They are TOOLS that the AI client must explicitly call.
+The name "autonomous_hooks" is historical and misleading: the hooks are
+NOT automatically triggered. They are MCP tools that the AI client (Claude
+Desktop, Cursor, Cline, etc.) must explicitly call — MCP is a
+request/response protocol and the server has no way to intercept
+conversation turns on its own. The module name is preserved for back-compat
+and will be renamed to ``conversation_hooks`` in 0.5 with an alias for the
+deprecation window.
 
-This module provides hook tools for the MCP server that enable:
-- Searching the vault when queries are received (auto_hook_query)
-- Saving conversations when responses are generated (auto_hook_response)
+What this module exposes:
 
-However, the AI client (e.g., Claude Desktop) must explicitly call these tools.
-They do NOT automatically intercept messages due to MCP protocol limitations.
+- ``auto_hook_query(user_query, ...)`` — when called at the *start* of a
+  turn, optionally searches the vault and returns relevant context.
+- ``auto_hook_response(user_query, ai_response, ...)`` — when called at
+  the *end* of a turn, saves the exchange to the vault.
 
-To make these hooks work automatically:
-1. Enable: MEMOGRAPH_AUTONOMOUS_MODE=true (enables save when called)
-2. Guide the AI: Add custom instructions telling Claude to call auto_hook_response
-3. See docs/AUTONOMOUS_HOOKS_GUIDE.md for complete setup instructions
+Making the hooks actually fire requires telling the client to call them.
+The README's "Conversation-save hooks" section has the instructions.
 
-The term "autonomous" means "self-configured" not "automatic".
+Default behaviour, called out explicitly because it surprised users in
+0.4.0:
+
+- ``auto_save_queries`` is **False** by default — short ack queries like
+  "ok" or "thanks" would otherwise flood the vault.
+- ``auto_save_responses`` is **True** by default — model responses are
+  where the value lives.
+- ``min_query_length=10`` skips short queries. ``auto_hook_query``
+  returns ``status="skipped"`` with a ``reason`` so clients can react
+  rather than silently dropping the call.
 """
 
 import logging
@@ -79,11 +91,23 @@ class AutonomousHooks:
             Dictionary with context, sources, and actions performed
         """
         try:
-            # Check if query is long enough
+            # Check if query is long enough. Return an explicit "skipped"
+            # status so the caller can branch on it — previously this
+            # returned success=True with no signal, which left clients
+            # unable to distinguish "no context found" from "we didn't
+            # even try."
             if len(user_query.strip()) < self.min_query_length:
                 return {
                     "success": True,
-                    "message": "Query too short for autonomous processing",
+                    "status": "skipped",
+                    "reason": "query_too_short",
+                    "min_query_length": self.min_query_length,
+                    "message": (
+                        f"Query is shorter than min_query_length="
+                        f"{self.min_query_length}; skipping vault search. "
+                        "Adjust via configure_autonomous_mode if this is "
+                        "unexpected."
+                    ),
                     "context": None,
                     "sources": [],
                     "actions": [],
@@ -730,19 +754,26 @@ class AutonomousHooks:
             return {"success": False, "error": str(e)}
 
     def _calculate_performance_grade(self, save_rate: float) -> dict[str, str]:
-        """Calculate performance grade based on save rate."""
+        """Bucket the save rate into a grade label.
+
+        Returns ``{grade, status}`` only — emoji output was removed in
+        0.4.1 after API consumers flagged it as noise leaking internal
+        UI into a developer-facing response. The grade letter is still
+        useful for at-a-glance health; format it however suits the
+        caller's UI.
+        """
         if save_rate >= 95:
-            return {"grade": "A+", "status": "Excellent", "emoji": "🌟"}
+            return {"grade": "A+", "status": "Excellent"}
         elif save_rate >= 90:
-            return {"grade": "A", "status": "Very Good", "emoji": "✅"}
+            return {"grade": "A", "status": "Very Good"}
         elif save_rate >= 80:
-            return {"grade": "B", "status": "Good", "emoji": "👍"}
+            return {"grade": "B", "status": "Good"}
         elif save_rate >= 70:
-            return {"grade": "C", "status": "Fair", "emoji": "⚠️"}
+            return {"grade": "C", "status": "Fair"}
         elif save_rate >= 50:
-            return {"grade": "D", "status": "Poor", "emoji": "❌"}
+            return {"grade": "D", "status": "Poor"}
         else:
-            return {"grade": "F", "status": "Critical", "emoji": "🚨"}
+            return {"grade": "F", "status": "Critical"}
 
     def _generate_analytics_recommendations(
         self, overall_rate: float, layer1_count: int, layer2_count: int, total: int

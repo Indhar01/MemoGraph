@@ -638,7 +638,8 @@ class TestPhase3Analytics:
         grade = result["performance_grade"]
         assert "grade" in grade
         assert "status" in grade
-        assert "emoji" in grade
+        # Emoji removed in 0.4.1 to drop UI noise from the API response.
+        assert "emoji" not in grade
         # With 10 saves, should have good grade
         assert grade["grade"] in ["A+", "A", "B"]
 
