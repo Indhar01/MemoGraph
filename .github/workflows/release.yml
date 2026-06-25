@@ -38,7 +38,7 @@ jobs:
       tag: ${{ steps.derive.outputs.tag }}
       version: ${{ steps.derive.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
@@ -79,7 +79,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Tags carry signed metadata when present; fetch the full history
           # so the workflow can read them.

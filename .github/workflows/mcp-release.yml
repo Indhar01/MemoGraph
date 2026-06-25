@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -118,7 +118,7 @@ jobs:
 
     steps:
       - name: Checkout (so server.json is on disk)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # If the version sync step pushed a commit, fetch it so we
           # publish with the up-to-date server.json.
