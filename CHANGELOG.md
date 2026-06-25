@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-23
+
+This release ships everything required for the v1.0 cut: a signed,
+multi-arch container image; a Helm chart and raw K8s manifests; an
+explicit public API surface and deprecation policy; and the full
+Phase 0–3 enterprise readiness work (auth, hardening, multi-tenancy
+scaffold, GDPR scheduled deletion). It is also the first release cut
+through the new `release.yml` + `verify-versions` + cosign pipeline —
+so the version itself is partly a dress rehearsal for v1.0.
+
 ### Added — v1.0 release readiness
 
 - `requirements.lock` (pip-compile, hash-pinned, includes `[web]` extras)

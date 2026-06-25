@@ -34,7 +34,7 @@ spec:
       containers:
         - name: memograph
           # Pin to a digest in production: ghcr.io/indhar01/memograph@sha256:...
-          image: ghcr.io/indhar01/memograph:0.3.0
+          image: ghcr.io/indhar01/memograph:0.4.0
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
