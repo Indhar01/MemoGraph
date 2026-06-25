@@ -111,6 +111,13 @@ jobs:
     # The namespace `io.github.Indhar01/memograph` is GitHub-bound, so
     # publishing requires a GitHub OIDC token. No PAT / repo secret is
     # needed; `id-token: write` is the authoritative grant.
+    #
+    # Field-format lesson (from a manual publish that hit a 422):
+    # mcp-publisher v1.0.0 (Sep 2025) serialised the package metadata
+    # with snake_case (`registry_type`), but the registry schema since
+    # 2025-12-11 requires camelCase (`registryType`). Always installing
+    # `releases/latest` below avoids that class of bug — CI will be one
+    # release behind upstream at worst.
     if: github.event_name == 'release' || github.event_name == 'push'
     permissions:
       contents: read
@@ -125,29 +132,71 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Install mcp-publisher
-        # Pull the latest publisher binary for the runner's arch and
-        # extract just the executable into the working dir.
+      - name: Set up Python (for the pre/post verify steps)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install mcp-publisher (latest release)
+        # Always pull `releases/latest`. The schema-version trap we hit
+        # locally (v1.0.0 sending snake_case fields to a camelCase
+        # registry) can only happen if the binary is months old. Latest
+        # is the safest pin for a low-frequency release pipeline.
         run: |
-          curl -L \
-            "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
-            | tar xz mcp-publisher
+          set -euo pipefail
+          url="https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz"
+          echo "Downloading: $url"
+          curl -fsSL "$url" | tar xz mcp-publisher
           chmod +x ./mcp-publisher
-          ./mcp-publisher --help | head -5
+
+      - name: Print mcp-publisher version (debug aid)
+        # Surfaced on every run so a future schema break is immediately
+        # diagnosable from the log alone — no need to re-derive which
+        # binary was in use.
+        run: |
+          ./mcp-publisher --version
+          echo "---"
+          ./mcp-publisher --help | head -10
+
+      - name: "Pre-publish: validate server.json locally"
+        # Catches schema breakage (wrong field name, missing required
+        # property, namespace mismatch) before we hit the registry's
+        # 422 response, with much clearer error messages.
+        run: python scripts/verify_mcp_registry.py
 
       - name: Login to MCP Registry via GitHub OIDC
-        # The `github-oidc` login mode uses the workflow's OIDC token to
-        # claim the `io.github.<owner>` namespace — no secret needed,
-        # which is why `id-token: write` is required at the job level.
+        # `github-oidc` mode exchanges the workflow's OIDC token for a
+        # registry JWT. The token's `repository_owner` claim
+        # (`Indhar01`) is matched against the namespace owner
+        # (`io.github.Indhar01`) — no human, no device code, no
+        # browser. Requires `id-token: write` on this job.
         run: ./mcp-publisher login github-oidc
 
-      - name: Publish server.json
-        # Reads server.json in the working dir and POSTs it to
-        # registry.modelcontextprotocol.io. Reports the published
-        # name + version on success.
-        run: ./mcp-publisher publish
+      - name: Publish server.json (idempotent on re-runs)
+        # `mcp-publisher publish` returns non-zero when the version
+        # already exists. That's fine for re-runs against an already
+        # published version — we treat the "already exists" path as
+        # success so a workflow re-trigger doesn't fail loudly.
+        # Any *other* error still fails the step.
+        run: |
+          set +e
+          out=$(./mcp-publisher publish 2>&1)
+          rc=$?
+          echo "$out"
+          if [ $rc -eq 0 ]; then
+            echo "::notice::Published successfully."
+            exit 0
+          fi
+          if echo "$out" | grep -qiE "already exists|version.*conflict|409"; then
+            echo "::warning::Version already published — treating as success."
+            exit 0
+          fi
+          echo "::error::mcp-publisher publish failed (rc=$rc) and not an 'already exists' case."
+          exit $rc
 
-      - name: Verify the publish landed
+      - name: "Post-publish: verify the registry has the new version"
+        # Re-fetch from the live registry to confirm the publish landed
+        # (or the prior publish is still healthy in the re-run case).
         run: python scripts/verify_mcp_registry.py
 
   summary:

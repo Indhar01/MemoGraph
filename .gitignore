@@ -114,6 +114,7 @@ PRE-PUSH-GUIDE.md
 
 .bobignore
 .aider*
+mcp-pub*
 
 # Stray test/scratch scripts at root
 quick_test.py
