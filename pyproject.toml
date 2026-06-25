@@ -92,7 +92,7 @@ litellm = [
 embeddings = [
     # sentence-transformers has had quiet API churn between minor versions;
     # cap to <4 until a contract test exists.
-    "sentence-transformers>=2.2.0,<4",
+    "sentence-transformers>=2.2.0,<6",
     "numpy>=1.24.0,<3",
 ]
 web = [
