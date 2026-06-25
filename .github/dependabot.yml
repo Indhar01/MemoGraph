@@ -1,0 +1,52 @@
+# Dependabot keeps pinned tooling moving without surprise CI failures.
+#
+# Strategy: every direct dep, dev dep, and GitHub Action is pinned exactly
+# in pyproject.toml / workflow YAML. Dependabot opens a small PR per
+# package per week. You run the pre-push hook locally, verify, merge.
+#
+# This converts "CI broke overnight because ruff added a rule" into
+# "Dependabot opened a PR you can review at your own pace."
+
+version: 2
+updates:
+  # Python deps from pyproject.toml ([project] and [project.optional-deps]).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Group security-related tooling so they bump together — they tend to
+    # add new rules in lockstep and a single PR is easier to validate than
+    # three separate ones.
+    groups:
+      security-tooling:
+        patterns:
+          - "ruff"
+          - "bandit*"
+          - "pip-audit"
+          - "mypy"
+
+  # GitHub Actions versions (codeql-action, setup-python, checkout, etc.).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
