@@ -81,12 +81,21 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run pip-audit
-        # --strict promotes warnings to failures; --desc gives human-readable
-        # CVE summaries in the log so triagers don't have to follow links.
-        # --skip-editable skips this package itself (installed editable, not
-        # on PyPI), which otherwise triggers
-        #   "memograph: Dependency not found on PyPI"
-        # and --strict turns that into a hard failure.
+        # We audit a generated requirements list that EXCLUDES the project
+        # itself, because:
+        #   * `pip install -e .` registers `memograph` as an editable
+        #     distribution. pip-audit cannot audit editable installs (it
+        #     would have to look the local source up on PyPI).
+        #   * `--strict` turns that warning into a hard failure even when
+        #     `--skip-editable` is set — strict mode treats *any* skip
+        #     reason as an error.
+        # `pip list --format=freeze --exclude-editable` resolves to exact
+        # `package==version` lines for every dep that came from PyPI,
+        # which pip-audit can audit deterministically.
+        #
+        # --desc gives human-readable CVE summaries in the log so triagers
+        # don't have to follow links.
+        #
         # The --ignore-vuln list is for transitive deps we cannot upgrade
         # from this project (e.g. build-time setuptools). Add new IDs
         # sparingly and only after triage.
@@ -94,7 +103,14 @@ jobs:
         # Ignored:
         #   GHSA-5rjg-fvgr-3xxf  -> setuptools < 78.1.1 (build-time only,
         #                          mitigated by upgrade in install step)
-        run: pip-audit --strict --desc --skip-editable --ignore-vuln GHSA-5rjg-fvgr-3xxf
+        run: |
+          pip list --format=freeze --exclude-editable > installed-deps.txt
+          echo "--- Auditing the following resolved deps: ---"
+          cat installed-deps.txt
+          echo "--- End of dep list ---"
+          pip-audit --strict --desc \
+            --requirement installed-deps.txt \
+            --ignore-vuln GHSA-5rjg-fvgr-3xxf
 
   ruff:
     name: Ruff (lint + format)
