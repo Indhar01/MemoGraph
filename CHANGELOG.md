@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — v1.0 release readiness
+
+- `requirements.lock` (pip-compile, hash-pinned, includes `[web]` extras)
+  and Dockerfile install via `--require-hashes` against it.
+- Base image pinned by digest (`python@sha256:...`) instead of tag in
+  Dockerfile.
+- [`docs/RELEASE_RUNBOOK.md`](docs/RELEASE_RUNBOOK.md) — durable,
+  version-agnostic procedure for cutting a release across PyPI, GHCR,
+  and the MCP registry.
+- [`docs/MIGRATION_0.X_TO_1.0.md`](docs/MIGRATION_0.X_TO_1.0.md) —
+  contract for what changes (and what doesn't) at the v1.0 cut.
+- `memograph.scripts.migrate_to_multitenant` — helper that relocates a
+  single-vault 0.x deploy under a 1.0 global root with `--dry-run`.
+- Expanded `memograph.__all__` to declare the 1.0 public Python surface
+  (`MemoryKernel`, `MemoryQuery`, `SearchOptions`, `MemoryNode`,
+  `VaultGraph`, `VaultStorage`, `HybridRetriever`, and the GAM types).
+- `helm lint` + double `helm template` render job in CI to catch chart
+  regressions before they reach Helm users.
+
 ### Added — Phase 0–3 enterprise readiness
 
 The work below makes MemoGraph deployable to multiple paying

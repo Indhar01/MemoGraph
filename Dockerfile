@@ -9,14 +9,18 @@
 #               memograph:dev
 #
 # Layers are arranged so that source-only changes do not invalidate the
-# pip-install layer. requirements.lock (Phase 0.5) will provide hash-pinned
-# installs once it's generated; until then the runtime image installs from
-# pyproject extras.
+# pip-install layer.
+#
+# Base image is pinned by digest so a transient tag retag in upstream
+# python:slim cannot silently change what we ship. To refresh:
+#   docker pull python:3.12-slim-bookworm
+#   docker inspect --format='{{index .RepoDigests 0}}' python:3.12-slim-bookworm
+# Then update BASE_IMAGE below.
 
-ARG PYTHON_VERSION=3.12-slim-bookworm
+ARG BASE_IMAGE=python@sha256:8a7e7cc04fd3e2bd787f7f24e22d5d119aa590d429b50c95dfe12b3abe52f48b
 
 # ---------- Stage 1: build wheels into a temporary venv ----------
-FROM python:${PYTHON_VERSION} AS builder
+FROM ${BASE_IMAGE} AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -31,21 +35,27 @@ RUN apt-get update && \
 
 # Copy only the files needed to resolve dependencies first; this keeps
 # subsequent code-only changes from busting the install cache.
-COPY pyproject.toml requirements.txt ./
+COPY pyproject.toml requirements.txt requirements.lock ./
 COPY memograph/__init__.py ./memograph/__init__.py
 COPY memograph/py.typed ./memograph/py.typed
 
-# Create a venv inside /opt and install runtime deps + the web extra.
-# We deliberately install the web extra here so uvicorn ships in the image.
+# Create a venv inside /opt and install runtime deps from the hash-pinned
+# lockfile. requirements.lock is generated with:
+#   pip-compile --generate-hashes --extra web -o requirements.lock pyproject.toml
+# so any tampered wheel breaks the install rather than landing silently.
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
-COPY . /build
 RUN pip install --upgrade pip && \
-    pip install ".[web]"
+    pip install --require-hashes --no-deps -r requirements.lock
+
+# Now copy the source and install the package itself (without re-resolving
+# deps, which are already locked above).
+COPY . /build
+RUN pip install --no-deps .
 
 # ---------- Stage 2: runtime ----------
-FROM python:${PYTHON_VERSION} AS runtime
+FROM ${BASE_IMAGE} AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

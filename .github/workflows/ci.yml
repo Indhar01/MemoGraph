@@ -242,6 +242,35 @@ jobs:
             | tar -xz -C /tmp kubeconform
           /tmp/kubeconform -strict -summary -ignore-missing-schemas /tmp/rendered-default.yaml /tmp/rendered-mt.yaml
 
+  helm-lint:
+    name: Helm chart lint + render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: helm lint
+        run: helm lint deploy/helm/memograph
+
+      - name: helm template (render with defaults)
+        # Catches templating bugs that `lint` alone won't surface — e.g. an
+        # undefined value reference that only blows up at render time.
+        run: helm template memograph deploy/helm/memograph > /tmp/rendered.yaml
+
+      - name: helm template (multi-tenant + ingress overrides)
+        # A second render exercising the non-default toggles so the toggles
+        # don't quietly bitrot.
+        run: |
+          helm template memograph deploy/helm/memograph \
+            --set memograph.tenancyEnabled=true \
+            --set ingress.enabled=true \
+            --set networkPolicy.enabled=true \
+            --set autoscaling.enabled=true > /tmp/rendered-full.yaml
+
   pre-commit:
     runs-on: ubuntu-latest
     steps:
