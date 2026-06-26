@@ -11,6 +11,7 @@ import {
   Monitor,
   Menu,
   Command as CommandIcon,
+  Database,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useKeyboardShortcuts } from '../lib/keyboardShortcuts';
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { path: '/search', label: 'Search', icon: Search },
   { path: '/graph', label: 'Graph', icon: Network },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { path: '/sources', label: 'Sources', icon: Database },
 ];
 
 export default function Layout({ children }: LayoutProps) {

@@ -202,9 +202,44 @@ class TestCreateSource:
         assert body["is_active"] is False
         assert (sources_root / ".sources" / "primary.json").exists()
 
-    def test_create_rejects_non_local_in_phase_1(
-        self, sources_server, vault_dir: Path
+    def test_create_onedrive_source(
+        self, sources_server, vault_dir: Path, sources_root: Path,
+        monkeypatch,
     ) -> None:
+        # Phase 4: OneDrive POSTs are accepted structurally; the
+        # source remains unusable until the OAuth callback persists
+        # an encrypted token bundle.
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv("MEMOGRAPH_SECRET_KEY", Fernet.generate_key().decode())
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "od-personal",
+                "kind": "onedrive",
+                "display_name": "OneDrive",
+                "params": {"drive_id": "b!abc"},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["kind"] == "onedrive"
+        assert body["params"]["drive_id"] == "b!abc"
+        assert (sources_root / ".sources" / "od-personal.json").exists()
+
+    def test_create_gdrive_source(
+        self, sources_server, vault_dir: Path, sources_root: Path,
+        monkeypatch,
+    ) -> None:
+        # Direct POST for GDrive works structurally, but the source
+        # remains unusable until the OAuth callback persists a bundle
+        # in the encrypted token store. Health probes will surface
+        # FAILED until then.
+        from cryptography.fernet import Fernet
+
+        monkeypatch.setenv("MEMOGRAPH_SECRET_KEY", Fernet.generate_key().decode())
         client = _client(sources_server, vault_dir)
         r = client.post(
             "/api/v1/sources",
@@ -212,12 +247,98 @@ class TestCreateSource:
                 "source_id": "gdrive-personal",
                 "kind": "gdrive",
                 "display_name": "Drive",
+                "params": {"folder_id": "abc123"},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["kind"] == "gdrive"
+        assert body["params"]["folder_id"] == "abc123"
+        assert (sources_root / ".sources" / "gdrive-personal.json").exists()
+
+    def test_create_s3_source(
+        self, sources_server, vault_dir: Path, sources_root: Path
+    ) -> None:
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "s3-primary",
+                "kind": "s3",
+                "display_name": "Primary S3",
+                "params": {
+                    "bucket": "my-bucket",
+                    "prefix": "memos",
+                    "region": "us-east-1",
+                },
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["kind"] == "s3"
+        # Only recognised fields persist — typos are dropped.
+        persisted = (sources_root / ".sources" / "s3-primary.json").read_text(
+            encoding="utf-8"
+        )
+        assert "my-bucket" in persisted
+        assert "us-east-1" in persisted
+
+    def test_create_s3_requires_bucket(
+        self, sources_server, vault_dir: Path
+    ) -> None:
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "s3-empty",
+                "kind": "s3",
+                "display_name": "Empty",
                 "params": {},
             },
             headers=ADMIN_HEADER,
         )
-        assert r.status_code == 501
-        assert "v1.1+ roadmap" in r.json()["error"]
+        assert r.status_code == 400
+        assert "bucket" in r.json()["error"].lower()
+
+    def test_create_notion_source(
+        self, sources_server, vault_dir: Path
+    ) -> None:
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "notion-team",
+                "kind": "notion",
+                "display_name": "Team Wiki",
+                "params": {"auth_token": "secret_test_token"},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["kind"] == "notion"
+
+    def test_create_notion_requires_token_somewhere(
+        self,
+        sources_server,
+        vault_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "notion-empty",
+                "kind": "notion",
+                "display_name": "Empty",
+                "params": {},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 400
+        assert "NOTION_API_TOKEN" in r.json()["error"]
 
     def test_create_rejects_relative_path(
         self, sources_server, vault_dir: Path

@@ -234,13 +234,28 @@ class TestLRUEviction:
 
 
 class TestFactoryDispatch:
-    def test_unknown_kind_raises(self) -> None:
+    def test_gdrive_requires_registry_context(self) -> None:
+        # GDrive needs an EncryptedTokenStore that only the registry can
+        # wire (it has the tenant's sources_dir). Calling the bare factory
+        # is a programming error — surface it loudly.
         config = SourceConfig(
             source_id="x",
             kind=SourceKind.GDRIVE,
             display_name="x",
         )
-        with pytest.raises(SourceError, match="not implemented yet"):
+        with pytest.raises(SourceError, match="SourceRegistry"):
+            default_source_factory(config)
+
+    def test_onedrive_requires_registry_context(self) -> None:
+        # OneDrive, like GDrive, needs the registry to inject the
+        # token store — calling the bare factory is a programming
+        # error and must raise loudly.
+        config = SourceConfig(
+            source_id="x",
+            kind=SourceKind.ONEDRIVE,
+            display_name="x",
+        )
+        with pytest.raises(SourceError, match="SourceRegistry"):
             default_source_factory(config)
 
     def test_local_dispatch(self, tmp_path: Path) -> None:

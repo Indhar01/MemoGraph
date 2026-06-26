@@ -1,11 +1,17 @@
 # ADR 0002: Storage Adapter Strategy
 
-- **Status:** In implementation (2026-06-26) — Phase 1 (LocalSource +
-  registry + audit + Prometheus + admin-scoped routes) landed behind
-  `MEMOGRAPH_SOURCES_ENABLED=1`. Phases 2–5 (S3, Notion, GDrive,
-  OneDrive, frontend, Redis-coordinated swap) tracked separately.
-  Accepted 2026-06-12; local filesystem remains canonical through
-  v1.0 with pluggable adapters arriving incrementally in v1.1+.
+- **Status:** In implementation (2026-06-26). Phases 1–5 landed behind
+  `MEMOGRAPH_SOURCES_ENABLED=1`: Phase 1 (LocalSource + registry +
+  audit + Prometheus + admin-scoped routes), Phase 2 (S3 + Notion +
+  in-process SyncScheduler), Phase 3 (Google Drive OAuth with PKCE +
+  encrypted token store + Drive v3 REST), Phase 4 (OneDrive /
+  SharePoint via Microsoft Graph), Phase 5 (frontend SourcesPage with
+  AddSourceWizard, health pills, activate/delete, OAuth redirect
+  handling). Outstanding before the flag flips on by default: Redis
+  pub/sub coordinated multi-worker swap, Playwright e2e coverage of
+  the wizard, Google OAuth app verification for the hosted multi-
+  tenant story. Accepted 2026-06-12; local filesystem remains
+  canonical through v1.0 with pluggable adapters arriving in v1.1+.
 - **Phase:** post-3.7 (storage extensibility roadmap).
 - **Decided by:** Project owner.
 - **Supersedes:** Nothing. Complements [ADR 0001](0001-tenancy-model.md).

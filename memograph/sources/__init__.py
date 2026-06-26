@@ -39,6 +39,14 @@ from memograph.sources.base import (
 )
 from memograph.sources.local import LocalSource
 
+# Phase 2+ adapters are not re-exported eagerly here — importing
+# them would pull in boto3 / notion-client at package import time
+# and break the optional-dependency promise. Consumers that know
+# they need an adapter should import it directly:
+#     from memograph.sources.s3 import S3Source
+#     from memograph.sources.notion import NotionSource
+# The registry's default factory does this lazily for routes.
+
 __all__ = [
     "ChangeEvent",
     "ChangeKind",

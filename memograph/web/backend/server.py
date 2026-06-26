@@ -63,6 +63,16 @@ _SOURCES_ENABLED = os.environ.get("MEMOGRAPH_SOURCES_ENABLED", "").lower() in {
     "yes",
 }
 
+# When source adapters are enabled, the in-process SyncScheduler ticks
+# every poll_interval_seconds and runs each source's
+# ``materialize_to_vault`` on its configured cadence. Set
+# ``MEMOGRAPH_SOURCES_SYNC_DISABLED=1`` to keep the registry available
+# (so the UI can list / probe sources) without running automatic syncs
+# — useful when an operator wants to drive ingestion from cron / CI.
+_SOURCES_SYNC_DISABLED = os.environ.get(
+    "MEMOGRAPH_SOURCES_SYNC_DISABLED", ""
+).lower() in {"1", "true", "yes"}
+
 
 def _configure_logging() -> None:
     """Idempotent root-logger setup honoring the LOG_JSON env flag."""
@@ -167,10 +177,39 @@ async def lifespan(app: FastAPI):
         # itself stays up so /healthz still returns 200 (the orchestrator
         # can decide whether to restart).
 
+    # Source-adapter sync loop. Only starts when the feature flag is
+    # set AND the operator hasn't asked us to stay passive. The
+    # scheduler is fault-tolerant — bad sources are caught per-tick
+    # and don't kill the loop — so a partial start is safe even if
+    # some sources are unreachable.
+    app.state.sync_scheduler = None
+    source_registry = getattr(app.state, "source_registry", None)
+    if source_registry is not None and not _SOURCES_SYNC_DISABLED:
+        try:
+            from memograph.sources.sync import SyncScheduler
+
+            poll = _env_int("MEMOGRAPH_SOURCES_SYNC_POLL_SECONDS", 30)
+            scheduler = SyncScheduler(
+                registry=source_registry,
+                poll_interval_seconds=float(poll),
+            )
+            await scheduler.start()
+            app.state.sync_scheduler = scheduler
+            logger.info("SyncScheduler started (poll=%ds)", poll)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to start SyncScheduler: %s", exc)
+
     yield
 
     # Shutdown
     app.state.is_ready = False
+    scheduler = getattr(app.state, "sync_scheduler", None)
+    if scheduler is not None:
+        try:
+            await scheduler.stop()
+            logger.info("SyncScheduler stopped")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("SyncScheduler shutdown error: %s", exc)
     logger.info("Shutting down MemoGraph server...")
 
 
@@ -368,6 +407,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # user rather than 401-ing — preserves local-dev workflows.
     from .routes import admin, ai, analytics, graph, memories, search
     if _SOURCES_ENABLED:
+        from .routes import oauth as oauth_routes
         from .routes import sources as sources_routes
 
     auth_dep = [Depends(require_user)]
@@ -398,6 +438,11 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             app.include_router(
                 sources_routes.router, prefix=prefix, dependencies=auth_dep
             )
+            # OAuth router: /oauth/{provider}/start is admin-scoped
+            # internally; /callback is public (the AS hits it
+            # directly, with state-binding as the legitimacy proof).
+            # Mount WITHOUT auth_dep so the callback isn't blocked.
+            app.include_router(oauth_routes.router, prefix=prefix)
 
     if _METRICS_ENABLED:
 

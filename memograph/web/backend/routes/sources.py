@@ -27,6 +27,7 @@ exposes ``router``.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -168,6 +169,127 @@ def _registry(request: Request) -> SourceRegistry:
             ),
         )
     return registry
+
+
+def _validate_local_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate + canonicalise LocalSource params.
+
+    Raises ``HTTPException(400)`` on any failure. Returns the
+    cleaned params dict; callers pass this straight into
+    :class:`SourceConfig.params`.
+    """
+    path_raw = params.get("path")
+    if not path_raw or not isinstance(path_raw, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LOCAL source requires params['path'] (absolute path)",
+        )
+    p = Path(path_raw).expanduser()
+    if not p.is_absolute():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LOCAL source path must be absolute",
+        )
+    if any(part == ".." for part in p.parts):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LOCAL source path must not contain '..' segments",
+        )
+    return {"path": str(p)}
+
+
+def _validate_s3_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate S3 params: ``bucket`` required, everything else optional.
+
+    Credentials, when present, are stored as-is on disk in the
+    JSON config. Operators should prefer the ambient AWS credential
+    chain (env, profile, instance role) and leave the credential
+    fields unset in the request body.
+    """
+    bucket = params.get("bucket")
+    if not bucket or not isinstance(bucket, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="S3 source requires params['bucket']",
+        )
+    # Pass through only the recognized fields so a typo in the
+    # request body doesn't quietly persist.
+    cleaned: dict[str, Any] = {"bucket": bucket}
+    for k in (
+        "prefix",
+        "region",
+        "endpoint_url",
+        "access_key_id",
+        "secret_access_key",
+        "session_token",
+        "suffix",
+    ):
+        if k in params and params[k] is not None:
+            cleaned[k] = params[k]
+    return cleaned
+
+
+def _validate_gdrive_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate Google Drive params.
+
+    Drive auth lives in the encrypted token store, not in
+    ``params``. The only validation we do here is to allowlist the
+    config keys we recognise; the actual usability check happens
+    on the first health probe (which will return FAILED if the
+    OAuth flow hasn't been completed yet).
+    """
+    cleaned: dict[str, Any] = {}
+    if "folder_id" in params and params["folder_id"]:
+        cleaned["folder_id"] = params["folder_id"]
+    if "scopes" in params and isinstance(params["scopes"], list):
+        cleaned["scopes"] = params["scopes"]
+    if "sync_interval_seconds" in params:
+        cleaned["sync_interval_seconds"] = params["sync_interval_seconds"]
+    return cleaned
+
+
+def _validate_onedrive_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate OneDrive params.
+
+    OneDrive auth lives in the encrypted token store, not in
+    ``params``. We allowlist the config keys we recognise so a
+    typo in the request body doesn't quietly persist.
+    """
+    cleaned: dict[str, Any] = {}
+    if "drive_id" in params and params["drive_id"]:
+        cleaned["drive_id"] = params["drive_id"]
+    if "folder_id" in params and params["folder_id"]:
+        cleaned["folder_id"] = params["folder_id"]
+    if "scopes" in params and isinstance(params["scopes"], list):
+        cleaned["scopes"] = params["scopes"]
+    if "sync_interval_seconds" in params:
+        cleaned["sync_interval_seconds"] = params["sync_interval_seconds"]
+    return cleaned
+
+
+def _validate_notion_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Validate Notion params: at least one of ``auth_token`` or
+    ambient ``NOTION_API_TOKEN`` env must be present.
+
+    We do not test the token here — that's the health probe's job.
+    Validation is structural only: either provide a token in the
+    request or rely on the env var.
+    """
+    cleaned: dict[str, Any] = {}
+    if "auth_token" in params and params["auth_token"]:
+        cleaned["auth_token"] = params["auth_token"]
+    elif not os.environ.get("NOTION_API_TOKEN"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "NOTION source requires params['auth_token'] or the "
+                "NOTION_API_TOKEN environment variable to be set"
+            ),
+        )
+    for k in ("database_id", "filter_query"):
+        if k in params and params[k]:
+            cleaned[k] = params[k]
+    return cleaned
 
 
 def _tenant_for(request: Request, user: User) -> str | None:
@@ -323,7 +445,27 @@ async def create_source(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
 
-    if payload.kind is not SourceKind.LOCAL:
+    # Per-kind param validation. Kept inline rather than dispatched
+    # via a hook on the adapter class because the validations are
+    # short and route-side rejection produces a friendlier 400 than
+    # waiting for the adapter constructor to raise.
+    if payload.kind is SourceKind.LOCAL:
+        validated_params = _validate_local_params(payload.params)
+    elif payload.kind is SourceKind.S3:
+        validated_params = _validate_s3_params(payload.params)
+    elif payload.kind is SourceKind.NOTION:
+        validated_params = _validate_notion_params(payload.params)
+    elif payload.kind is SourceKind.GDRIVE:
+        # GDrive sources are normally created through the OAuth
+        # callback (it auto-registers on success). Direct POST is
+        # supported for completeness — but the source will be
+        # unusable until tokens land in the encrypted store.
+        validated_params = _validate_gdrive_params(payload.params)
+    elif payload.kind is SourceKind.ONEDRIVE:
+        # Same pattern as GDrive — OAuth callback auto-registers; the
+        # direct POST is here for completeness and for testing.
+        validated_params = _validate_onedrive_params(payload.params)
+    else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=(
@@ -332,36 +474,12 @@ async def create_source(
             ),
         )
 
-    # LocalSource path validation: must be absolute, must not contain
-    # ".." segments, must not resolve outside its declared root.
-    # VaultStorage will create the directory if missing — that's the
-    # intended UX for "I picked a new folder" registration.
-    path_raw = payload.params.get("path")
-    if not path_raw or not isinstance(path_raw, str):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="LOCAL source requires params['path'] (absolute path)",
-        )
-    p = Path(path_raw).expanduser()
-    if not p.is_absolute():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="LOCAL source path must be absolute",
-        )
-    # Reject paths whose unresolved form contains ".." — defense in
-    # depth even though VaultStorage's own guards apply later.
-    if any(part == ".." for part in p.parts):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="LOCAL source path must not contain '..' segments",
-        )
-
     config = SourceConfig(
         source_id=payload.source_id,
         kind=payload.kind,
         display_name=payload.display_name,
         tenant_id=tenant_id,
-        params={"path": str(p)},
+        params=validated_params,
     )
     try:
         registry.register(config)

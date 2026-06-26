@@ -118,6 +118,7 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 
 ### Enterprise & SaaS readiness
 
+- **Source adapters** — connect a local folder, S3-compatible bucket (AWS / MinIO / R2 / B2), Notion workspace, Google Drive folder, or OneDrive / SharePoint library. OAuth flows with PKCE; Fernet-encrypted refresh-token store; per-source health probes; admin-scoped REST + a wizard in the web UI. Wired behind `MEMOGRAPH_SOURCES_ENABLED=1` until v1.1.
 - **Multi-tenancy** with filesystem-isolated tenants, an LRU registry of warm kernels, per-tenant audit logs, and end-to-end isolation tests gating release.
 - **Authentication** via OIDC (JWKS) or hashed API keys; per-route auth scope; identity bound into the audit log.
 - **Web hardening** — restrictive CORS, slowapi rate limiting, request-size caps, structured JSON logging with request IDs, info-leak-free 500 handler.
@@ -127,7 +128,7 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 - **Reliability** — concurrency audit, stress tests for concurrent writes, versioned backup format with integrity checks.
 - **Distribution** — pinned-and-locked dependencies, Docker compose for self-host, security workflow (`bandit` + `pip-audit`).
 
-> See [docs/INSTALL_ENTERPRISE.md](docs/INSTALL_ENTERPRISE.md), [docs/SSO_SETUP.md](docs/SSO_SETUP.md), [docs/GDPR_RUNBOOK.md](docs/GDPR_RUNBOOK.md), [docs/BACKUP_RESTORE_RUNBOOK.md](docs/BACKUP_RESTORE_RUNBOOK.md), [docs/OBSERVABILITY_GUIDE.md](docs/OBSERVABILITY_GUIDE.md), and [docs/RBAC_GUIDE.md](docs/RBAC_GUIDE.md) for the operator-facing details.
+> See [docs/INSTALL_ENTERPRISE.md](docs/INSTALL_ENTERPRISE.md), [docs/SSO_SETUP.md](docs/SSO_SETUP.md), [docs/SOURCES.md](docs/SOURCES.md), [docs/GDPR_RUNBOOK.md](docs/GDPR_RUNBOOK.md), [docs/BACKUP_RESTORE_RUNBOOK.md](docs/BACKUP_RESTORE_RUNBOOK.md), [docs/OBSERVABILITY_GUIDE.md](docs/OBSERVABILITY_GUIDE.md), and [docs/RBAC_GUIDE.md](docs/RBAC_GUIDE.md) for the operator-facing details.
 
 ## 🚀 Quick Start
 

@@ -85,16 +85,45 @@ to avoid touching real cloud APIs."""
 def default_source_factory(config: SourceConfig) -> Source:
     """Build a :class:`Source` from a config, dispatching on kind.
 
-    Only LOCAL is wired in Phase 1. Phase 2 adds S3 + Notion; Phases
-    3-4 add Drive + OneDrive. Unknown kinds raise
-    :class:`SourceError` so a corrupt config doesn't silently boot
-    into a half-broken registry.
+    Phase 1 wired LOCAL; Phase 2 adds S3 + Notion; Phases 3-4 add
+    Drive + OneDrive. Each adapter is imported lazily inside its
+    branch so importing :mod:`memograph.sources` does not pull in
+    boto3 / notion-client / Google / Microsoft SDKs for installs
+    that don't need them. Unknown kinds raise :class:`SourceError`
+    so a corrupt config doesn't silently boot into a half-broken
+    registry.
     """
     if config.kind is SourceKind.LOCAL:
         return LocalSource(config)
-    # Phase 2+ adapters are imported lazily inside their branches so
-    # importing memograph.sources doesn't pull in boto3 / google APIs
-    # for installs that don't need them.
+    if config.kind is SourceKind.S3:
+        from memograph.sources.s3 import S3Source
+
+        return S3Source(config)
+    if config.kind is SourceKind.NOTION:
+        from memograph.sources.notion import NotionSource
+
+        return NotionSource(config)
+    if config.kind is SourceKind.GDRIVE:
+        # The token store needs a path the factory cannot know on
+        # its own (depends on the registry's global_root + tenant).
+        # The registry's :meth:`SourceRegistry.get` injects the
+        # store via :meth:`_build_with_context`; this branch only
+        # fires when callers bypass the registry, in which case
+        # they must pre-build a source with the store injected.
+        raise SourceError(
+            "GoogleDriveSource cannot be built via default_source_factory "
+            "alone — go through SourceRegistry.get() so the token store "
+            "is wired with the tenant's sources_dir."
+        )
+    if config.kind is SourceKind.ONEDRIVE:
+        # Same reasoning as GDRIVE above — the Microsoft adapter also
+        # depends on the encrypted token store and must be built via
+        # the registry's :meth:`_build_with_context`.
+        raise SourceError(
+            "OneDriveSource cannot be built via default_source_factory "
+            "alone — go through SourceRegistry.get() so the token store "
+            "is wired with the tenant's sources_dir."
+        )
     raise SourceError(
         f"no adapter registered for source kind {config.kind.value!r}; "
         "this kind is on the v1.1+ roadmap but not implemented yet"
@@ -213,7 +242,7 @@ class SourceRegistry:
 
         try:
             config = self._load_config(tenant_id, source_id)
-            source = self._factory(config)
+            source = self._build_with_context(config)
         except Exception:
             with self._lock:
                 self._building.pop(key, None)
@@ -227,6 +256,55 @@ class SourceRegistry:
             self._building.pop(key, None)
         event.set()
         return source
+
+    def _build_with_context(self, config: SourceConfig) -> Source:
+        """Construct a source with registry-derived context plumbed in.
+
+        Some adapters need access to per-tenant filesystem paths
+        (token stores live there). The default factory is intentionally
+        context-free; this method is the seam where the registry
+        bridges the two.
+
+        Kept inside the registry so adapters never reach back out to
+        ``SourceRegistry`` directly — that would invert the
+        dependency and tangle the lifecycle.
+        """
+        if config.kind is SourceKind.GDRIVE:
+            from memograph.sources.gdrive import GoogleDriveSource
+            from memograph.sources.oauth.token_store import (
+                EncryptedTokenStore,
+                TokenStoreError,
+            )
+
+            sources_dir = self._sources_dir(config.tenant_id)
+            try:
+                store = EncryptedTokenStore(sources_dir)
+            except TokenStoreError as exc:
+                # Surface a clearer message than the generic
+                # SourceError the user would otherwise see at the
+                # first read_document() call.
+                raise SourceError(
+                    f"GoogleDriveSource {config.source_id!r} could not "
+                    f"build its token store: {exc}"
+                ) from exc
+            return GoogleDriveSource(config, token_store=store)
+        if config.kind is SourceKind.ONEDRIVE:
+            from memograph.sources.oauth.token_store import (
+                EncryptedTokenStore,
+                TokenStoreError,
+            )
+            from memograph.sources.onedrive import OneDriveSource
+
+            sources_dir = self._sources_dir(config.tenant_id)
+            try:
+                store = EncryptedTokenStore(sources_dir)
+            except TokenStoreError as exc:
+                raise SourceError(
+                    f"OneDriveSource {config.source_id!r} could not "
+                    f"build its token store: {exc}"
+                ) from exc
+            return OneDriveSource(config, token_store=store)
+        return self._factory(config)
 
     def _load_config(self, tenant_id: str | None, source_id: str) -> SourceConfig:
         path = self._config_path(tenant_id, source_id)

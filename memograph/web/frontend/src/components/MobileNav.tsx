@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { X, Brain, Search, Network, BarChart3, PlusCircle } from 'lucide-react';
+import { X, Brain, Search, Network, BarChart3, PlusCircle, Database } from 'lucide-react';
 
 interface MobileNavProps {
   open: boolean;
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: '/search', label: 'Search', icon: Search },
   { path: '/graph', label: 'Graph', icon: Network },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { path: '/sources', label: 'Sources', icon: Database },
 ];
 
 export function MobileNav({ open, onClose }: MobileNavProps) {
