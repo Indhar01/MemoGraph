@@ -14,6 +14,7 @@ from typing import Any
 from ..core.enums import MemoryType
 from ..core.kernel import MemoryKernel
 from .autonomous_hooks import AutonomousHooks
+from .capture_filter import VALID_MODES, CaptureMode, normalize_mode
 from .conversation_monitor import ConversationMonitor
 from .vault_lock import VaultLock, VaultLockError
 
@@ -144,6 +145,15 @@ class MemoGraphMCPServer:
             self.autonomous_hooks.auto_search_enabled = True
             self.autonomous_hooks.auto_save_responses = True
             logger.info("Autonomous mode enabled via MEMOGRAPH_AUTONOMOUS_MODE")
+
+        # Capture mode: the single low/mid/high dial that drives both the
+        # Tier-A Claude Code Stop-hook (via the CLI) and the Tier-B unified
+        # auto_hook_turn MCP tool. An unknown value falls back to "mid" so a
+        # typo in the env var cannot silently disable saves.
+        self.capture_mode: CaptureMode = normalize_mode(
+            os.environ.get("MEMOGRAPH_CAPTURE_MODE")
+        )
+        logger.info(f"Capture mode: {self.capture_mode}")
 
         # Initialize conversation monitor if enabled (Layer 2 auto-save)
         monitor_enabled = (
@@ -1374,10 +1384,13 @@ class MemoGraphMCPServer:
                     "analytics": ["get_vault_info", "get_vault_stats"],
                     "discovery": ["list_available_tools"],
                     "autonomous": [
+                        "auto_hook_turn",
                         "auto_hook_query",
                         "auto_hook_response",
                         "configure_autonomous_mode",
+                        "configure_capture_mode",
                         "get_autonomous_config",
+                        "get_capture_mode",
                     ],
                     "graph": [
                         "relate_memories",
@@ -2162,6 +2175,87 @@ class MemoGraphMCPServer:
         """
         return self.autonomous_hooks.get_configuration()
 
+    async def auto_hook_turn(
+        self,
+        user_query: str,
+        ai_response: str,
+        sources_used: list[dict[str, Any]] | None = None,
+        conversation_id: str | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Unified end-of-turn hook combining search-context recall and save.
+
+        This is the recommended Tier-B entry point for MCP clients (Claude
+        Desktop, Cursor, Cline, Codex, ChatGPT, Gemini). One call per turn
+        replaces the auto_hook_query + auto_hook_response pair, halving the
+        failure surface from forgotten calls.
+
+        Args:
+            user_query: The user's verbatim message for this turn.
+            ai_response: The assistant's complete reply.
+            sources_used: Optional sources cited from the vault.
+            conversation_id: Optional stable conversation identifier.
+            mode: One-call override of the server-configured capture mode
+                ('low', 'mid', 'high'). Unknown values fall back to default.
+
+        Returns:
+            Dictionary with the capture decision and save result (if any).
+        """
+        return await self.autonomous_hooks.auto_hook_turn(
+            user_query=user_query,
+            ai_response=ai_response,
+            sources_used=sources_used,
+            conversation_id=conversation_id,
+            mode=mode,
+        )
+
+    async def configure_capture_mode(self, mode: str) -> dict[str, Any]:
+        """Switch the capture mode at runtime.
+
+        Args:
+            mode: 'low' (search only), 'mid' (filtered save — default),
+                or 'high' (save every substantive turn).
+
+        Returns:
+            Dictionary with the new mode and a summary of behavior.
+        """
+        normalized = normalize_mode(mode)
+        if mode and normalized != mode.strip().lower():
+            return {
+                "success": False,
+                "error": (
+                    f"Unknown capture mode {mode!r}. "
+                    f"Valid modes: {', '.join(VALID_MODES)}."
+                ),
+                "current_mode": self.capture_mode,
+            }
+        self.capture_mode = normalized
+        logger.info(f"Capture mode switched to: {self.capture_mode}")
+        return {
+            "success": True,
+            "mode": self.capture_mode,
+            "message": f"Capture mode set to {self.capture_mode!r}.",
+            "behavior": {
+                "low": "Search-only. No saves to the vault.",
+                "mid": "Filtered save (default). Skips noise/trivial turns.",
+                "high": "Save every substantive turn verbatim.",
+            }[self.capture_mode],
+        }
+
+    async def get_capture_mode(self) -> dict[str, Any]:
+        """Report the current capture mode and what each mode does."""
+        return {
+            "success": True,
+            "current_mode": self.capture_mode,
+            "valid_modes": list(VALID_MODES),
+            "descriptions": {
+                "low": "Search-only. No saves to the vault.",
+                "mid": "Filtered save (default). Skips noise/trivial turns.",
+                "high": "Save every substantive turn verbatim.",
+            },
+            "env_var": "MEMOGRAPH_CAPTURE_MODE",
+        }
+
     async def verify_last_save(
         self,
         time_window_seconds: int = 60,
@@ -2847,6 +2941,81 @@ class MemoGraphMCPServer:
             {
                 "name": "get_autonomous_config",
                 "description": "Get current autonomous hooks configuration and recommendations",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "name": "auto_hook_turn",
+                "description": (
+                    "💾 SAVE TURN (UNIFIED) — Call ONCE at the end of every substantive turn "
+                    "to persist the exchange. Replaces the auto_hook_query + auto_hook_response "
+                    "pair with a single call, halving the chance of forgetting.\n\n"
+                    "The server's capture mode (low/mid/high) decides what actually saves:\n"
+                    "  • low  — never saves\n"
+                    "  • mid  — saves filtered turns (default)\n"
+                    "  • high — saves every substantive turn\n\n"
+                    "Pass mode='low'|'mid'|'high' to override per-call."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "user_query": {
+                            "type": "string",
+                            "description": "The user's verbatim message for this turn",
+                        },
+                        "ai_response": {
+                            "type": "string",
+                            "description": "The assistant's complete reply",
+                        },
+                        "sources_used": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "title": {"type": "string"},
+                                },
+                            },
+                            "description": "Optional vault sources cited in the reply",
+                        },
+                        "conversation_id": {
+                            "type": "string",
+                            "description": "Optional stable conversation identifier",
+                        },
+                        "mode": {
+                            "type": "string",
+                            "enum": ["low", "mid", "high"],
+                            "description": "Per-call override of capture mode (optional)",
+                        },
+                    },
+                    "required": ["user_query", "ai_response"],
+                },
+            },
+            {
+                "name": "configure_capture_mode",
+                "description": (
+                    "Switch the capture mode at runtime. "
+                    "low = search only (no saves); "
+                    "mid = filtered save (default); "
+                    "high = save every substantive turn."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["low", "mid", "high"],
+                            "description": "Capture mode to activate",
+                        },
+                    },
+                    "required": ["mode"],
+                },
+            },
+            {
+                "name": "get_capture_mode",
+                "description": "Get the current capture mode and a description of each mode.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {},

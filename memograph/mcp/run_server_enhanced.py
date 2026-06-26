@@ -333,10 +333,16 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
             result = await memograph_server.auto_hook_query(**arguments)
         elif name == "auto_hook_response":
             result = await memograph_server.auto_hook_response(**arguments)
+        elif name == "auto_hook_turn":
+            result = await memograph_server.auto_hook_turn(**arguments)
         elif name == "configure_autonomous_mode":
             result = await memograph_server.configure_autonomous_mode(**arguments)
+        elif name == "configure_capture_mode":
+            result = await memograph_server.configure_capture_mode(**arguments)
         elif name == "get_autonomous_config":
             result = await memograph_server.get_autonomous_config()
+        elif name == "get_capture_mode":
+            result = await memograph_server.get_capture_mode()
         elif name == "verify_last_save":
             result = await memograph_server.verify_last_save(**arguments)
         elif name == "get_save_stats":

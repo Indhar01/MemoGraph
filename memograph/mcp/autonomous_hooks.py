@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..core.enums import MemoryType
+from .capture_filter import CaptureDecision, should_save
 
 logger = logging.getLogger(__name__)
 
@@ -340,6 +341,159 @@ class AutonomousHooks:
                 "success": False,
                 "error": str(e),
                 "saved": False,
+            }
+
+    async def auto_hook_turn(
+        self,
+        user_query: str,
+        ai_response: str,
+        sources_used: list[dict[str, Any]] | None = None,
+        conversation_id: str | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Unified end-of-turn capture: applies capture-mode filter, then saves.
+
+        Tier-B entry point used by MCP clients that lack native harness
+        hooks (Claude Desktop, Cursor, Cline, Codex, ChatGPT, Gemini). One
+        call per turn replaces the auto_hook_query + auto_hook_response
+        pair, so a forgotten call costs only one missed save instead of two.
+
+        Args:
+            user_query: User's verbatim message.
+            ai_response: Assistant's complete reply.
+            sources_used: Optional vault sources cited in the reply.
+            conversation_id: Optional stable conversation identifier.
+            mode: Per-call override of capture mode. None uses the server's
+                configured mode (``self.server.capture_mode``).
+
+        Returns:
+            Dict with ``decision`` (the CaptureDecision), and ``saved`` /
+            ``path`` if a write occurred.
+        """
+        # Track save attempt eagerly so analytics see the call even on filter-drop.
+        self.save_attempts += 1
+        timestamp = datetime.now(timezone.utc)
+
+        effective_mode = mode or getattr(self.server, "capture_mode", "mid")
+        decision: CaptureDecision = should_save(
+            user_query=user_query,
+            ai_response=ai_response,
+            mode=effective_mode,
+            sources_cited=bool(sources_used),
+        )
+
+        if not decision.save:
+            self._add_to_history(
+                {
+                    "timestamp": timestamp,
+                    "success": True,
+                    "skipped": True,
+                    "reason": decision.reason,
+                }
+            )
+            return {
+                "success": True,
+                "saved": False,
+                "mode": effective_mode,
+                "decision": {
+                    "save": False,
+                    "reason": decision.reason,
+                    "salience": decision.salience,
+                },
+                "message": f"Skipped per capture mode {effective_mode!r}: {decision.reason}",
+            }
+
+        # Honor readonly even past the filter.
+        if getattr(self.server, "readonly", False):
+            logger.info("auto_hook_turn: readonly mode — skipping save")
+            return {
+                "success": True,
+                "saved": False,
+                "readonly": True,
+                "mode": effective_mode,
+                "decision": {
+                    "save": False,
+                    "reason": "readonly_server",
+                    "salience": decision.salience,
+                },
+                "message": "Server is in read-only mode; turn not saved.",
+            }
+
+        try:
+            title = f"Conversation: {user_query[:50]}..."
+            content = "**Saved By:** Layer 1 (auto_hook_turn — unified)\n\n"
+            content += f"**Capture Mode:** {effective_mode}\n"
+            content += f"**Decision:** {decision.reason} (salience={decision.salience:.2f})\n\n"
+            content += f"**User Query**\n\n{user_query}\n\n"
+            content += f"**AI Response**\n\n{ai_response}\n\n"
+
+            if sources_used:
+                content += "**Sources Used**\n\n"
+                for source in sources_used:
+                    content += (
+                        f"- [[{source.get('id', 'unknown')}]] "
+                        f"{source.get('title', 'Untitled')}\n"
+                    )
+                content += "\n"
+
+            if conversation_id:
+                content += f"**Conversation ID**: {conversation_id}\n"
+
+            content += f"\n**Timestamp**: {timestamp.isoformat()}"
+
+            tags = list(decision.tags) + ["layer1-explicit", "unified-turn"]
+
+            path = self.kernel.remember(
+                title=title,
+                content=content,
+                memory_type=MemoryType.EPISODIC,
+                tags=tags,
+                salience=decision.salience,
+            )
+
+            # Keep search results fresh for the next turn.
+            try:
+                self.kernel.ingest(force=False)
+            except Exception as ingest_error:
+                logger.warning(f"Failed to refresh graph after save: {ingest_error}")
+
+            self.successful_saves += 1
+            self._add_to_history(
+                {
+                    "timestamp": timestamp,
+                    "success": True,
+                    "title": title,
+                    "mode": effective_mode,
+                }
+            )
+
+            logger.info(f"auto_hook_turn saved conversation to: {path}")
+
+            return {
+                "success": True,
+                "saved": True,
+                "path": path,
+                "mode": effective_mode,
+                "decision": {
+                    "save": True,
+                    "reason": decision.reason,
+                    "salience": decision.salience,
+                    "tags": list(tags),
+                },
+                "message": f"Conversation saved (mode={effective_mode}).",
+            }
+
+        except Exception as e:
+            self.failed_saves += 1
+            self._add_to_history(
+                {"timestamp": timestamp, "success": False, "error": str(e)}
+            )
+            logger.error(f"Error in auto_hook_turn: {e}")
+            return {
+                "success": False,
+                "saved": False,
+                "error": str(e),
+                "mode": effective_mode,
             }
 
     async def configure(

@@ -1,0 +1,65 @@
+name: OpenSSF Scorecard
+
+# Scorecard rates the repo's security posture on ~18 axes (branch
+# protection, signed releases, pinned actions, fuzzing, SAST, etc.) and
+# publishes a badge + SARIF report. It's the closest free thing to a
+# procurement-team scorecard; many "Awesome" lists and enterprise
+# allowlists check it.
+#
+# Free for public repos. Results appear under "Security → Code scanning"
+# and at https://securityscorecards.dev/viewer/?uri=github.com/<owner>/<repo>.
+
+on:
+  # Branch protection report only fires meaningfully on the default branch.
+  branch_protection_rule:
+  schedule:
+    # Wednesday 04:23 UTC — between Sunday CodeQL and Monday Dependabot.
+    - cron: '23 4 * * 3'
+  push:
+    branches: [main]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload SARIF results to GitHub code-scanning.
+      security-events: write
+      # Required for branch-protection check.
+      id-token: write
+      contents: read
+      actions: read
+      # Reading issues/checks improves the "Webhooks" + "Maintained" checks.
+      issues: read
+      checks: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@v2.4.0
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          # `publish_results: true` requires the repo to opt in at
+          # https://github.com/ossf/scorecard-action#publishing-results
+          # — once enabled, the badge in README will render.
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-results
+          path: scorecard-results.sarif
+          retention-days: 5
+
+      - name: Upload SARIF to code-scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: scorecard-results.sarif
+          category: scorecard

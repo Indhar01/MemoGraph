@@ -92,7 +92,9 @@ class TestToolSchema:
         """Test that get_tools_schema returns a list."""
         schemas = mcp_server.get_tools_schema()
         assert isinstance(schemas, list)
-        assert len(schemas) == 39  # Updated tool count
+        assert (
+            len(schemas) == 42
+        )  # +auto_hook_turn, configure_capture_mode, get_capture_mode
 
     def test_all_tools_have_required_fields(self, mcp_server):
         """Test that all tool schemas have name, description, inputSchema."""
@@ -384,7 +386,9 @@ class TestListAvailableTools:
         """Test listing available tools."""
         result = await mcp_server.list_available_tools()
         assert result["success"] is True
-        assert result["total_tools"] == 39  # Updated tool count
+        assert (
+            result["total_tools"] == 42
+        )  # +auto_hook_turn, configure_capture_mode, get_capture_mode
         assert "categories" in result
         assert "autonomous" in result["categories"]
         assert "graph" in result["categories"]
@@ -763,7 +767,7 @@ class TestPhase3ToolCount:
         """Test that tool count reflects all available tools."""
         schemas = mcp_server.get_tools_schema()
         # Updated to reflect current tool count
-        assert len(schemas) == 39
+        assert len(schemas) == 42
 
     def test_get_auto_save_analytics_tool_in_schema(self, mcp_server):
         """Test that get_auto_save_analytics is in tool schema."""

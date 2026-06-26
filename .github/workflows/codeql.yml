@@ -1,0 +1,64 @@
+name: CodeQL
+
+# GitHub-native SAST. Bandit (in security.yml) catches Python-specific
+# anti-patterns; CodeQL catches dataflow-level vulnerabilities (taint
+# tracking, injection, deserialization) that pattern matchers miss.
+# Results land in the repo's "Security → Code scanning" tab and gate PRs
+# once branch protection is enabled.
+#
+# Free for public repositories. The weekly cron picks up newly-published
+# query packs even when the source tree is quiet.
+
+on:
+  push:
+    branches: [main, develop, dev]
+  pull_request:
+    branches: [main, develop, dev]
+  schedule:
+    # Sunday 03:42 UTC — off-peak, before Monday Dependabot run.
+    - cron: '42 3 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # Required to upload SARIF results to code-scanning.
+      security-events: write
+      # Required for private repos; harmless for public ones.
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Only Python is shipped in this repo. The web frontend is JS/TS
+        # under memograph/web/frontend — add 'javascript-typescript' here
+        # if/when its surface grows beyond a dev-time UI.
+        language: ['python']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds higher-precision queries beyond the
+          # default set; security-and-quality also includes maintainability
+          # checks but they're already covered by ruff + mypy here.
+          queries: security-extended
+
+      - name: Autobuild
+        # For Python, autobuild is a no-op — CodeQL traces imports without
+        # needing a real build. Kept for parity in case JS/TS is added.
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
