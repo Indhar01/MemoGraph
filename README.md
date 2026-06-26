@@ -15,6 +15,9 @@
 [![Type checked: mypy](https://img.shields.io/badge/type%20checked-mypy-blue)](http://mypy-lang.org/)
 [![Tests](https://img.shields.io/badge/tests-pytest-orange)](https://docs.pytest.org/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-brightgreen)](https://github.com/Indhar01/MemoGraph)
+[![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blue)](https://indhar01.github.io/MemoGraph/)
+<!-- Hosted demo: replace the placeholder URL once the Hugging Face Space is live. See deploy/huggingface/SETUP.md. -->
+[![Try the live demo](https://img.shields.io/badge/demo-Hugging%20Face%20Space-yellow?logo=huggingface)](https://huggingface.co/spaces)
 
 **MemoGraph turns a folder of markdown notes into a queryable, AI-ready knowledge graph.** It solves the LLM memory problem — your AI assistants forget last Tuesday's decision, can't find a related note across two projects, and re-derive the same insight again and again — by giving them a persistent, navigable, attribution-friendly memory layer that lives in plain markdown files you control.
 

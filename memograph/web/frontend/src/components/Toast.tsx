@@ -1,8 +1,5 @@
 /**
- * Toast Component
- *
- * Individual toast notification with animations and icons.
- * Supports success, error, info, and warning types.
+ * Toast notification — glass-styled, theme-aware.
  */
 
 import { useEffect, useState } from 'react';
@@ -16,107 +13,63 @@ interface ToastProps {
 
 export function Toast({ toast }: ToastProps) {
   const { removeToast } = useToastStore();
-  const [isExiting, setIsExiting] = useState(false);
-
-  // Handle exit animation before removing
-  const handleClose = () => {
-    setIsExiting(true);
-    setTimeout(() => {
-      removeToast(toast.id);
-    }, 300); // Match animation duration
-  };
-
-  // Auto-dismiss progress bar
+  const [exiting, setExiting] = useState(false);
   const [progress, setProgress] = useState(100);
+
+  const handleClose = () => {
+    setExiting(true);
+    setTimeout(() => removeToast(toast.id), 200);
+  };
 
   useEffect(() => {
     if (toast.duration <= 0) return;
-
-    const interval = 50; // Update every 50ms
-    const decrement = (interval / toast.duration) * 100;
-
-    const timer = setInterval(() => {
-      setProgress((prev) => {
-        const next = prev - decrement;
-        return next <= 0 ? 0 : next;
-      });
-    }, interval);
-
-    return () => clearInterval(timer);
+    const tick = 50;
+    const dec = (tick / toast.duration) * 100;
+    const t = setInterval(() => {
+      setProgress((p) => Math.max(0, p - dec));
+    }, tick);
+    return () => clearInterval(t);
   }, [toast.duration]);
 
-  // Get icon and colors based on type
-  const getTypeStyles = () => {
+  const styles = (() => {
     switch (toast.type) {
       case 'success':
-        return {
-          icon: <CheckCircle className="w-5 h-5" />,
-          className: 'bg-green-50 border-green-200 text-green-900',
-          iconColor: 'text-green-600',
-          progressColor: 'bg-green-500',
-        };
+        return { Icon: CheckCircle, ring: 'border-emerald-500/40', tint: 'text-emerald-500', bar: 'bg-emerald-500' };
       case 'error':
-        return {
-          icon: <AlertCircle className="w-5 h-5" />,
-          className: 'bg-red-50 border-red-200 text-red-900',
-          iconColor: 'text-red-600',
-          progressColor: 'bg-red-500',
-        };
+        return { Icon: AlertCircle, ring: 'border-rose-500/40', tint: 'text-rose-500', bar: 'bg-rose-500' };
       case 'warning':
-        return {
-          icon: <AlertTriangle className="w-5 h-5" />,
-          className: 'bg-yellow-50 border-yellow-200 text-yellow-900',
-          iconColor: 'text-yellow-600',
-          progressColor: 'bg-yellow-500',
-        };
+        return { Icon: AlertTriangle, ring: 'border-amber-500/40', tint: 'text-amber-500', bar: 'bg-amber-500' };
       case 'info':
       default:
-        return {
-          icon: <Info className="w-5 h-5" />,
-          className: 'bg-blue-50 border-blue-200 text-blue-900',
-          iconColor: 'text-blue-600',
-          progressColor: 'bg-blue-500',
-        };
+        return { Icon: Info, ring: 'border-primary-500/40', tint: 'text-primary-500', bar: 'bg-primary-500' };
     }
-  };
-
-  const styles = getTypeStyles();
+  })();
+  const { Icon } = styles;
 
   return (
     <div
-      className={cn(
-        'relative flex items-start space-x-3 p-4 rounded-lg border shadow-lg min-w-[320px] max-w-md',
-        'transition-all duration-300 ease-out',
-        isExiting ? 'opacity-0 translate-x-full' : 'opacity-100 translate-x-0',
-        styles.className
-      )}
       role="alert"
       aria-live="polite"
+      className={cn(
+        'relative flex items-start gap-3 p-4 rounded-md glass-strong border shadow-glass-md min-w-[320px] max-w-md transition-all duration-200',
+        styles.ring,
+        exiting ? 'opacity-0 translate-x-6' : 'opacity-100 translate-x-0',
+      )}
     >
-      {/* Icon */}
-      <div className={cn('flex-shrink-0 mt-0.5', styles.iconColor)}>
-        {styles.icon}
-      </div>
-
-      {/* Message */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium">{toast.message}</p>
-      </div>
-
-      {/* Close button */}
+      <Icon className={cn('w-5 h-5 shrink-0 mt-0.5', styles.tint)} />
+      <p className="flex-1 text-sm text-fg font-medium">{toast.message}</p>
       <button
+        type="button"
         onClick={handleClose}
-        className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
         aria-label="Close notification"
+        className="text-muted-fg hover:text-fg transition-colors"
       >
         <X className="w-4 h-4" />
       </button>
-
-      {/* Progress bar */}
       {toast.duration > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 bg-opacity-30 rounded-b-lg overflow-hidden">
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-border rounded-b-md overflow-hidden">
           <div
-            className={cn('h-full transition-all ease-linear', styles.progressColor)}
+            className={cn('h-full transition-all ease-linear', styles.bar)}
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -125,25 +78,19 @@ export function Toast({ toast }: ToastProps) {
   );
 }
 
-/**
- * ToastContainer Component
- *
- * Renders all active toasts in a fixed position on the screen.
- * Place this component once at the root of your app.
- */
 export function ToastContainer() {
   const { toasts } = useToastStore();
-
   if (toasts.length === 0) return null;
-
   return (
     <div
-      className="fixed top-4 right-4 z-50 flex flex-col space-y-2"
+      className="fixed top-20 right-4 z-[110] flex flex-col gap-2 pointer-events-none"
       aria-live="polite"
       aria-atomic="false"
     >
-      {toasts.map((toast) => (
-        <Toast key={toast.id} toast={toast} />
+      {toasts.map((t) => (
+        <div key={t.id} className="pointer-events-auto animate-fade-up">
+          <Toast toast={t} />
+        </div>
       ))}
     </div>
   );

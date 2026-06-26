@@ -25,7 +25,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { aiAPI } from '../../lib/api';
-import type { GapType, KnowledgeGapItem } from '../../types';
+import type { GapType } from '../../types';
 
 interface GapDetectorProps {
   minSeverity?: number;

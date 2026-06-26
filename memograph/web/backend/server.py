@@ -17,7 +17,12 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from ...core.kernel import MemoryKernel
 from .auth import AuthProvider, require_scope, require_user
-from .middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from .middleware import (
+    BodySizeLimitMiddleware,
+    ReadOnlyMiddleware,
+    RequestIdMiddleware,
+    is_readonly_enabled,
+)
 from .observability import init_telemetry, metrics_endpoint, record_request
 from .rate_limit import limiter, rate_limit_exceeded_handler
 
@@ -214,6 +219,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
 
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(BodySizeLimitMiddleware)
+
+    # Read-only gate runs AFTER body-size + request-id (added first =
+    # runs last; Starlette applies middleware in reverse-add order). The
+    # demo sandbox sets MEMOGRAPH_READONLY=true; in normal deployments
+    # the env var is unset and this middleware is a no-op.
+    if is_readonly_enabled():
+        logger.info(
+            "Read-only mode enabled (MEMOGRAPH_READONLY=true). "
+            "Body-mutating methods will be rejected with 403."
+        )
+        app.add_middleware(ReadOnlyMiddleware)
 
     # Initialize kernel
     vault_path_obj = Path(vault_path).expanduser()
