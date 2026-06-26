@@ -1,11 +1,19 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: >-
+  If you use this software, please cite both the software (this file) and
+  the accompanying paper (see `preferred-citation` below) so that uses
+  appear in both software and paper citation graphs.
 type: software
 title: "MemoGraph: Graph-Based Memory System for LLMs"
-abstract: "A graph-based memory vault for Large Language Models with intelligent retrieval capabilities using knowledge graphs, hybrid search, and semantic embeddings."
+abstract: >-
+  A graph-based memory vault for Large Language Models with hybrid
+  retrieval (keyword + semantic + graph traversal), a four-class
+  memory taxonomy (episodic, semantic, procedural, fact), and a
+  Model Context Protocol (MCP) server for use by LLM-based agents.
 authors:
-  - family-names: "Contributors"
-    given-names: "MemoGraph"
+  - family-names: "S"
+    given-names: "Indirakumar"
+    email: "itsmeindirakumar@gmail.com"
 repository-code: "https://github.com/Indhar01/MemoGraph"
 url: "https://github.com/Indhar01/MemoGraph"
 keywords:
@@ -17,6 +25,43 @@ keywords:
   - ai
   - machine-learning
   - python
+  - model-context-protocol
+  - mcp
+  - agent-memory
+  - persistent-memory
 license: MIT
-version: 0.0.2
-date-released: 2026-03-02
+version: 0.4.1
+date-released: 2026-06-23
+
+# Paper citation. Replace `arxiv-id` and `year`/`month` fields below
+# with concrete values once the preprint is posted. Until then, this
+# block is intentionally left as a template — `cffconvert --validate`
+# treats `preferred-citation` as optional so leaving placeholders does
+# not fail CI, but `cff-version` consumers (Zenodo, Zotero, GitHub's
+# "Cite this repository") will start surfacing the paper as the canonical
+# citation as soon as the arxiv-id is filled in.
+preferred-citation:
+  type: article
+  title: "MemoGraph: A Graph-Based Persistent Memory Architecture for Large Language Model Agents"
+  authors:
+    - family-names: "S"
+      given-names: "Indirakumar"
+      email: "itsmeindirakumar@gmail.com"
+  year: 2026
+  # journal: "Transactions on Machine Learning Research"   # uncomment after TMLR acceptance
+  # volume: ""
+  # url: "https://openreview.net/forum?id=..."             # uncomment after TMLR acceptance
+  # arXiv preprint reference (preferred-citation supports `type: article`
+  # with `repository` / `identifiers` for preprints).
+  # Once posted, fill in:
+  # identifiers:
+  #   - type: other
+  #     value: "arXiv:XXXX.XXXXX"
+  #     description: "arXiv preprint"
+  keywords:
+    - large language models
+    - persistent memory
+    - knowledge graphs
+    - agent memory
+    - model context protocol
+    - retrieval systems

@@ -1,10 +1,18 @@
 # ADR 0002: Storage Adapter Strategy
 
-- **Status:** Accepted (2026-06-12) — local filesystem remains canonical
-  through v1.0; pluggable adapters are roadmap for v1.1+.
+- **Status:** In implementation (2026-06-26) — Phase 1 (LocalSource +
+  registry + audit + Prometheus + admin-scoped routes) landed behind
+  `MEMOGRAPH_SOURCES_ENABLED=1`. Phases 2–5 (S3, Notion, GDrive,
+  OneDrive, frontend, Redis-coordinated swap) tracked separately.
+  Accepted 2026-06-12; local filesystem remains canonical through
+  v1.0 with pluggable adapters arriving incrementally in v1.1+.
 - **Phase:** post-3.7 (storage extensibility roadmap).
 - **Decided by:** Project owner.
 - **Supersedes:** Nothing. Complements [ADR 0001](0001-tenancy-model.md).
+- **Implementation:** [memograph/sources/](../../memograph/sources/),
+  [memograph/web/backend/routes/sources.py](../../memograph/web/backend/routes/sources.py),
+  [tests/sources/](../../tests/sources/),
+  [tests/web/test_sources_routes.py](../../tests/web/test_sources_routes.py).
 
 ## Context
 

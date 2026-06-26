@@ -18,6 +18,10 @@
 [![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blue)](https://indhar01.github.io/MemoGraph/)
 <!-- Hosted demo: replace the placeholder URL once the Hugging Face Space is live. See deploy/huggingface/SETUP.md. -->
 [![Try the live demo](https://img.shields.io/badge/demo-Hugging%20Face%20Space-yellow?logo=huggingface)](https://huggingface.co/spaces)
+<!-- Discord: replace the placeholder URL once the server is live. See docs/community/COMMUNITY.md. -->
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://github.com/Indhar01/MemoGraph/discussions)
+[![Benchmarks: MRA 81.8%](https://img.shields.io/badge/MRA-81.8%25-success)](BENCHMARKS.md)
+[![CRS 3.04 vs 2.66 in-context](https://img.shields.io/badge/CRS-3.04%20vs%202.66-success)](BENCHMARKS.md)
 
 **MemoGraph turns a folder of markdown notes into a queryable, AI-ready knowledge graph.** It solves the LLM memory problem — your AI assistants forget last Tuesday's decision, can't find a related note across two projects, and re-derive the same insight again and again — by giving them a persistent, navigable, attribution-friendly memory layer that lives in plain markdown files you control.
 
@@ -750,6 +754,16 @@ We maintain high code quality standards:
 - **[Code of Conduct](CODE_OF_CONDUCT.md)** - Community guidelines
 - **[Security Policy](SECURITY.md)** - Security reporting and best practices
 - **[Changelog](CHANGELOG.md)** - Version history and changes
+
+### Community & Distribution (for amplifiers, partners, and contributors)
+
+- **[Launch Playbook](docs/community/LAUNCH_PLAYBOOK.md)** - 🚀 Free, no-PR-firm launch sequence (Show HN, ProductHunt, Reddit, dev.to)
+- **[Paper Launch Playbook](docs/community/PAPER_LAUNCH.md)** - 📄 arXiv + TMLR + Papers With Code + ML Twitter sequence
+- **[Awesome-list submissions](docs/community/AWESOME_SUBMISSIONS.md)** - 📋 Exact entries to file at each awesome-mcp-servers list
+- **[Community setup](docs/community/COMMUNITY.md)** - 💬 Discord / GitHub Discussions / moderation playbook
+- **[Hugging Face demo deployment](deploy/huggingface/SETUP.md)** - ▶️ Step-by-step to stand up the public read-only demo
+- **[Demo GIF capture script](docs/DEMO_GIF_CAPTURE.md)** - 🎬 Script for the 60-second README GIF
+- **[Benchmarks](BENCHMARKS.md)** - 📊 Headline numbers + reproduction harness pointer
 
 ## 🔒 Security
 

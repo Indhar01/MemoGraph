@@ -53,6 +53,16 @@ _TENANCY_ENABLED = os.environ.get("MEMOGRAPH_TENANCY_ENABLED", "").lower() in {
     "yes",
 }
 
+# Phase 1 of ADR 0002 v1.1+ rollout: the /api/v1/sources routes are
+# wired only when this flag is set. Default off so existing installs
+# see no behavior change; flip to "1" to expose the source-management
+# surface. Phase 5 removes the flag and makes sources always-on.
+_SOURCES_ENABLED = os.environ.get("MEMOGRAPH_SOURCES_ENABLED", "").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
 
 def _configure_logging() -> None:
     """Idempotent root-logger setup honoring the LOG_JSON env flag."""
@@ -269,6 +279,28 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             max_warm,
         )
 
+    # ADR 0002 v1.1+: source registry. Lives on app.state.source_registry
+    # when the feature flag is set. Routes 503 with a clear message
+    # otherwise so callers can detect the disabled state.
+    app.state.source_registry = None
+    if _SOURCES_ENABLED:
+        from memograph.sources.registry import SourceRegistry
+
+        sources_global_root = os.environ.get(
+            "MEMOGRAPH_SOURCES_ROOT",
+            os.environ.get("MEMOGRAPH_GLOBAL_ROOT", str(vault_path_obj)),
+        )
+        sources_max_warm = _env_int("MEMOGRAPH_SOURCES_MAX_WARM", 128)
+        app.state.source_registry = SourceRegistry(
+            global_root=sources_global_root,
+            max_warm=sources_max_warm,
+        )
+        logger.info(
+            "Source adapters enabled: global_root=%s max_warm=%d",
+            sources_global_root,
+            sources_max_warm,
+        )
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         return JSONResponse(
@@ -335,6 +367,8 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # MEMOGRAPH_AUTH_PROVIDER=none, require_user returns an anonymous
     # user rather than 401-ing — preserves local-dev workflows.
     from .routes import admin, ai, analytics, graph, memories, search
+    if _SOURCES_ENABLED:
+        from .routes import sources as sources_routes
 
     auth_dep = [Depends(require_user)]
     # Admin router is gated by an additional `admin` scope. The scope
@@ -357,6 +391,13 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
         )
         app.include_router(ai.router, prefix=prefix, tags=["ai"], dependencies=auth_dep)
         app.include_router(admin.router, prefix=prefix, dependencies=admin_dep)
+        if _SOURCES_ENABLED:
+            # Sources router applies its own per-route scope checks
+            # (read = require_user, mutating = require_scope("admin"))
+            # so we mount with auth_dep only.
+            app.include_router(
+                sources_routes.router, prefix=prefix, dependencies=auth_dep
+            )
 
     if _METRICS_ENABLED:
 
