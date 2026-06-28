@@ -53,14 +53,14 @@ _TENANCY_ENABLED = os.environ.get("MEMOGRAPH_TENANCY_ENABLED", "").lower() in {
     "yes",
 }
 
-# Phase 1 of ADR 0002 v1.1+ rollout: the /api/v1/sources routes are
-# wired only when this flag is set. Default off so existing installs
-# see no behavior change; flip to "1" to expose the source-management
-# surface. Phase 5 removes the flag and makes sources always-on.
-_SOURCES_ENABLED = os.environ.get("MEMOGRAPH_SOURCES_ENABLED", "").lower() in {
-    "1",
-    "true",
-    "yes",
+# ADR 0002 v1.1 sources subsystem: default ON since 2026-06-27.
+# Set MEMOGRAPH_SOURCES_ENABLED=0 (or =false / =no) to keep the routes
+# unmounted and the registry uninitialized — an opt-out kill-switch for
+# operators who need to disable in a hurry without rolling back code.
+_SOURCES_ENABLED = os.environ.get("MEMOGRAPH_SOURCES_ENABLED", "1").lower() not in {
+    "0",
+    "false",
+    "no",
 }
 
 # When source adapters are enabled, the in-process SyncScheduler ticks
@@ -177,21 +177,59 @@ async def lifespan(app: FastAPI):
         # itself stays up so /healthz still returns 200 (the orchestrator
         # can decide whether to restart).
 
+    # Swap coordinator — propagates source-activation events across
+    # uvicorn workers. NullSwapCoordinator (the default) is a no-op
+    # and costs nothing; RedisSwapCoordinator engages when
+    # MEMOGRAPH_REDIS_URL is set. Started before the SyncScheduler so
+    # an early activate-during-startup edge case has the coordinator
+    # already listening.
+    app.state.swap_coordinator = None
+    source_registry = getattr(app.state, "source_registry", None)
+    if source_registry is not None:
+        try:
+            from memograph.sources.swap_coordinator import coordinator_from_env
+
+            coordinator = coordinator_from_env()
+            await coordinator.start(source_registry)
+            app.state.swap_coordinator = coordinator
+            logger.info(
+                "SwapCoordinator started (%s)",
+                type(coordinator).__name__,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # A misconfigured Redis is operator error worth surfacing
+            # via the readiness probe, but we don't want to crash the
+            # whole process — single-worker installs degrade to no
+            # coordination, multi-worker installs notice via /readyz.
+            logger.error("Failed to start SwapCoordinator: %s", exc)
+
     # Source-adapter sync loop. Only starts when the feature flag is
     # set AND the operator hasn't asked us to stay passive. The
     # scheduler is fault-tolerant — bad sources are caught per-tick
     # and don't kill the loop — so a partial start is safe even if
     # some sources are unreachable.
     app.state.sync_scheduler = None
-    source_registry = getattr(app.state, "source_registry", None)
     if source_registry is not None and not _SOURCES_SYNC_DISABLED:
         try:
+            from memograph.sources.kernel_binding import reindex_active_kernel
             from memograph.sources.sync import SyncScheduler
 
             poll = _env_int("MEMOGRAPH_SOURCES_SYNC_POLL_SECONDS", 30)
+
+            async def _on_synced(tenant_id: str | None, source_id: str) -> None:
+                # Re-ingest only when the just-synced source is the
+                # active one for that tenant. Non-active syncs just
+                # warm the cache.
+                if (
+                    source_registry is not None
+                    and source_registry.get_active(tenant_id) == source_id
+                ):
+                    await reindex_active_kernel(app, source_id)
+
             scheduler = SyncScheduler(
                 registry=source_registry,
                 poll_interval_seconds=float(poll),
+                on_synced=_on_synced,
             )
             await scheduler.start()
             app.state.sync_scheduler = scheduler
@@ -210,6 +248,18 @@ async def lifespan(app: FastAPI):
             logger.info("SyncScheduler stopped")
         except Exception as exc:  # noqa: BLE001
             logger.warning("SyncScheduler shutdown error: %s", exc)
+    coordinator = getattr(app.state, "swap_coordinator", None)
+    if coordinator is not None:
+        try:
+            await coordinator.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("SwapCoordinator shutdown error: %s", exc)
+    nango_client = getattr(app.state, "nango_client", None)
+    if nango_client is not None:
+        try:
+            await nango_client.aclose()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("NangoClient shutdown error: %s", exc)
     logger.info("Shutting down MemoGraph server...")
 
 
@@ -322,6 +372,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # when the feature flag is set. Routes 503 with a clear message
     # otherwise so callers can detect the disabled state.
     app.state.source_registry = None
+    app.state.nango_client = None
     if _SOURCES_ENABLED:
         from memograph.sources.registry import SourceRegistry
 
@@ -330,14 +381,61 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             os.environ.get("MEMOGRAPH_GLOBAL_ROOT", str(vault_path_obj)),
         )
         sources_max_warm = _env_int("MEMOGRAPH_SOURCES_MAX_WARM", 128)
+
+        # Nango handles OAuth + cloud-provider plumbing for GDRIVE /
+        # ONEDRIVE / NOTION. The client is optional — installs that
+        # only use LOCAL + S3 sources don't need Nango — but if it's
+        # configured, we inject it into the registry so cloud kinds
+        # can be materialized.
+        nango_client = None
+        if os.environ.get("MEMOGRAPH_NANGO_BASE_URL", "").strip():
+            try:
+                from memograph.sources.nango_client import (
+                    NangoClient,
+                    NangoConfigError,
+                )
+
+                nango_client = NangoClient.from_env()
+                logger.info(
+                    "Nango client configured (base_url=%s public_url=%s)",
+                    nango_client.config.base_url,
+                    nango_client.config.public_url,
+                )
+                # The Nango stack ALWAYS signs outbound webhooks with
+                # the encryption secret set on its side. If we don't
+                # match it, the webhook handler 401s every delivery
+                # silently and no cloud source ever registers.
+                # Refuse to keep going quietly in that state.
+                if not nango_client.config.webhook_secret:
+                    logger.error(
+                        "MEMOGRAPH_NANGO_WEBHOOK_SECRET is not set but "
+                        "Nango is configured. Webhook deliveries will be "
+                        "rejected with 401 and cloud sources will never "
+                        "appear. Set the env var to the same value used "
+                        "for MEMOGRAPH_NANGO_WEBHOOK_SECRET in the Nango "
+                        "stack and restart."
+                    )
+            except NangoConfigError as exc:
+                logger.error(
+                    "Nango is partially configured but unusable: %s. "
+                    "Cloud sources will return 503 until you fix the env vars.",
+                    exc,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to initialise Nango client: %s", exc)
+        app.state.nango_client = nango_client
+
         app.state.source_registry = SourceRegistry(
             global_root=sources_global_root,
             max_warm=sources_max_warm,
+            nango_client=nango_client,
         )
         logger.info(
-            "Source adapters enabled: global_root=%s max_warm=%d",
+            "Source adapters enabled: global_root=%s max_warm=%d "
+            "nango=%s",
             sources_global_root,
             sources_max_warm,
+            "configured" if nango_client else "not configured",
         )
 
     @app.exception_handler(HTTPException)
@@ -407,7 +505,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # user rather than 401-ing — preserves local-dev workflows.
     from .routes import admin, ai, analytics, graph, memories, search
     if _SOURCES_ENABLED:
-        from .routes import oauth as oauth_routes
+        from .routes import nango as nango_routes
         from .routes import sources as sources_routes
 
     auth_dep = [Depends(require_user)]
@@ -438,11 +536,11 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             app.include_router(
                 sources_routes.router, prefix=prefix, dependencies=auth_dep
             )
-            # OAuth router: /oauth/{provider}/start is admin-scoped
-            # internally; /callback is public (the AS hits it
-            # directly, with state-binding as the legitimacy proof).
-            # Mount WITHOUT auth_dep so the callback isn't blocked.
-            app.include_router(oauth_routes.router, prefix=prefix)
+            # Nango router: connect-session is admin-scoped internally;
+            # the webhook is public (Nango hits it directly with an
+            # HMAC signature as the legitimacy proof). Mount WITHOUT
+            # auth_dep so the webhook isn't blocked.
+            app.include_router(nango_routes.router, prefix=prefix)
 
     if _METRICS_ENABLED:
 

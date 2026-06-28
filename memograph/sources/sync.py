@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -83,6 +84,11 @@ class SyncScheduler:
     state: dict[tuple[str | None, str], SyncJobState] = field(
         default_factory=dict
     )
+    # Fired after every successful sync. The lifespan wires this to
+    # ``reindex_active_kernel`` so the kernel re-ingests when the
+    # newly-materialized files belong to the active source. Optional —
+    # tests don't need to wire it.
+    on_synced: Callable[[str | None, str], Awaitable[None]] | None = None
     _task: asyncio.Task[None] | None = None
     _stopped: asyncio.Event | None = None
 
@@ -141,6 +147,35 @@ class SyncScheduler:
             ):
                 continue
             await self._sync_one(source, state)
+
+    async def sync_now(
+        self,
+        tenant_id: str | None,
+        source_id: str,
+    ) -> SyncJobState:
+        """Force a sync for one source regardless of cadence.
+
+        The route handler calls this when an operator hits
+        ``POST /sources/{id}/sync``. The cadence gate in
+        :meth:`tick_once` is intentionally bypassed — the operator's
+        intent is "I just registered/updated this and want data
+        now," and waiting 5 minutes is a worse experience than the
+        small risk of double-syncing if the tick fires concurrently.
+
+        The :attr:`SyncJobState.in_flight` flag still applies: if a
+        sync is already running for this source, we skip rather than
+        run a second one in parallel. The caller should retry.
+
+        Returns the post-sync :class:`SyncJobState` so the route can
+        surface success/error to the user without a second lookup.
+        """
+        source = self.registry.get(tenant_id, source_id)
+        key = (tenant_id, source_id)
+        state = self.state.setdefault(key, SyncJobState())
+        if state.in_flight:
+            return state
+        await self._sync_one(source, state)
+        return state
 
     async def _sync_one(self, source, state: SyncJobState) -> None:
         """Run ``materialize_to_vault`` for one source, recording metrics
@@ -220,6 +255,22 @@ class SyncScheduler:
             stats.documents_written,
             stats.duration_seconds,
         )
+
+        # Notify the lifespan so it can refresh the kernel's graph for
+        # the active tenant. We DON'T await the callback's downstream
+        # work — kernel ingest is long; the scheduler tick must keep
+        # moving — but we do await the callback itself so it can fire
+        # off its own background task. Callback failures are logged
+        # and swallowed so a buggy listener can't kill the scheduler.
+        if self.on_synced is not None:
+            try:
+                await self.on_synced(source.tenant_id, source.source_id)
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "on_synced callback raised for %s/%s",
+                    source.tenant_id,
+                    source.source_id,
+                )
 
     def _interval_for(self, source) -> float:
         """Per-source cadence override. Returns 0 for opt-out."""

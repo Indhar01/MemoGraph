@@ -682,6 +682,11 @@ def main():
         "--ollama-url", default=None, help="Override Ollama base URL"
     )
 
+    subparsers.add_parser(
+        "nango-doctor",
+        help="Preflight check for the Nango-backed cloud source integration",
+    )
+
     setup_mcp_parser = subparsers.add_parser(
         "setup-mcp", help="Interactive MCP setup wizard"
     )
@@ -1302,6 +1307,11 @@ def main():
     if args.command == "doctor":
         _run_doctor(args)
         return
+
+    if args.command == "nango-doctor":
+        from memograph.cli_nango_doctor import run_doctor as run_nango_doctor
+
+        sys.exit(run_nango_doctor())
 
     if args.command == "setup-mcp":
         from .mcp_setup import MCPSetup

@@ -1,17 +1,38 @@
 # ADR 0002: Storage Adapter Strategy
 
-- **Status:** In implementation (2026-06-26). Phases 1–5 landed behind
-  `MEMOGRAPH_SOURCES_ENABLED=1`: Phase 1 (LocalSource + registry +
-  audit + Prometheus + admin-scoped routes), Phase 2 (S3 + Notion +
-  in-process SyncScheduler), Phase 3 (Google Drive OAuth with PKCE +
-  encrypted token store + Drive v3 REST), Phase 4 (OneDrive /
-  SharePoint via Microsoft Graph), Phase 5 (frontend SourcesPage with
-  AddSourceWizard, health pills, activate/delete, OAuth redirect
-  handling). Outstanding before the flag flips on by default: Redis
-  pub/sub coordinated multi-worker swap, Playwright e2e coverage of
-  the wizard, Google OAuth app verification for the hosted multi-
-  tenant story. Accepted 2026-06-12; local filesystem remains
-  canonical through v1.0 with pluggable adapters arriving in v1.1+.
+- **Status:** In implementation (2026-06-27). Phases 1–5 landed and as
+  of 2026-06-27 ship default-on (set `MEMOGRAPH_SOURCES_ENABLED=0` to
+  opt out): Phase 1 (LocalSource + registry +
+  audit + Prometheus + admin-scoped routes), Phase 2 (S3 +
+  in-process SyncScheduler), Phase 3–4 (Google Drive, OneDrive /
+  SharePoint, and Notion via a self-hosted [Nango](https://nango.dev)
+  connector — see the v1.1 status note below), Phase 5 (frontend
+  SourcesPage with AddSourceWizard, NangoConnect, health pills,
+  activate/delete). Outstanding before the flag flips on by default:
+  Redis pub/sub coordinated multi-worker swap (landed), Playwright
+  e2e coverage of the wizard. Accepted 2026-06-12; local filesystem
+  remains canonical through v1.0 with pluggable adapters arriving in
+  v1.1+.
+
+- **v1.1 status note (2026-06-27).** The original Phase 3–4 plan was
+  to build bespoke OAuth (authorization-code + PKCE), an encrypted
+  Fernet token store, and per-provider REST adapters for Drive /
+  OneDrive / Notion in-tree. We shipped that and then ripped it out
+  in favor of delegating to a self-hosted Nango instance. Nango owns
+  the OAuth dance, encrypted token storage, automatic refresh, and
+  the REST proxy that injects credentials into outbound provider
+  calls; MemoGraph talks to it over the Nango REST API. **Rationale:**
+  (a) ~4,200 lines of code and ~1,500 lines of tests we no longer
+  maintain, (b) provider quirks (Google's verification review,
+  Microsoft tenant routing, Notion's blocks API) become Nango's
+  problem, (c) credentials never live in MemoGraph's process —
+  consistent with the "your data, your machine" stance because the
+  operator owns the Nango instance too. Local + S3 still bypass Nango
+  (they don't use OAuth). Operators who'd rather use Nango Cloud than
+  self-host can change `MEMOGRAPH_NANGO_BASE_URL` without touching
+  code. See [docs/SOURCES.md](../SOURCES.md) for the new operator
+  flow and [docker-compose.nango.yml](../../docker-compose.nango.yml)
+  for the turnkey self-hosted stack.
 - **Phase:** post-3.7 (storage extensibility roadmap).
 - **Decided by:** Project owner.
 - **Supersedes:** Nothing. Complements [ADR 0001](0001-tenancy-model.md).

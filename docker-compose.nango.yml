@@ -1,0 +1,95 @@
+# MemoGraph + Nango — turnkey compose for self-hosted cloud sources.
+#
+# This brings up the Nango stack (Postgres + Redis + Nango server)
+# next to your MemoGraph backend so the OAuth dance, encrypted token
+# storage, and provider proxying for Google Drive / OneDrive / Notion
+# all run on your own infrastructure.
+#
+# Usage:
+#   1. Generate secrets (do this once, commit nothing — store in your
+#      secret manager / .env):
+#        openssl rand -hex 32      # NANGO_ENCRYPTION_KEY (32 bytes hex)
+#        openssl rand -hex 32      # NANGO_DB_PASSWORD
+#        openssl rand -hex 32      # MEMOGRAPH_NANGO_WEBHOOK_SECRET
+#   2. Export them (or put them in .env next to this file):
+#        export NANGO_ENCRYPTION_KEY=...
+#        export NANGO_DB_PASSWORD=...
+#        export MEMOGRAPH_NANGO_WEBHOOK_SECRET=...
+#   3. docker compose -f docker-compose.nango.yml up -d
+#   4. Open http://localhost:3003 — Nango admin UI. Create
+#      integrations for the providers you want (google-drive,
+#      one-drive, notion). Each one takes a few minutes — you supply
+#      the OAuth client_id/secret from Google Cloud Console /
+#      Azure portal / Notion's integration page.
+#   5. Mint a secret key in Nango admin (Environment Settings →
+#      API keys, scopes: connect_sessions:write, connections:read,
+#      proxy). Set it in MemoGraph's env as
+#      MEMOGRAPH_NANGO_SECRET_KEY.
+#   6. Restart MemoGraph and visit /sources in the UI.
+
+services:
+  nango-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nango
+      POSTGRES_USER: nango
+      POSTGRES_PASSWORD: ${NANGO_DB_PASSWORD:-changeme}
+    volumes:
+      - nango_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nango -d nango"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nango-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - nango_redis:/data
+
+  nango-server:
+    # Nango bundles their server, dashboard, and worker in one image.
+    # Pin to a known-good tag rather than ``latest`` so production
+    # upgrades are deliberate.
+    image: nangohq/nango-server:hosted
+    restart: unless-stopped
+    depends_on:
+      nango-postgres:
+        condition: service_healthy
+      nango-redis:
+        condition: service_started
+    ports:
+      - "3003:8080"
+    environment:
+      # See https://docs.nango.dev/guides/platform/self-hosting for
+      # the full env reference; these are the minimum required ones.
+      NANGO_DB_HOST: nango-postgres
+      NANGO_DB_PORT: "5432"
+      NANGO_DB_NAME: nango
+      NANGO_DB_USER: nango
+      NANGO_DB_PASSWORD: ${NANGO_DB_PASSWORD:-changeme}
+      NANGO_REDIS_URL: redis://nango-redis:6379
+      # Mandatory: 32-byte hex used to encrypt OAuth tokens at rest.
+      # Losing it means losing every stored token — back it up like
+      # any other production secret.
+      NANGO_ENCRYPTION_KEY: ${NANGO_ENCRYPTION_KEY:?set NANGO_ENCRYPTION_KEY to 32 random hex bytes}
+      # Where Nango sends webhook events. MemoGraph runs the receiver
+      # at /api/v1/sources/webhook; we point Nango at it through the
+      # gateway URL the operator configured. Override if your
+      # MemoGraph backend isn't reachable at host.docker.internal.
+      NANGO_WEBHOOK_URL: ${MEMOGRAPH_PUBLIC_URL:-http://host.docker.internal:8000}/api/v1/sources/webhook
+      NANGO_WEBHOOK_SECRET: ${MEMOGRAPH_NANGO_WEBHOOK_SECRET:?set MEMOGRAPH_NANGO_WEBHOOK_SECRET}
+      # Where Nango redirects users after the OAuth dance. For local
+      # dev this points back at MemoGraph's /sources page.
+      NANGO_SERVER_URL: http://localhost:3003
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+volumes:
+  nango_db:
+  nango_redis:

@@ -96,10 +96,10 @@ def sources_server(
 
 @pytest.fixture
 def disabled_server(monkeypatch: pytest.MonkeyPatch):
-    """Reload the server module WITHOUT the sources flag set."""
+    """Reload the server module with the sources opt-out flag set."""
     monkeypatch.delenv("MEMOGRAPH_DEBUG", raising=False)
     monkeypatch.delenv("MEMOGRAPH_LOG_JSON", raising=False)
-    monkeypatch.delenv("MEMOGRAPH_SOURCES_ENABLED", raising=False)
+    monkeypatch.setenv("MEMOGRAPH_SOURCES_ENABLED", "0")
 
     from memograph.web.backend import server as server_mod
 
@@ -130,7 +130,8 @@ class TestFeatureFlag:
     def test_disabled_returns_404_on_list(
         self, disabled_server, vault_dir: Path
     ) -> None:
-        # When the flag is off, the router is not mounted — 404, not 503.
+        # When operator opts out (MEMOGRAPH_SOURCES_ENABLED=0), the
+        # router is not mounted — 404, not 503.
         client = _client(disabled_server, vault_dir)
         r = client.get("/api/v1/sources")
         assert r.status_code == 404
@@ -199,19 +200,17 @@ class TestCreateSource:
         body = r.json()
         assert body["source_id"] == "primary"
         assert body["kind"] == "local"
-        assert body["is_active"] is False
+        # First-source auto-activate: with no prior active source,
+        # the new one is immediately activated so the kernel re-points
+        # at it and the user doesn't have to click Activate manually.
+        assert body["is_active"] is True
         assert (sources_root / ".sources" / "primary.json").exists()
 
-    def test_create_onedrive_source(
-        self, sources_server, vault_dir: Path, sources_root: Path,
-        monkeypatch,
+    def test_create_onedrive_redirects_to_connect_flow(
+        self, sources_server, vault_dir: Path
     ) -> None:
-        # Phase 4: OneDrive POSTs are accepted structurally; the
-        # source remains unusable until the OAuth callback persists
-        # an encrypted token bundle.
-        from cryptography.fernet import Fernet
-
-        monkeypatch.setenv("MEMOGRAPH_SECRET_KEY", Fernet.generate_key().decode())
+        # OneDrive sources go through Nango Connect. The direct POST
+        # route refuses them with a 400 pointing at /connect-session.
         client = _client(sources_server, vault_dir)
         r = client.post(
             "/api/v1/sources",
@@ -219,27 +218,16 @@ class TestCreateSource:
                 "source_id": "od-personal",
                 "kind": "onedrive",
                 "display_name": "OneDrive",
-                "params": {"drive_id": "b!abc"},
+                "params": {},
             },
             headers=ADMIN_HEADER,
         )
-        assert r.status_code == 201, r.text
-        body = r.json()
-        assert body["kind"] == "onedrive"
-        assert body["params"]["drive_id"] == "b!abc"
-        assert (sources_root / ".sources" / "od-personal.json").exists()
+        assert r.status_code == 400
+        assert "connect-session" in r.json()["error"]
 
-    def test_create_gdrive_source(
-        self, sources_server, vault_dir: Path, sources_root: Path,
-        monkeypatch,
+    def test_create_gdrive_redirects_to_connect_flow(
+        self, sources_server, vault_dir: Path
     ) -> None:
-        # Direct POST for GDrive works structurally, but the source
-        # remains unusable until the OAuth callback persists a bundle
-        # in the encrypted token store. Health probes will surface
-        # FAILED until then.
-        from cryptography.fernet import Fernet
-
-        monkeypatch.setenv("MEMOGRAPH_SECRET_KEY", Fernet.generate_key().decode())
         client = _client(sources_server, vault_dir)
         r = client.post(
             "/api/v1/sources",
@@ -247,15 +235,12 @@ class TestCreateSource:
                 "source_id": "gdrive-personal",
                 "kind": "gdrive",
                 "display_name": "Drive",
-                "params": {"folder_id": "abc123"},
+                "params": {},
             },
             headers=ADMIN_HEADER,
         )
-        assert r.status_code == 201, r.text
-        body = r.json()
-        assert body["kind"] == "gdrive"
-        assert body["params"]["folder_id"] == "abc123"
-        assert (sources_root / ".sources" / "gdrive-personal.json").exists()
+        assert r.status_code == 400
+        assert "connect-session" in r.json()["error"]
 
     def test_create_s3_source(
         self, sources_server, vault_dir: Path, sources_root: Path
@@ -302,30 +287,54 @@ class TestCreateSource:
         assert r.status_code == 400
         assert "bucket" in r.json()["error"].lower()
 
-    def test_create_notion_source(
+    def test_create_notion_source_with_connection_id(
         self, sources_server, vault_dir: Path
     ) -> None:
-        client = _client(sources_server, vault_dir)
+        # Scripted creation: caller pre-minted a Nango connection
+        # and supplies its id. Route accepts the source structurally;
+        # the adapter will refuse at first call if the connection
+        # is missing on the Nango side, but that's the right place
+        # to discover it.
+        #
+        # NOTION sources can't be materialised without a NangoClient,
+        # so we inject a stub onto the app state so registry.register()
+        # (which warms the source) doesn't trip the misconfig guard.
+        app = sources_server.create_app(vault_path=str(vault_dir), use_gam=False)
+        app.state.kernel.ingest()
+        app.state.is_ready = True
+
+        class _StubNango:
+            pass
+
+        app.state.nango_client = _StubNango()
+        app.state.source_registry._nango_client = app.state.nango_client
+        from fastapi.testclient import TestClient
+
+        client = TestClient(app)
         r = client.post(
             "/api/v1/sources",
             json={
                 "source_id": "notion-team",
                 "kind": "notion",
                 "display_name": "Team Wiki",
-                "params": {"auth_token": "secret_test_token"},
+                "params": {
+                    "nango_connection_id": "conn-test-1",
+                    "database_id": "abcdef",
+                },
             },
             headers=ADMIN_HEADER,
         )
         assert r.status_code == 201, r.text
-        assert r.json()["kind"] == "notion"
+        body = r.json()
+        assert body["kind"] == "notion"
+        assert body["params"]["nango_connection_id"] == "conn-test-1"
+        assert body["params"]["database_id"] == "abcdef"
 
-    def test_create_notion_requires_token_somewhere(
+    def test_create_notion_requires_nango_connection_id(
         self,
         sources_server,
         vault_dir: Path,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.delenv("NOTION_API_TOKEN", raising=False)
         client = _client(sources_server, vault_dir)
         r = client.post(
             "/api/v1/sources",
@@ -338,7 +347,7 @@ class TestCreateSource:
             headers=ADMIN_HEADER,
         )
         assert r.status_code == 400
-        assert "NOTION_API_TOKEN" in r.json()["error"]
+        assert "nango_connection_id" in r.json()["error"]
 
     def test_create_rejects_relative_path(
         self, sources_server, vault_dir: Path
@@ -356,6 +365,72 @@ class TestCreateSource:
         )
         assert r.status_code == 400
         assert "absolute" in r.json()["error"]
+
+    def test_create_rejects_nonexistent_local_path(
+        self, sources_server, vault_dir: Path, tmp_path: Path
+    ) -> None:
+        # Wizard ergonomics: the user must learn at create time that
+        # the path doesn't exist, not after the health probe.
+        missing = tmp_path / "definitely-not-here"
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "primary",
+                "kind": "local",
+                "display_name": "Primary",
+                "params": {"path": str(missing)},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 400
+        body = r.json()
+        assert "does not exist" in body["error"]
+        # The resolved path the backend saw is echoed in the error so
+        # the user can spot OS-level mangling.
+        assert "definitely-not-here" in body["error"]
+
+    def test_create_rejects_file_as_local_path(
+        self, sources_server, vault_dir: Path, tmp_path: Path
+    ) -> None:
+        # Pointing at a file (rather than a directory) is a common
+        # wizard slip — surface it as a clean 400 with a hint.
+        f = tmp_path / "notes.md"
+        f.write_text("# hi", encoding="utf-8")
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "primary",
+                "kind": "local",
+                "display_name": "Primary",
+                "params": {"path": str(f)},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 400
+        assert "not a directory" in r.json()["error"]
+
+    def test_create_local_trims_quotes_and_whitespace(
+        self, sources_server, vault_dir: Path, tmp_path: Path
+    ) -> None:
+        # Copy-pasting from a terminal often wraps paths in quotes;
+        # wizard should be forgiving about that.
+        target = tmp_path / "quoted"
+        target.mkdir()
+        client = _client(sources_server, vault_dir)
+        wrapped = f'  "{target}"  '
+        r = client.post(
+            "/api/v1/sources",
+            json={
+                "source_id": "primary",
+                "kind": "local",
+                "display_name": "Primary",
+                "params": {"path": wrapped},
+            },
+            headers=ADMIN_HEADER,
+        )
+        assert r.status_code == 201, r.text
 
     def test_create_rejects_path_traversal(
         self, sources_server, vault_dir: Path, tmp_path: Path
@@ -396,7 +471,10 @@ class TestActivate:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["active_source_id"] == "primary"
-        assert body["previous_active_source_id"] is None
+        # Create auto-activates the first source, so a subsequent
+        # explicit Activate of the same source reports itself as the
+        # previous active — idempotent under repeated clicks.
+        assert body["previous_active_source_id"] == "primary"
         active = client.get("/api/v1/sources/active", headers=USER_HEADER)
         assert active.status_code == 200
         assert active.json()["source_id"] == "primary"
@@ -420,6 +498,60 @@ class TestActivate:
             "/api/v1/sources/never-existed/activate", headers=ADMIN_HEADER
         )
         assert r.status_code == 404
+
+
+class TestManualSync:
+    def test_sync_runs_immediately_for_local(
+        self,
+        sources_server,
+        sources_root: Path,
+        vault_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        target = tmp_path / "v"; target.mkdir()
+        (target / "a.md").write_text("# A", encoding="utf-8")
+        client = _client(sources_server, vault_dir)
+        _create_local(client, "primary", target)
+        r = client.post(
+            "/api/v1/sources/primary/sync", headers=ADMIN_HEADER
+        )
+        assert r.status_code == 202, r.text
+        body = r.json()
+        assert body["source_id"] == "primary"
+        assert body["in_flight"] is False
+        assert body["last_success_at"] is not None
+        assert body["last_error"] is None
+        # Audit log got the sync entry.
+        log_path = sources_root / ".sources" / "_audit.log"
+        lines = [
+            json.loads(line)
+            for line in log_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert any(e["action"] == "source.sync" for e in lines)
+
+    def test_sync_unknown_source_404s(
+        self, sources_server, vault_dir: Path
+    ) -> None:
+        client = _client(sources_server, vault_dir)
+        r = client.post(
+            "/api/v1/sources/never-existed/sync", headers=ADMIN_HEADER
+        )
+        assert r.status_code == 404
+
+    def test_sync_requires_admin(
+        self,
+        sources_server,
+        vault_dir: Path,
+        tmp_path: Path,
+    ) -> None:
+        target = tmp_path / "v"; target.mkdir()
+        client = _client(sources_server, vault_dir)
+        _create_local(client, "primary", target)
+        r = client.post(
+            "/api/v1/sources/primary/sync", headers=USER_HEADER
+        )
+        assert r.status_code == 403
 
 
 class TestGet:

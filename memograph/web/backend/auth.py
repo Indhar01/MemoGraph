@@ -257,7 +257,13 @@ async def require_user(
 
     if provider is AuthProvider.NONE:
         _warn_open_api_once()
-        anon = User(id="anonymous", email="", scopes=("anonymous",))
+        # When auth is off, the API is wide open anyway — giving the
+        # anonymous user the "admin" scope so admin-gated routes
+        # (source registration, connect-session, deletes) work in
+        # local dev. Production deployments MUST set
+        # MEMOGRAPH_AUTH_PROVIDER to api_key or oidc instead of
+        # relying on this; the startup warning fires above.
+        anon = User(id="anonymous", email="", scopes=("anonymous", "admin"))
         current_user.set(anon)
         request.state.user = anon
         return anon

@@ -33,7 +33,7 @@ from collections import OrderedDict
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 from memograph.sources.base import (
     Source,
@@ -56,6 +56,11 @@ each warm in working set; tune in the registry constructor or via the
 # alnum + dash + underscore, 1-64 chars. Tightly scoped because the
 # id ends up in filenames + URLs.
 _SOURCE_ID_PATTERN = re.compile(r"^[a-z0-9_-]{1,64}$")
+
+# Sentinel distinct from None so the active-source cache can
+# distinguish "I checked and there is no active source" (cached as
+# None) from "I haven't checked yet" (key absent / value is _UNSET).
+_UNSET: Any = object()
 
 
 class InvalidSourceIdError(SourceError):
@@ -85,13 +90,13 @@ to avoid touching real cloud APIs."""
 def default_source_factory(config: SourceConfig) -> Source:
     """Build a :class:`Source` from a config, dispatching on kind.
 
-    Phase 1 wired LOCAL; Phase 2 adds S3 + Notion; Phases 3-4 add
-    Drive + OneDrive. Each adapter is imported lazily inside its
-    branch so importing :mod:`memograph.sources` does not pull in
-    boto3 / notion-client / Google / Microsoft SDKs for installs
-    that don't need them. Unknown kinds raise :class:`SourceError`
-    so a corrupt config doesn't silently boot into a half-broken
-    registry.
+    LOCAL and S3 are constructed directly from config. The cloud
+    OAuth kinds (GDRIVE / ONEDRIVE / NOTION) all funnel through
+    :class:`memograph.sources.nango_source.NangoBackedSource`, which
+    needs a :class:`NangoClient` injected at construction. The
+    registry's :meth:`SourceRegistry._build_with_context` handles
+    that injection; this branch only fires when callers bypass the
+    registry, in which case they must pre-build the source.
     """
     if config.kind is SourceKind.LOCAL:
         return LocalSource(config)
@@ -99,34 +104,18 @@ def default_source_factory(config: SourceConfig) -> Source:
         from memograph.sources.s3 import S3Source
 
         return S3Source(config)
-    if config.kind is SourceKind.NOTION:
-        from memograph.sources.notion import NotionSource
-
-        return NotionSource(config)
-    if config.kind is SourceKind.GDRIVE:
-        # The token store needs a path the factory cannot know on
-        # its own (depends on the registry's global_root + tenant).
-        # The registry's :meth:`SourceRegistry.get` injects the
-        # store via :meth:`_build_with_context`; this branch only
-        # fires when callers bypass the registry, in which case
-        # they must pre-build a source with the store injected.
+    if config.kind in (
+        SourceKind.GDRIVE,
+        SourceKind.ONEDRIVE,
+        SourceKind.NOTION,
+    ):
         raise SourceError(
-            "GoogleDriveSource cannot be built via default_source_factory "
-            "alone — go through SourceRegistry.get() so the token store "
-            "is wired with the tenant's sources_dir."
-        )
-    if config.kind is SourceKind.ONEDRIVE:
-        # Same reasoning as GDRIVE above — the Microsoft adapter also
-        # depends on the encrypted token store and must be built via
-        # the registry's :meth:`_build_with_context`.
-        raise SourceError(
-            "OneDriveSource cannot be built via default_source_factory "
-            "alone — go through SourceRegistry.get() so the token store "
-            "is wired with the tenant's sources_dir."
+            f"{config.kind.value!r} sources route through Nango and need "
+            "a NangoClient injected — go through SourceRegistry.get() "
+            "rather than calling default_source_factory directly."
         )
     raise SourceError(
-        f"no adapter registered for source kind {config.kind.value!r}; "
-        "this kind is on the v1.1+ roadmap but not implemented yet"
+        f"no adapter registered for source kind {config.kind.value!r}"
     )
 
 
@@ -143,6 +132,7 @@ class SourceRegistry:
         global_root: Path | str,
         source_factory: SourceFactory = default_source_factory,
         max_warm: int = DEFAULT_MAX_WARM,
+        nango_client: Any = None,
     ) -> None:
         if max_warm < 1:
             raise ValueError(f"max_warm must be >= 1, got {max_warm}")
@@ -150,6 +140,10 @@ class SourceRegistry:
         self.global_root.mkdir(parents=True, exist_ok=True)
         self._factory = source_factory
         self.max_warm = max_warm
+        # Optional. None when the operator hasn't wired Nango; the
+        # registry then refuses to materialize cloud sources with a
+        # clear error rather than crashing.
+        self._nango_client = nango_client
 
         self._lock = threading.RLock()
         # Key is "(tenant_id, source_id)" so a single OrderedDict
@@ -157,6 +151,12 @@ class SourceRegistry:
         # is fine — the registry doesn't know which tenant is hot.
         self._warm: OrderedDict[tuple[str | None, str], Source] = OrderedDict()
         self._building: dict[tuple[str | None, str], threading.Event] = {}
+        # In-memory cache of the active-source decision per tenant.
+        # The on-disk ``_active.json`` is still source of truth, but
+        # reading it on every request is wasteful. The
+        # :class:`SwapCoordinator` invalidates entries here when a
+        # peer worker activates a different source.
+        self._active_cache: dict[str | None, str | None] = {}
 
     # --- persistence ---
 
@@ -258,52 +258,32 @@ class SourceRegistry:
         return source
 
     def _build_with_context(self, config: SourceConfig) -> Source:
-        """Construct a source with registry-derived context plumbed in.
+        """Construct a source with registry-derived context injected.
 
-        Some adapters need access to per-tenant filesystem paths
-        (token stores live there). The default factory is intentionally
-        context-free; this method is the seam where the registry
-        bridges the two.
+        The cloud OAuth kinds (GDrive, OneDrive, Notion) need a
+        :class:`NangoClient` to talk to Nango. The default factory is
+        context-free; this seam injects what the registry happens to
+        have on hand (the Nango client passed in at construction).
 
         Kept inside the registry so adapters never reach back out to
-        ``SourceRegistry`` directly — that would invert the
-        dependency and tangle the lifecycle.
+        ``SourceRegistry`` — that would invert the dependency and
+        tangle the lifecycle.
         """
-        if config.kind is SourceKind.GDRIVE:
-            from memograph.sources.gdrive import GoogleDriveSource
-            from memograph.sources.oauth.token_store import (
-                EncryptedTokenStore,
-                TokenStoreError,
-            )
-
-            sources_dir = self._sources_dir(config.tenant_id)
-            try:
-                store = EncryptedTokenStore(sources_dir)
-            except TokenStoreError as exc:
-                # Surface a clearer message than the generic
-                # SourceError the user would otherwise see at the
-                # first read_document() call.
+        if config.kind in (
+            SourceKind.GDRIVE,
+            SourceKind.ONEDRIVE,
+            SourceKind.NOTION,
+        ):
+            if self._nango_client is None:
                 raise SourceError(
-                    f"GoogleDriveSource {config.source_id!r} could not "
-                    f"build its token store: {exc}"
-                ) from exc
-            return GoogleDriveSource(config, token_store=store)
-        if config.kind is SourceKind.ONEDRIVE:
-            from memograph.sources.oauth.token_store import (
-                EncryptedTokenStore,
-                TokenStoreError,
-            )
-            from memograph.sources.onedrive import OneDriveSource
+                    f"{config.kind.value!r} source {config.source_id!r} "
+                    "requires Nango to be configured. Set "
+                    "MEMOGRAPH_NANGO_BASE_URL + MEMOGRAPH_NANGO_SECRET_KEY "
+                    "and restart the server."
+                )
+            from memograph.sources.nango_source import NangoBackedSource
 
-            sources_dir = self._sources_dir(config.tenant_id)
-            try:
-                store = EncryptedTokenStore(sources_dir)
-            except TokenStoreError as exc:
-                raise SourceError(
-                    f"OneDriveSource {config.source_id!r} could not "
-                    f"build its token store: {exc}"
-                ) from exc
-            return OneDriveSource(config, token_store=store)
+            return NangoBackedSource(config, nango_client=self._nango_client)
         return self._factory(config)
 
     def _load_config(self, tenant_id: str | None, source_id: str) -> SourceConfig:
@@ -356,6 +336,8 @@ class SourceRegistry:
         active = self.get_active(tenant_id)
         if active == source_id:
             self._active_path(tenant_id).unlink(missing_ok=True)
+            with self._lock:
+                self._active_cache[tenant_id] = None
         return True
 
     # --- listing ---
@@ -395,10 +377,11 @@ class SourceRegistry:
     def set_active(self, tenant_id: str | None, source_id: str) -> None:
         """Mark a source as the kernel's active vault for this tenant.
 
-        Writes ``<sources_dir>/_active.json`` atomically. Does NOT
-        coordinate across uvicorn workers — that's wired in Phase 5
-        via Redis pub/sub. In single-worker dev mode this file is
-        the source of truth and the kernel hot-reloads from it.
+        Writes ``<sources_dir>/_active.json`` atomically and refreshes
+        the in-memory cache. Multi-worker propagation is handled
+        separately by a :class:`SwapCoordinator` (see
+        :meth:`notify_remote_swap`) — the route layer publishes the
+        event after this call returns.
         """
         validate_source_id(source_id)
         # Refuse to activate a non-existent source.
@@ -418,9 +401,28 @@ class SourceRegistry:
         tmp = self._active_path(tenant_id).with_suffix(".json.tmp")
         tmp.write_text(payload, encoding="utf-8")
         tmp.replace(self._active_path(tenant_id))
+        with self._lock:
+            self._active_cache[tenant_id] = source_id
 
     def get_active(self, tenant_id: str | None) -> str | None:
-        """Return the active source_id or None if none is set."""
+        """Return the active source_id or None if none is set.
+
+        Reads from the in-memory cache first; falls through to disk
+        on miss. The cache is invalidated by
+        :meth:`notify_remote_swap` when a peer worker activates a
+        different source, so multi-worker deployments see swaps
+        within one Redis pub/sub round-trip.
+        """
+        with self._lock:
+            cached = self._active_cache.get(tenant_id, _UNSET)
+        if cached is not _UNSET:
+            return cached  # type: ignore[return-value]
+        value = self._read_active_from_disk(tenant_id)
+        with self._lock:
+            self._active_cache[tenant_id] = value
+        return value
+
+    def _read_active_from_disk(self, tenant_id: str | None) -> str | None:
         path = self._active_path(tenant_id)
         if not path.exists():
             return None
@@ -430,6 +432,30 @@ class SourceRegistry:
         except (OSError, json.JSONDecodeError) as exc:
             logger.warning("malformed _active.json at %s: %s", path, exc)
             return None
+
+    def notify_remote_swap(
+        self, tenant_id: str | None, source_id: str
+    ) -> None:
+        """Invalidate the in-memory active-source cache for this tenant.
+
+        Called by the :class:`SwapCoordinator` subscriber when another
+        worker publishes a swap event. We deliberately do NOT trust
+        the payload as authoritative — the on-disk ``_active.json``
+        is canonical. We just clear the cache so the next read picks
+        up the fresh value.
+
+        Idempotent: calling on a cold cache, on an entry that already
+        matches, or on a tenant the worker has never touched is all
+        a no-op.
+        """
+        with self._lock:
+            self._active_cache.pop(tenant_id, None)
+        logger.debug(
+            "registry cleared active-source cache for tenant=%s "
+            "after remote swap to %s",
+            tenant_id,
+            source_id,
+        )
 
     # --- internals ---
 

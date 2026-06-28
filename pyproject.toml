@@ -140,26 +140,26 @@ sources-s3 = [
     # Cap at a single major to avoid surprise API churn.
     "boto3>=1.26.0,<2",
 ]
-sources-notion = [
-    "notion-client>=2.0.0,<4",
-]
-sources-gdrive = [
-    # Drive REST is reached directly via httpx (already a transitive
-    # dep of FastAPI) — no google-api-python-client needed. cryptography
-    # encrypts the refresh-token store on disk.
-    "cryptography>=42.0.0,<50",
+sources-cloud = [
+    # All OAuth cloud sources (Google Drive, OneDrive / SharePoint,
+    # Notion) route through a self-hosted Nango instance. The
+    # backend talks to Nango's REST API over httpx; the encrypted
+    # token store, OAuth dance, and per-provider quirks live in
+    # Nango. So one extra replaces the previous per-provider
+    # extras (sources-gdrive, sources-onedrive, sources-notion).
     "httpx>=0.27.0,<1",
 ]
-sources-onedrive = [
-    # Microsoft Graph is reached directly via httpx — same reasoning
-    # as the GDrive adapter (no msgraph-sdk dep). cryptography is
-    # shared with sources-gdrive but listed again so installing only
-    # OneDrive does not depend on the Drive extra being present.
-    "cryptography>=42.0.0,<50",
-    "httpx>=0.27.0,<1",
+redis = [
+    # Multi-worker uvicorn deployments use redis pub/sub to propagate
+    # source-activation events across workers. Single-worker installs
+    # don't need it — the in-memory active-source cache stays
+    # consistent without coordination. Pinned to a single major to
+    # avoid surprise breakage; 5.0 is the first version with the
+    # native asyncio shim under ``redis.asyncio``.
+    "redis>=5.0,<7",
 ]
 sources = [
-    "memograph[sources-s3,sources-notion,sources-gdrive,sources-onedrive]",
+    "memograph[sources-s3,sources-cloud]",
 ]
 observability = [
     # OpenTelemetry (traces + metrics over OTLP/HTTP). Pinning to a single

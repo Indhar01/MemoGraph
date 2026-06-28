@@ -234,29 +234,36 @@ class TestLRUEviction:
 
 
 class TestFactoryDispatch:
-    def test_gdrive_requires_registry_context(self) -> None:
-        # GDrive needs an EncryptedTokenStore that only the registry can
-        # wire (it has the tenant's sources_dir). Calling the bare factory
-        # is a programming error — surface it loudly.
+    def test_cloud_kinds_require_registry_context(self) -> None:
+        # Cloud OAuth kinds (gdrive, onedrive, notion) need a
+        # NangoClient injected, which only the registry has at
+        # construction time. Calling the bare factory is a
+        # programming error — surface it loudly.
+        for kind in (SourceKind.GDRIVE, SourceKind.ONEDRIVE, SourceKind.NOTION):
+            config = SourceConfig(
+                source_id="x",
+                kind=kind,
+                display_name="x",
+            )
+            with pytest.raises(SourceError, match="SourceRegistry"):
+                default_source_factory(config)
+
+    def test_cloud_kind_without_nango_client_raises(self, tmp_path: Path) -> None:
+        # Through the registry, but no nango_client injected — the
+        # operator never wired Nango up. Surface a clear setup error
+        # rather than crashing later at first proxy call.
+        registry = SourceRegistry(global_root=tmp_path / "global")
         config = SourceConfig(
             source_id="x",
             kind=SourceKind.GDRIVE,
             display_name="x",
+            params={"nango_connection_id": "conn-1"},
         )
-        with pytest.raises(SourceError, match="SourceRegistry"):
-            default_source_factory(config)
-
-    def test_onedrive_requires_registry_context(self) -> None:
-        # OneDrive, like GDrive, needs the registry to inject the
-        # token store — calling the bare factory is a programming
-        # error and must raise loudly.
-        config = SourceConfig(
-            source_id="x",
-            kind=SourceKind.ONEDRIVE,
-            display_name="x",
-        )
-        with pytest.raises(SourceError, match="SourceRegistry"):
-            default_source_factory(config)
+        with pytest.raises(SourceError, match="MEMOGRAPH_NANGO_BASE_URL"):
+            # register() warms the source immediately by calling get(),
+            # so the misconfiguration surfaces here without a separate
+            # get() call.
+            registry.register(config)
 
     def test_local_dispatch(self, tmp_path: Path) -> None:
         v = tmp_path / "v"; v.mkdir()

@@ -1,8 +1,8 @@
 """Lifespan wiring tests for the source-adapter sync scheduler.
 
-These exercise the FastAPI startup hook: when
-``MEMOGRAPH_SOURCES_ENABLED=1`` and the disable knob is off, the app
-should construct a :class:`SyncScheduler`, attach it to
+These exercise the FastAPI startup hook: when ``MEMOGRAPH_SOURCES_ENABLED``
+is not explicitly disabled (default-on as of v1.1) and the sync knob is
+off, the app should construct a :class:`SyncScheduler`, attach it to
 ``app.state.sync_scheduler``, and stop it cleanly on shutdown.
 
 We use :class:`fastapi.testclient.TestClient` as a context manager so
@@ -85,9 +85,9 @@ def test_scheduler_skipped_when_sources_disabled(
     sources_root: Path,
     vault_dir: Path,
 ) -> None:
-    # No MEMOGRAPH_SOURCES_ENABLED — registry stays None, scheduler
-    # should never be constructed.
-    monkeypatch.delenv("MEMOGRAPH_SOURCES_ENABLED", raising=False)
+    # MEMOGRAPH_SOURCES_ENABLED=0 — operator opted out; registry stays
+    # None and the scheduler should never be constructed.
+    monkeypatch.setenv("MEMOGRAPH_SOURCES_ENABLED", "0")
     server_mod = _reload_server(monkeypatch, sources_root)
     app = server_mod.create_app(vault_path=str(vault_dir), use_gam=False)
     with TestClient(app):

@@ -13,8 +13,16 @@ import {
   XCircle,
   RefreshCw,
   ArrowRight,
+  PlayCircle,
 } from 'lucide-react';
-import { sourcesAPI, getErrorMessage, type Source, type SourceKind } from '../lib/api';
+import axios from 'axios';
+import {
+  sourcesAPI,
+  getErrorMessage,
+  isNotFoundError,
+  type Source,
+  type SourceKind,
+} from '../lib/api';
 import { ErrorAlert } from '../components/ErrorDisplay';
 
 const KIND_LABEL: Record<SourceKind, string> = {
@@ -36,9 +44,9 @@ const KIND_ICON: Record<SourceKind, typeof Database> = {
 const KIND_HINT: Record<SourceKind, string> = {
   local: 'A folder of markdown files on this machine.',
   s3: 'Any S3 bucket — AWS, MinIO, Backblaze B2, Cloudflare R2.',
-  gdrive: 'OAuth into a Google Drive folder. Read-only.',
-  onedrive: 'OAuth into personal OneDrive or a SharePoint document library. Read-only.',
-  notion: 'A Notion workspace via internal integration token.',
+  gdrive: 'Sign in with Google via Nango. One click — no fields. Read-only.',
+  onedrive: 'Sign in with Microsoft (personal or work) via Nango. One click. Read-only.',
+  notion: 'Sign in with Notion via Nango. One click — no manual token needed.',
 };
 
 export default function SourcesPage() {
@@ -98,7 +106,14 @@ export default function SourcesPage() {
         </div>
       )}
 
-      {error && (
+      {/*
+        A 404 here means the source subsystem isn't mounted on this
+        backend — show the friendly EmptyState instead of a red error
+        alert. The Layout-level banner handles the admin-facing notice.
+        Other failures (500, network) still surface as a hard error
+        because they're not "no sources yet" — they're broken.
+      */}
+      {error && !isNotFoundError(error) && (
         <ErrorAlert
           message={getErrorMessage(error)}
           onRetry={() => {
@@ -109,7 +124,7 @@ export default function SourcesPage() {
 
       {isLoading ? (
         <p className="text-muted-fg">Loading sources…</p>
-      ) : data && data.sources.length === 0 ? (
+      ) : isNotFoundError(error) || (data && data.sources.length === 0) ? (
         <EmptyState onAdd={() => setWizardOpen(true)} />
       ) : (
         <div className="space-y-3">
@@ -163,9 +178,29 @@ function SourceCard({ source, activeId }: { source: Source; activeId: string | n
     staleTime: 30_000,
   });
 
+  // Activating a source re-points the kernel at it and triggers a
+  // reindex; syncing materializes new files and re-indexes if active.
+  // Both can change what shows up on the Memories / Graph / Analytics
+  // pages, so invalidate those query keys too — the user shouldn't
+  // have to reload to see their new memories.
+  const invalidateMemoryViews = () => {
+    qc.invalidateQueries({ queryKey: ['sources'] });
+    qc.invalidateQueries({ queryKey: ['memories'] });
+    qc.invalidateQueries({ queryKey: ['graph'] });
+    qc.invalidateQueries({ queryKey: ['analytics'] });
+  };
+
   const activate = useMutation({
     mutationFn: () => sourcesAPI.activate(source.source_id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sources'] }),
+    onSuccess: invalidateMemoryViews,
+  });
+
+  const syncNow = useMutation({
+    mutationFn: () => sourcesAPI.sync(source.source_id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['source-health', source.source_id] });
+      invalidateMemoryViews();
+    },
   });
 
   const remove = useMutation({
@@ -216,6 +251,16 @@ function SourceCard({ source, activeId }: { source: Source; activeId: string | n
           >
             <RefreshCw className={`w-4 h-4 ${healthFetching ? 'animate-spin' : ''}`} />
           </button>
+          <button
+            type="button"
+            onClick={() => syncNow.mutate()}
+            disabled={syncNow.isPending}
+            className="btn btn-ghost p-2"
+            aria-label="Sync now"
+            title="Sync now — pulls fresh content from the source immediately"
+          >
+            <PlayCircle className={`w-4 h-4 ${syncNow.isPending ? 'animate-pulse' : ''}`} />
+          </button>
           {!isActive && (
             <button
               type="button"
@@ -250,6 +295,23 @@ function SourceCard({ source, activeId }: { source: Source; activeId: string | n
       {remove.isError && (
         <p className="text-xs text-red-500 mt-2">
           {getErrorMessage(remove.error)}
+        </p>
+      )}
+      {syncNow.isError && (
+        <p className="text-xs text-red-500 mt-2">
+          {getErrorMessage(syncNow.error)}
+        </p>
+      )}
+      {syncNow.isSuccess && syncNow.data?.last_error && (
+        <p className="text-xs text-amber-500 mt-2">
+          Sync completed with error: {syncNow.data.last_error}
+        </p>
+      )}
+      {syncNow.isSuccess && !syncNow.data?.last_error && (
+        <p className="text-xs text-emerald-500 mt-2">
+          Synced{syncNow.data?.last_success_at
+            ? ` at ${new Date(syncNow.data.last_success_at).toLocaleTimeString()}`
+            : ''}.
         </p>
       )}
     </div>
@@ -298,6 +360,12 @@ function HealthPill({
 
 const KIND_ORDER: SourceKind[] = ['local', 's3', 'gdrive', 'onedrive', 'notion'];
 
+type NangoKind = 'gdrive' | 'onedrive' | 'notion';
+
+function isNangoKind(k: SourceKind): k is NangoKind {
+  return k === 'gdrive' || k === 'onedrive' || k === 'notion';
+}
+
 function AddSourceWizard({
   onClose,
   onCreated,
@@ -306,6 +374,7 @@ function AddSourceWizard({
   onCreated: () => void;
 }) {
   const [kind, setKind] = useState<SourceKind | null>(null);
+  const routedThroughNango = kind !== null && isNangoKind(kind);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -316,9 +385,11 @@ function AddSourceWizard({
               {kind ? `Connect ${KIND_LABEL[kind]}` : 'Add a source'}
             </h2>
             <p className="text-xs text-muted-fg mt-0.5">
-              {kind
-                ? 'Configure the connection. Tokens are encrypted on disk.'
-                : 'Pick the kind of source you want to connect.'}
+              {!kind
+                ? 'Pick the kind of source you want to connect.'
+                : routedThroughNango
+                  ? "You'll sign in with the provider through Nango. Tokens stay encrypted in your Nango instance."
+                  : 'Fill in the connection details.'}
             </p>
           </div>
           <button type="button" onClick={onClose} className="btn btn-ghost p-2">
@@ -328,14 +399,216 @@ function AddSourceWizard({
         <div className="p-4">
           {!kind ? (
             <KindPicker onPick={setKind} />
+          ) : routedThroughNango ? (
+            <NangoConnect
+              kind={kind}
+              onBack={() => setKind(null)}
+              onConnected={onCreated}
+            />
           ) : (
             <KindForm
-              kind={kind}
+              kind={kind as 'local' | 's3'}
               onBack={() => setKind(null)}
               onCreated={onCreated}
             />
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function nangoErrorHint(err: unknown): string {
+  // 404: the /sources/connect-session route isn't mounted on this
+  // backend — sources subsystem is disabled or running stale code.
+  // 503: route mounted but Nango isn't configured / not reachable.
+  // Anything else: fall through to the generic axios message.
+  if (isNotFoundError(err)) {
+    return "This MemoGraph instance hasn't enabled source connections. Contact your administrator.";
+  }
+  if (axios.isAxiosError(err) && err.response?.status === 503) {
+    const detail = err.response.data?.error;
+    return (
+      detail ||
+      "Nango isn't reachable from this MemoGraph backend. Ask your administrator to bring up the Nango stack (docs/SOURCES.md)."
+    );
+  }
+  return getErrorMessage(err);
+}
+
+function NangoConnect({
+  kind,
+  onBack,
+  onConnected,
+}: {
+  kind: NangoKind;
+  onBack: () => void;
+  onConnected: () => void;
+}) {
+  const qc = useQueryClient();
+  const providerLabel = {
+    gdrive: 'Google Drive',
+    onedrive: 'OneDrive / SharePoint',
+    notion: 'Notion',
+  }[kind];
+
+  // Probe Nango readiness so the operator knows up front whether
+  // the integration is wired. A red banner here saves the user
+  // from clicking through to a 503.
+  const { data: nangoHealth, isLoading: nangoChecking } = useQuery({
+    queryKey: ['nango-health'],
+    queryFn: () => sourcesAPI.getNangoHealth(),
+    staleTime: 60_000,
+  });
+
+  const connect = useMutation({
+    mutationFn: async () => {
+      const session = await sourcesAPI.createConnectSession({ kind });
+      // Lazy-load Nango's frontend SDK to keep the main bundle slim.
+      // Falls back to opening the connect_link in a new tab if the
+      // SDK isn't installed yet — useful while the operator is still
+      // wiring up the integration.
+      try {
+        // The dep is declared in package.json but kept optional at
+        // build time so checkouts without `npm install` still
+        // typecheck AND don't crash the dev server. /* @vite-ignore */
+        // tells Vite not to pre-bundle or statically resolve the
+        // specifier, so a missing module surfaces as a runtime
+        // exception (caught below) instead of a Vite parse error.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nangoModule: any = await import(/* @vite-ignore */ '@nangohq/frontend');
+        const Nango =
+          (nangoModule.default as unknown as new (opts: {
+            host: string;
+          }) => {
+            openConnectUI: (opts: {
+              sessionToken: string;
+              onEvent?: (e: { type: string; payload?: unknown }) => void;
+            }) => unknown;
+          }) ?? null;
+        // Use public_url for the SDK — the browser, not the backend,
+        // talks to Nango here, so the URL needs to be reachable from
+        // the user's machine. Falls back to base_url for installs
+        // where only the legacy single-URL env var is set.
+        const nangoHost = nangoHealth?.public_url || nangoHealth?.base_url;
+        if (Nango && nangoHost) {
+          const nango = new Nango({ host: nangoHost });
+          await new Promise<void>((resolve, reject) => {
+            nango.openConnectUI({
+              sessionToken: session.session_token,
+              onEvent: (event: { type: string }) => {
+                if (event.type === 'close') {
+                  resolve();
+                } else if (event.type === 'connect') {
+                  resolve();
+                }
+              },
+            });
+            // Safety timeout: 5 minutes is well under Nango's 30-min
+            // session lifetime; if the modal never reports close we
+            // still let the user retry.
+            setTimeout(() => reject(new Error('Connect timed out')), 5 * 60_000);
+          });
+        } else if (session.connect_link) {
+          window.open(session.connect_link, '_blank', 'noopener,noreferrer');
+        } else {
+          throw new Error(
+            'Nango SDK is not installed and no connect_link was returned. ' +
+              "Run 'npm install @nangohq/frontend' in the frontend " +
+              'project to enable the embedded modal.'
+          );
+        }
+      } catch (err) {
+        // Module not found → fall back to the connect_link.
+        if (session.connect_link) {
+          window.open(session.connect_link, '_blank', 'noopener,noreferrer');
+        } else {
+          throw err;
+        }
+      }
+      return session;
+    },
+    onSuccess: () => {
+      // The webhook lands asynchronously — re-fetch the sources list
+      // immediately, but expect the user may need to wait a beat. If
+      // this is the first source, the webhook also auto-activates +
+      // triggers a kernel ingest, so refresh the memory views too.
+      qc.invalidateQueries({ queryKey: ['sources'] });
+      qc.invalidateQueries({ queryKey: ['memories'] });
+      qc.invalidateQueries({ queryKey: ['graph'] });
+      qc.invalidateQueries({ queryKey: ['analytics'] });
+      onConnected();
+    },
+  });
+
+  const nangoBroken =
+    nangoHealth && !nangoHealth.configured;
+  // MemoGraph kind → Nango provider-config-key (must match the values
+  // in memograph/sources/nango_client.py KIND_TO_PROVIDER_KEY).
+  const kindToProviderKey: Record<NangoKind, string> = {
+    gdrive: 'google-drive',
+    onedrive: 'one-drive',
+    notion: 'notion',
+  };
+  const providerKey = kindToProviderKey[kind];
+  // Once the health probe reports back, we know whether the operator
+  // has actually configured this provider in the Nango admin UI. If
+  // not, clicking Continue would mint a session that fails inside the
+  // Connect modal with "no integration found" — far too late.
+  const integrationMissing =
+    nangoHealth?.configured === true &&
+    Array.isArray(nangoHealth.available_integrations) &&
+    !nangoHealth.available_integrations.includes(providerKey);
+
+  return (
+    <div className="space-y-4">
+      {nangoChecking && (
+        <p className="text-xs text-muted-fg">Checking Nango status…</p>
+      )}
+      {nangoBroken && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+          <strong>Nango is not configured.</strong> Set{' '}
+          <code>MEMOGRAPH_NANGO_BASE_URL</code> and{' '}
+          <code>MEMOGRAPH_NANGO_SECRET_KEY</code> in your server
+          environment, then restart. See{' '}
+          <code>docs/SOURCES.md</code> for the full walkthrough.
+        </div>
+      )}
+      {integrationMissing && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+          <strong>{providerLabel} isn&rsquo;t configured in Nango yet.</strong>{' '}
+          Open the Nango admin UI at{' '}
+          <code>{nangoHealth?.public_url || nangoHealth?.base_url}</code>{' '}
+          and create an integration with the provider key{' '}
+          <code>{providerKey}</code> before continuing here.
+        </div>
+      )}
+      <div className="rounded-md border border-border bg-surface/40 p-4 text-sm space-y-2">
+        <p>
+          You&rsquo;ll be sent to <strong>{providerLabel}</strong> to sign in
+          and approve access. Once you finish, MemoGraph will register the
+          source automatically — no fields to fill in here.
+        </p>
+        <p className="text-muted-fg text-xs">
+          Authentication is brokered by Nango (your self-hosted instance).
+          MemoGraph never sees your provider tokens.
+        </p>
+      </div>
+      {connect.isError && (
+        <p className="text-xs text-red-500">{nangoErrorHint(connect.error)}</p>
+      )}
+      <div className="flex items-center justify-between pt-2">
+        <button type="button" onClick={onBack} className="btn btn-ghost">
+          ← Back
+        </button>
+        <button
+          type="button"
+          onClick={() => connect.mutate()}
+          disabled={connect.isPending || nangoBroken || integrationMissing}
+          className="btn btn-primary"
+        >
+          {connect.isPending ? 'Opening Nango…' : `Continue with ${providerLabel} →`}
+        </button>
       </div>
     </div>
   );
@@ -370,7 +643,7 @@ function KindForm({
   onBack,
   onCreated,
 }: {
-  kind: SourceKind;
+  kind: 'local' | 's3';
   onBack: () => void;
   onCreated: () => void;
 }) {
@@ -384,12 +657,6 @@ function KindForm({
   const [region, setRegion] = useState('');
   const [prefix, setPrefix] = useState('');
   const [endpointUrl, setEndpointUrl] = useState('');
-  // notion
-  const [notionToken, setNotionToken] = useState('');
-  const [notionDatabaseId, setNotionDatabaseId] = useState('');
-  // gdrive / onedrive
-  const [folderId, setFolderId] = useState('');
-  const [driveId, setDriveId] = useState('');
 
   const create = useMutation({
     mutationFn: async () => {
@@ -401,61 +668,31 @@ function KindForm({
           params: { path: localPath },
         });
       }
-      if (kind === 's3') {
-        const params: Record<string, unknown> = { bucket };
-        if (region) params.region = region;
-        if (prefix) params.prefix = prefix;
-        if (endpointUrl) params.endpoint_url = endpointUrl;
-        return sourcesAPI.create({
-          source_id: sourceId,
-          kind,
-          display_name: displayName || sourceId,
-          params,
-        });
-      }
-      if (kind === 'notion') {
-        const params: Record<string, unknown> = {};
-        if (notionToken) params.auth_token = notionToken;
-        if (notionDatabaseId) params.database_id = notionDatabaseId;
-        return sourcesAPI.create({
-          source_id: sourceId,
-          kind,
-          display_name: displayName || sourceId,
-          params,
-        });
-      }
-      // OAuth-driven kinds: kick off the flow rather than POST first.
-      // The callback auto-registers the source.
-      if (kind === 'gdrive') {
-        const flow = await sourcesAPI.startGoogleOAuth({
-          source_id: sourceId,
-          display_name: displayName || sourceId,
-          folder_id: folderId || undefined,
-        });
-        window.location.href = flow.authorization_url;
-        return undefined;
-      }
-      if (kind === 'onedrive') {
-        const flow = await sourcesAPI.startMicrosoftOAuth({
-          source_id: sourceId,
-          display_name: displayName || sourceId,
-          drive_id: driveId || undefined,
-          folder_id: folderId || undefined,
-        });
-        window.location.href = flow.authorization_url;
-        return undefined;
-      }
+      // s3
+      const params: Record<string, unknown> = { bucket };
+      if (region) params.region = region;
+      if (prefix) params.prefix = prefix;
+      if (endpointUrl) params.endpoint_url = endpointUrl;
+      return sourcesAPI.create({
+        source_id: sourceId,
+        kind,
+        display_name: displayName || sourceId,
+        params,
+      });
     },
     onSuccess: (result) => {
       if (result) {
+        // First-source auto-activate happens server-side, so a new
+        // Local/S3 source can immediately produce memories on the
+        // Memories page. Invalidate those queries too.
         qc.invalidateQueries({ queryKey: ['sources'] });
+        qc.invalidateQueries({ queryKey: ['memories'] });
+        qc.invalidateQueries({ queryKey: ['graph'] });
+        qc.invalidateQueries({ queryKey: ['analytics'] });
         onCreated();
       }
-      // OAuth kinds: the page has already been redirected.
     },
   });
-
-  const isOAuth = kind === 'gdrive' || kind === 'onedrive';
 
   return (
     <form
@@ -491,15 +728,19 @@ function KindForm({
 
       {kind === 'local' && (
         <Field
-          label="Absolute path"
-          hint="Must be an absolute path to a directory of markdown files."
+          label="Absolute path to your markdown folder"
+          hint={
+            'The folder must exist on this server and contain your .md files. ' +
+            'Forward slashes work on every OS — on Windows, prefer C:/Users/me/notes ' +
+            'over backslashes. The path is checked when you click Create.'
+          }
         >
           <input
             type="text"
             value={localPath}
             onChange={(e) => setLocalPath(e.target.value)}
             required
-            placeholder="/Users/me/notes  or  C:\\Users\\me\\notes"
+            placeholder="C:/Users/me/notes"
             className="input w-full font-mono"
           />
         </Field>
@@ -550,69 +791,6 @@ function KindForm({
         </>
       )}
 
-      {kind === 'notion' && (
-        <>
-          <Field
-            label="Internal integration token"
-            hint="Create one at notion.so/my-integrations. Stored encrypted."
-          >
-            <input
-              type="password"
-              value={notionToken}
-              onChange={(e) => setNotionToken(e.target.value)}
-              placeholder="secret_..."
-              className="input w-full font-mono"
-            />
-          </Field>
-          <Field label="Database ID (optional)">
-            <input
-              type="text"
-              value={notionDatabaseId}
-              onChange={(e) => setNotionDatabaseId(e.target.value)}
-              className="input w-full font-mono"
-            />
-          </Field>
-        </>
-      )}
-
-      {kind === 'gdrive' && (
-        <Field
-          label="Drive folder ID (optional)"
-          hint="Leave blank to scan all reachable files. Find the ID in the folder's URL."
-        >
-          <input
-            type="text"
-            value={folderId}
-            onChange={(e) => setFolderId(e.target.value)}
-            className="input w-full font-mono"
-          />
-        </Field>
-      )}
-
-      {kind === 'onedrive' && (
-        <>
-          <Field
-            label="Drive ID (optional)"
-            hint="For SharePoint libraries. Leave blank to use your personal OneDrive."
-          >
-            <input
-              type="text"
-              value={driveId}
-              onChange={(e) => setDriveId(e.target.value)}
-              className="input w-full font-mono"
-            />
-          </Field>
-          <Field label="Folder ID (optional)">
-            <input
-              type="text"
-              value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
-              className="input w-full font-mono"
-            />
-          </Field>
-        </>
-      )}
-
       {create.isError && (
         <p className="text-xs text-red-500">{getErrorMessage(create.error)}</p>
       )}
@@ -630,11 +808,7 @@ function KindForm({
           disabled={create.isPending}
           className="btn btn-primary"
         >
-          {create.isPending
-            ? 'Connecting…'
-            : isOAuth
-              ? 'Continue to provider →'
-              : 'Create source'}
+          {create.isPending ? 'Creating…' : 'Create source'}
         </button>
       </div>
     </form>

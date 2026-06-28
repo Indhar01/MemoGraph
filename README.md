@@ -118,7 +118,7 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 
 ### Enterprise & SaaS readiness
 
-- **Source adapters** — connect a local folder, S3-compatible bucket (AWS / MinIO / R2 / B2), Notion workspace, Google Drive folder, or OneDrive / SharePoint library. OAuth flows with PKCE; Fernet-encrypted refresh-token store; per-source health probes; admin-scoped REST + a wizard in the web UI. Wired behind `MEMOGRAPH_SOURCES_ENABLED=1` until v1.1.
+- **Source adapters** — connect a local folder, S3-compatible bucket (AWS / MinIO / R2 / B2), Notion workspace, Google Drive folder, or OneDrive / SharePoint library. OAuth for cloud providers is brokered through a self-hosted [Nango](https://nango.dev) instance (encrypted token storage, automatic refresh, REST proxy); per-source health probes; admin-scoped REST + a wizard in the web UI. Default-on; set `MEMOGRAPH_SOURCES_ENABLED=0` to opt out.
 - **Multi-tenancy** with filesystem-isolated tenants, an LRU registry of warm kernels, per-tenant audit logs, and end-to-end isolation tests gating release.
 - **Authentication** via OIDC (JWKS) or hashed API keys; per-route auth scope; identity bound into the audit log.
 - **Web hardening** — restrictive CORS, slowapi rate limiting, request-size caps, structured JSON logging with request IDs, info-leak-free 500 handler.

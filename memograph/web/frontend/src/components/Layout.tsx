@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
   Brain,
   Search,
@@ -12,9 +13,11 @@ import {
   Menu,
   Command as CommandIcon,
   Database,
+  AlertTriangle,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useKeyboardShortcuts } from '../lib/keyboardShortcuts';
+import { sourcesAPI } from '../lib/api';
 import { CommandPalette } from './CommandPalette';
 import { MobileNav } from './MobileNav';
 
@@ -90,6 +93,16 @@ export default function Layout({ children }: LayoutProps) {
       category: 'Help',
     });
   }, [registerShortcut, navigate, toggleTheme, toggleHelp]);
+
+  const { data: sourcesProbe } = useQuery({
+    queryKey: ['sources-enabled-probe'],
+    queryFn: sourcesAPI.probeEnabled,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    retry: false,
+  });
+  const sourcesDisabled = sourcesProbe?.enabled === false;
+  const [showAdminHint, setShowAdminHint] = useState(false);
 
   const isActive = (path: string) => location.pathname.startsWith(path);
 
@@ -171,6 +184,44 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </header>
+
+      {sourcesDisabled && (
+        <div
+          role="alert"
+          className="sticky top-16 z-30 w-full bg-amber-500/10 border-b border-amber-500/40 text-amber-900 dark:text-amber-200 text-sm px-4 py-2 flex items-start gap-3"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="flex-1">
+            Source connections are disabled on this instance.{' '}
+            <button
+              type="button"
+              onClick={() => setShowAdminHint((v) => !v)}
+              className="underline"
+              aria-expanded={showAdminHint}
+            >
+              {showAdminHint ? 'Hide details' : 'Why?'}
+            </button>
+            {showAdminHint && (
+              <span className="block mt-1 text-xs opacity-80">
+                Admin: unset{' '}
+                <code className="px-1 rounded bg-amber-500/20">
+                  MEMOGRAPH_SOURCES_ENABLED
+                </code>{' '}
+                (or set it to <code>1</code>) and restart the backend, then
+                refresh. See the docs link for the full troubleshooting list.
+              </span>
+            )}
+          </div>
+          <a
+            href="https://github.com/Indhar01/MemoGraph/blob/main/docs/SOURCES.md"
+            target="_blank"
+            rel="noreferrer"
+            className="underline shrink-0"
+          >
+            Docs
+          </a>
+        </div>
+      )}
 
       {/* Main */}
       <main className="flex-1 relative">

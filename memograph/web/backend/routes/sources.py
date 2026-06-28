@@ -27,7 +27,6 @@ exposes ``router``.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -149,15 +148,23 @@ class ActivateSourceResponse(BaseModel):
     active_source_id: str
 
 
+class SyncSourceResponse(BaseModel):
+    source_id: str
+    in_flight: bool
+    last_attempt_at: str | None = None
+    last_success_at: str | None = None
+    last_error: str | None = None
+    consecutive_failures: int = 0
+
+
 # --- helpers ---
 
 
 def _registry(request: Request) -> SourceRegistry:
     """Return the registry or raise 503.
 
-    The registry is built at startup when
-    ``MEMOGRAPH_SOURCES_ENABLED=1``; missing means the operator
-    hasn't opted in.
+    The registry is built at startup by default; missing means the
+    operator explicitly opted out with ``MEMOGRAPH_SOURCES_ENABLED=0``.
     """
     registry = getattr(request.app.state, "source_registry", None)
     if registry is None:
@@ -165,7 +172,7 @@ def _registry(request: Request) -> SourceRegistry:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "sources subsystem is disabled. "
-                "Set MEMOGRAPH_SOURCES_ENABLED=1 to enable."
+                "Unset MEMOGRAPH_SOURCES_ENABLED (or set =1) to enable."
             ),
         )
     return registry
@@ -177,6 +184,11 @@ def _validate_local_params(params: dict[str, Any]) -> dict[str, Any]:
     Raises ``HTTPException(400)`` on any failure. Returns the
     cleaned params dict; callers pass this straight into
     :class:`SourceConfig.params`.
+
+    The existence check happens here (at registration) rather than
+    only on the first health probe. Wizard users expect "I typed a
+    bad path → I get told now"; a 201 followed by a red health pill
+    is a worse experience than a 400 with a clear message.
     """
     path_raw = params.get("path")
     if not path_raw or not isinstance(path_raw, str):
@@ -184,18 +196,63 @@ def _validate_local_params(params: dict[str, Any]) -> dict[str, Any]:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="LOCAL source requires params['path'] (absolute path)",
         )
-    p = Path(path_raw).expanduser()
+    # Trim whitespace + strip wrapping quotes that copy-paste from a
+    # terminal often introduces ("/path/with spaces" → /path/with spaces).
+    cleaned_raw = path_raw.strip().strip('"').strip("'")
+    if not cleaned_raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LOCAL source path is empty after trimming",
+        )
+    try:
+        p = Path(cleaned_raw).expanduser()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LOCAL source path is not a valid path: {exc}",
+        ) from exc
     if not p.is_absolute():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="LOCAL source path must be absolute",
+            detail=(
+                f"LOCAL source path must be absolute (got {cleaned_raw!r}). "
+                "On Windows, include the drive letter, e.g. C:/Users/me/notes."
+            ),
         )
     if any(part == ".." for part in p.parts):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="LOCAL source path must not contain '..' segments",
         )
-    return {"path": str(p)}
+    # Resolve once so we store a canonical absolute path and so the
+    # existence check below sees what the adapter will actually use.
+    try:
+        resolved = p.resolve(strict=False)
+    except (OSError, RuntimeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LOCAL source path could not be resolved: {exc}",
+        ) from exc
+    if not resolved.exists():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"LOCAL source path does not exist on this server: "
+                f"{resolved}. (You entered {path_raw!r}.) If you're "
+                "running MemoGraph in Docker, the path must exist "
+                "*inside the container* — bind-mount your host folder."
+            ),
+        )
+    if not resolved.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"LOCAL source path is not a directory: {resolved}. "
+                "Point at the folder containing your .md files, "
+                "not at a single file."
+            ),
+        )
+    return {"path": str(resolved)}
 
 
 def _validate_s3_params(params: dict[str, Any]) -> dict[str, Any]:
@@ -229,63 +286,28 @@ def _validate_s3_params(params: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
-def _validate_gdrive_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Validate Google Drive params.
-
-    Drive auth lives in the encrypted token store, not in
-    ``params``. The only validation we do here is to allowlist the
-    config keys we recognise; the actual usability check happens
-    on the first health probe (which will return FAILED if the
-    OAuth flow hasn't been completed yet).
-    """
-    cleaned: dict[str, Any] = {}
-    if "folder_id" in params and params["folder_id"]:
-        cleaned["folder_id"] = params["folder_id"]
-    if "scopes" in params and isinstance(params["scopes"], list):
-        cleaned["scopes"] = params["scopes"]
-    if "sync_interval_seconds" in params:
-        cleaned["sync_interval_seconds"] = params["sync_interval_seconds"]
-    return cleaned
-
-
-def _validate_onedrive_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Validate OneDrive params.
-
-    OneDrive auth lives in the encrypted token store, not in
-    ``params``. We allowlist the config keys we recognise so a
-    typo in the request body doesn't quietly persist.
-    """
-    cleaned: dict[str, Any] = {}
-    if "drive_id" in params and params["drive_id"]:
-        cleaned["drive_id"] = params["drive_id"]
-    if "folder_id" in params and params["folder_id"]:
-        cleaned["folder_id"] = params["folder_id"]
-    if "scopes" in params and isinstance(params["scopes"], list):
-        cleaned["scopes"] = params["scopes"]
-    if "sync_interval_seconds" in params:
-        cleaned["sync_interval_seconds"] = params["sync_interval_seconds"]
-    return cleaned
-
-
 def _validate_notion_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Validate Notion params: at least one of ``auth_token`` or
-    ambient ``NOTION_API_TOKEN`` env must be present.
+    """Validate Notion params for the scripted-creation path.
 
-    We do not test the token here — that's the health probe's job.
-    Validation is structural only: either provide a token in the
-    request or rely on the env var.
+    Notion sources are normally created through the Nango Connect
+    flow, which writes ``nango_connection_id`` into the params via
+    the webhook handler. Scripted callers can still POST a Notion
+    source directly if they pre-create the Nango connection — they
+    must supply ``nango_connection_id`` explicitly.
     """
     cleaned: dict[str, Any] = {}
-    if "auth_token" in params and params["auth_token"]:
-        cleaned["auth_token"] = params["auth_token"]
-    elif not os.environ.get("NOTION_API_TOKEN"):
+    nango_connection_id = params.get("nango_connection_id")
+    if not nango_connection_id or not isinstance(nango_connection_id, str):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "NOTION source requires params['auth_token'] or the "
-                "NOTION_API_TOKEN environment variable to be set"
+                "NOTION source requires params['nango_connection_id']. "
+                "Use POST /api/v1/sources/connect-session for the "
+                "wizard flow; scripted callers must mint the Nango "
+                "connection first."
             ),
         )
+    cleaned["nango_connection_id"] = nango_connection_id
     for k in ("database_id", "filter_query"):
         if k in params and params[k]:
             cleaned[k] = params[k]
@@ -445,33 +467,34 @@ async def create_source(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
 
-    # Per-kind param validation. Kept inline rather than dispatched
-    # via a hook on the adapter class because the validations are
-    # short and route-side rejection produces a friendlier 400 than
-    # waiting for the adapter constructor to raise.
+    # Per-kind param validation. LOCAL + S3 + NOTION can be created
+    # directly via this route. GDRIVE + ONEDRIVE go through the Nango
+    # Connect flow (POST /sources/connect-session) which writes the
+    # SourceConfig from the webhook handler — accepting them here
+    # would silently create unusable entries.
     if payload.kind is SourceKind.LOCAL:
         validated_params = _validate_local_params(payload.params)
     elif payload.kind is SourceKind.S3:
         validated_params = _validate_s3_params(payload.params)
     elif payload.kind is SourceKind.NOTION:
+        # Notion also runs over Nango but a scripted caller who
+        # already has a Nango connection_id can register directly by
+        # supplying it. The validator enforces the field.
         validated_params = _validate_notion_params(payload.params)
-    elif payload.kind is SourceKind.GDRIVE:
-        # GDrive sources are normally created through the OAuth
-        # callback (it auto-registers on success). Direct POST is
-        # supported for completeness — but the source will be
-        # unusable until tokens land in the encrypted store.
-        validated_params = _validate_gdrive_params(payload.params)
-    elif payload.kind is SourceKind.ONEDRIVE:
-        # Same pattern as GDrive — OAuth callback auto-registers; the
-        # direct POST is here for completeness and for testing.
-        validated_params = _validate_onedrive_params(payload.params)
+    elif payload.kind in (SourceKind.GDRIVE, SourceKind.ONEDRIVE):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"{payload.kind.value!r} sources cannot be created via "
+                "POST /sources — use POST /sources/connect-session "
+                "to start the Nango Connect flow instead. The webhook "
+                "registers the source automatically on success."
+            ),
+        )
     else:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=(
-                f"source kind {payload.kind.value!r} is on the v1.1+ "
-                "roadmap but not implemented in this build"
-            ),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"unsupported source kind {payload.kind.value!r}",
         )
 
     config = SourceConfig(
@@ -501,6 +524,25 @@ async def create_source(
             "params": config.params,
         },
     )
+
+    # First-source auto-activate: if the tenant has no active source
+    # yet, mark this one active and point the kernel at it. Without
+    # this the user has to click Activate manually after Add, which
+    # was the exact UX trap we just fixed.
+    if registry.get_active(tenant_id) is None:
+        try:
+            registry.set_active(tenant_id, config.source_id)
+        except SourceError as exc:
+            logger.warning(
+                "auto-activate failed for %s/%s: %s",
+                tenant_id,
+                config.source_id,
+                exc,
+            )
+        else:
+            from memograph.sources.kernel_binding import swap_kernel_to_source
+
+            await swap_kernel_to_source(request.app, tenant_id, config.source_id)
 
     return SourceResponse.from_config(config, registry.get_active(tenant_id))
 
@@ -568,10 +610,13 @@ async def activate_source(
 ) -> ActivateSourceResponse:
     """Set the active source — the one the kernel reads from.
 
-    Phase 1 ships a synchronous swap: the marker file is updated,
-    the audit entry is written, and the response returns immediately.
-    Phase 5 will add multi-worker swap coordination through Redis
-    pub/sub; the route signature does not change.
+    The marker file is written atomically, the swap event is
+    published through the :class:`SwapCoordinator` (a no-op in
+    single-worker installs; a Redis pub/sub message otherwise), and
+    the audit entry is appended before the route returns. Peer
+    workers process the event asynchronously and invalidate their
+    cached active-source decision; convergence is sub-second on a
+    healthy Redis.
     """
     registry = _registry(request)
     tenant_id = _tenant_for(request, user)
@@ -614,6 +659,31 @@ async def activate_source(
         result="ok",
     )
 
+    # Multi-worker propagation. The coordinator is always present in
+    # single-process mode too (as a NullSwapCoordinator no-op), so
+    # this call is unconditional. Failure to publish is surfaced to
+    # the caller — a swap that lands on disk but doesn't propagate is
+    # worse than a 500 that prompts a retry.
+    coordinator = getattr(request.app.state, "swap_coordinator", None)
+    if coordinator is not None:
+        try:
+            await coordinator.publish_swap(tenant_id, source_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "swap publish failed (tenant=%s source_id=%s): %s",
+                tenant_id,
+                source_id,
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "source activated locally but could not publish "
+                    "the swap event to peer workers; check the swap "
+                    "coordinator (e.g. Redis connectivity)"
+                ),
+            ) from exc
+
     audit.record(
         sources_dir=registry._sources_dir(tenant_id),
         action=audit.ACTION_ACTIVATE,
@@ -626,10 +696,116 @@ async def activate_source(
         after={"source_id": source_id},
     )
 
+    # Re-point the kernel at the newly active source and trigger a
+    # background reindex. This is the missing wire that made activate
+    # appear to do nothing for users.
+    from memograph.sources.kernel_binding import swap_kernel_to_source
+
+    await swap_kernel_to_source(request.app, tenant_id, source_id)
+
     return ActivateSourceResponse(
         tenant_id=tenant_id,
         previous_active_source_id=previous,
         active_source_id=source_id,
+    )
+
+
+@router.post(
+    "/{source_id}/sync",
+    response_model=SyncSourceResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def sync_source(
+    source_id: str,
+    request: Request,
+    user: User = Depends(require_scope("admin")),
+) -> SyncSourceResponse:
+    """Trigger an immediate sync of one source.
+
+    Bypasses the per-source ``sync_interval_seconds`` cadence — the
+    operator's intent is "I want the data now". If the scheduler is
+    not running (single-tenant install with
+    ``MEMOGRAPH_SOURCES_SYNC_DISABLED=1``) we instantiate a one-shot
+    sync against the registry directly so the route still works
+    without leaking that the operator opted out of automatic sync.
+
+    Returns 202 with the post-sync job state. A subsequent call
+    while the first sync is still in flight returns the in-flight
+    state without starting a second sync — the route is intentionally
+    idempotent under concurrent calls.
+    """
+    registry = _registry(request)
+    tenant_id = _tenant_for(request, user)
+    try:
+        validate_source_id(source_id)
+    except InvalidSourceIdError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    config = registry.get_config(tenant_id, source_id)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"source {source_id!r} not found",
+        )
+
+    # Use the running scheduler if one exists so its job-state
+    # bookkeeping (last_success_at, consecutive_failures, in_flight
+    # guard) stays consistent with the periodic ticks. Fall back to a
+    # transient scheduler when the operator disabled the loop.
+    scheduler = getattr(request.app.state, "sync_scheduler", None)
+    if scheduler is None:
+        from memograph.sources.sync import SyncScheduler
+
+        scheduler = SyncScheduler(registry=registry)
+
+    try:
+        state = await scheduler.sync_now(tenant_id, source_id)
+    except SourceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    audit.record(
+        sources_dir=registry._sources_dir(tenant_id),
+        action=audit.ACTION_SYNC,
+        source_id=source_id,
+        source_kind=config.kind.value,
+        user_id=user.id,
+        tenant_id=tenant_id,
+        request_id=getattr(request.state, "request_id", None),
+        after={
+            "in_flight": state.in_flight,
+            "had_error": state.last_error is not None,
+            "consecutive_failures": state.consecutive_failures,
+        },
+    )
+
+    # If the synced source is the currently active one, refresh the
+    # kernel's graph so newly-materialized files appear in the UI
+    # without the user having to also re-activate. We only fire on
+    # success — leaving a failed sync to surface its error without
+    # also wiping the previous indexing state.
+    if (
+        state.last_error is None
+        and registry.get_active(tenant_id) == source_id
+    ):
+        from memograph.sources.kernel_binding import reindex_active_kernel
+
+        await reindex_active_kernel(request.app, source_id)
+
+    return SyncSourceResponse(
+        source_id=source_id,
+        in_flight=state.in_flight,
+        last_attempt_at=(
+            state.last_attempt_at.isoformat() if state.last_attempt_at else None
+        ),
+        last_success_at=(
+            state.last_success_at.isoformat() if state.last_success_at else None
+        ),
+        last_error=state.last_error,
+        consecutive_failures=state.consecutive_failures,
     )
 
 
