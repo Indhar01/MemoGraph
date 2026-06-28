@@ -60,9 +60,7 @@ def vault_path_for_source(
             )
         return Path(path).expanduser().resolve()
     tenant_dir = (
-        registry.global_root
-        if tenant_id is None
-        else registry.global_root / tenant_id
+        registry.global_root if tenant_id is None else registry.global_root / tenant_id
     )
     return tenant_dir / ".sources_cache" / config.source_id
 

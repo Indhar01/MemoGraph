@@ -91,7 +91,9 @@ async def _check_reachable(client, want_integrations: Iterable[str]) -> list[Che
         return results
 
     results.append(
-        Check("Nango reachable + secret key valid", ok=True, detail=client.config.base_url)
+        Check(
+            "Nango reachable + secret key valid", ok=True, detail=client.config.base_url
+        )
     )
     keys = {
         item["unique_key"]
@@ -125,9 +127,7 @@ async def _check_reachable(client, want_integrations: Iterable[str]) -> list[Che
                 "MemoGraph cloud kinds have a matching Nango integration",
                 ok=False,
                 warning=True,
-                detail=(
-                    f"Missing: {', '.join(missing)} — wizard will grey these out."
-                ),
+                detail=(f"Missing: {', '.join(missing)} — wizard will grey these out."),
             )
         )
     else:
@@ -196,9 +196,7 @@ def run_doctor() -> int:
         _print(c)
 
     if not (base_url and secret_key):
-        print(
-            f"\n{RED}Cannot probe Nango — fix the env vars above first.{RESET}"
-        )
+        print(f"\n{RED}Cannot probe Nango — fix the env vars above first.{RESET}")
         return 1
 
     # Construct a client and check reachability + integrations.

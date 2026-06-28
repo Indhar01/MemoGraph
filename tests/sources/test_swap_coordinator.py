@@ -204,8 +204,10 @@ class TestRedisCoordinator:
         # Seed the registry with one source + activate it so the
         # cache has a known value; then publish a swap to a
         # different id and observe the cache reset.
-        vault = tmp_path / "v"; vault.mkdir()
-        other = tmp_path / "v2"; other.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
+        other = tmp_path / "v2"
+        other.mkdir()
         registry = SourceRegistry(global_root=tmp_path / "global")
         registry.register(_local_config(vault, source_id="primary"))
         registry.register(_local_config(other, source_id="secondary"))
@@ -244,7 +246,11 @@ class TestRedisCoordinator:
         await asyncio.sleep(0.05)
         # Then a missing-source-id payload.
         await fake.queue.put(
-            {"type": "message", "channel": DEFAULT_CHANNEL, "data": '{"tenant_id": "x"}'}
+            {
+                "type": "message",
+                "channel": DEFAULT_CHANNEL,
+                "data": '{"tenant_id": "x"}',
+            }
         )
         await asyncio.sleep(0.05)
         # Coordinator survived; we can stop cleanly.
@@ -253,7 +259,8 @@ class TestRedisCoordinator:
 
 class TestRegistryRemoteSwapHook:
     def test_notify_clears_cache(self, tmp_path: Path) -> None:
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         registry = SourceRegistry(global_root=tmp_path / "global")
         registry.register(_local_config(vault))
         registry.set_active(None, "primary")

@@ -431,8 +431,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             nango_client=nango_client,
         )
         logger.info(
-            "Source adapters enabled: global_root=%s max_warm=%d "
-            "nango=%s",
+            "Source adapters enabled: global_root=%s max_warm=%d " "nango=%s",
             sources_global_root,
             sources_max_warm,
             "configured" if nango_client else "not configured",
@@ -504,6 +503,7 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # MEMOGRAPH_AUTH_PROVIDER=none, require_user returns an anonymous
     # user rather than 401-ing — preserves local-dev workflows.
     from .routes import admin, ai, analytics, graph, memories, search
+
     if _SOURCES_ENABLED:
         from .routes import nango as nango_routes
         from .routes import sources as sources_routes

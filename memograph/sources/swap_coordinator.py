@@ -78,9 +78,7 @@ class SwapCoordinator(Protocol):
 
     async def start(self, registry: "SourceRegistry") -> None: ...
     async def stop(self) -> None: ...
-    async def publish_swap(
-        self, tenant_id: str | None, source_id: str
-    ) -> None: ...
+    async def publish_swap(self, tenant_id: str | None, source_id: str) -> None: ...
 
 
 @dataclass
@@ -101,9 +99,7 @@ class NullSwapCoordinator:
     async def stop(self) -> None:
         return None
 
-    async def publish_swap(
-        self, tenant_id: str | None, source_id: str
-    ) -> None:
+    async def publish_swap(self, tenant_id: str | None, source_id: str) -> None:
         logger.debug(
             "NullSwapCoordinator: swap announced locally only "
             "(tenant=%s source_id=%s)",
@@ -194,16 +190,12 @@ class RedisSwapCoordinator:
         self._stopped = None
         logger.info("RedisSwapCoordinator stopped")
 
-    async def publish_swap(
-        self, tenant_id: str | None, source_id: str
-    ) -> None:
+    async def publish_swap(self, tenant_id: str | None, source_id: str) -> None:
         if self._client is None:
             raise RuntimeError(
                 "RedisSwapCoordinator.publish_swap called before start()"
             )
-        payload = json.dumps(
-            {"tenant_id": tenant_id, "source_id": source_id}
-        )
+        payload = json.dumps({"tenant_id": tenant_id, "source_id": source_id})
         await self._client.publish(self.channel, payload)
         logger.debug(
             "published swap event tenant=%s source_id=%s",
@@ -238,9 +230,7 @@ class RedisSwapCoordinator:
                     delay,
                 )
                 try:
-                    await asyncio.wait_for(
-                        self._stopped.wait(), timeout=delay
-                    )
+                    await asyncio.wait_for(self._stopped.wait(), timeout=delay)
                     # _stopped was set — exit the outer while.
                     return
                 except asyncio.TimeoutError:
@@ -292,8 +282,7 @@ def coordinator_from_env() -> SwapCoordinator:
     if not url:
         return NullSwapCoordinator()
     channel = (
-        os.environ.get("MEMOGRAPH_REDIS_SWAP_CHANNEL", "").strip()
-        or DEFAULT_CHANNEL
+        os.environ.get("MEMOGRAPH_REDIS_SWAP_CHANNEL", "").strip() or DEFAULT_CHANNEL
     )
     return RedisSwapCoordinator(url=url, channel=channel)
 

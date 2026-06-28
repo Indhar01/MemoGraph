@@ -81,9 +81,7 @@ class SyncScheduler:
 
     registry: SourceRegistry
     poll_interval_seconds: float = 30.0
-    state: dict[tuple[str | None, str], SyncJobState] = field(
-        default_factory=dict
-    )
+    state: dict[tuple[str | None, str], SyncJobState] = field(default_factory=dict)
     # Fired after every successful sync. The lifespan wires this to
     # ``reindex_active_kernel`` so the kernel re-ingests when the
     # newly-materialized files belong to the active source. Optional —
@@ -98,9 +96,7 @@ class SyncScheduler:
             return
         self._stopped = asyncio.Event()
         self._task = asyncio.create_task(self._run(), name="memograph-sync-scheduler")
-        logger.info(
-            "SyncScheduler started (poll=%.1fs)", self.poll_interval_seconds
-        )
+        logger.info("SyncScheduler started (poll=%.1fs)", self.poll_interval_seconds)
 
     async def stop(self) -> None:
         """Stop ticking. Waits for the in-flight tick to finish."""
@@ -181,7 +177,6 @@ class SyncScheduler:
         """Run ``materialize_to_vault`` for one source, recording metrics
         and updating job state. Errors are caught and surfaced via the
         job state; the loop never raises."""
-        from pathlib import Path
 
         # We materialize to a per-source cache directory under the
         # registry's global root: <root>/<tenant?>/.sources_cache/<source_id>/

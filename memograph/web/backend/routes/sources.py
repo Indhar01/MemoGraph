@@ -635,9 +635,7 @@ async def activate_source(
         )
 
     previous = registry.get_active(tenant_id)
-    previous_config = (
-        registry.get_config(tenant_id, previous) if previous else None
-    )
+    previous_config = registry.get_config(tenant_id, previous) if previous else None
 
     try:
         registry.set_active(tenant_id, source_id)
@@ -787,10 +785,7 @@ async def sync_source(
     # without the user having to also re-activate. We only fire on
     # success — leaving a failed sync to surface its error without
     # also wiping the previous indexing state.
-    if (
-        state.last_error is None
-        and registry.get_active(tenant_id) == source_id
-    ):
+    if state.last_error is None and registry.get_active(tenant_id) == source_id:
         from memograph.sources.kernel_binding import reindex_active_kernel
 
         await reindex_active_kernel(request.app, source_id)

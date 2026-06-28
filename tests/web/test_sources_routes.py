@@ -136,9 +136,7 @@ class TestFeatureFlag:
         r = client.get("/api/v1/sources")
         assert r.status_code == 404
 
-    def test_enabled_lists_empty(
-        self, sources_server, vault_dir: Path
-    ) -> None:
+    def test_enabled_lists_empty(self, sources_server, vault_dir: Path) -> None:
         client = _client(sources_server, vault_dir)
         r = client.get("/api/v1/sources", headers=USER_HEADER)
         assert r.status_code == 200
@@ -147,9 +145,7 @@ class TestFeatureFlag:
 
 
 class TestAuthorization:
-    def test_unauthenticated_list_is_401(
-        self, sources_server, vault_dir: Path
-    ) -> None:
+    def test_unauthenticated_list_is_401(self, sources_server, vault_dir: Path) -> None:
         client = _client(sources_server, vault_dir)
         r = client.get("/api/v1/sources")
         assert r.status_code == 401
@@ -159,7 +155,8 @@ class TestAuthorization:
     ) -> None:
         # Seed a source as admin.
         client = _client(sources_server, vault_dir)
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         _create_local(client, "primary", target)
         # User scope can read.
         r = client.get("/api/v1/sources", headers=USER_HEADER)
@@ -170,7 +167,8 @@ class TestAuthorization:
         self, sources_server, vault_dir: Path, tmp_path: Path
     ) -> None:
         client = _client(sources_server, vault_dir)
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         r = _create_local(client, "primary", target, headers=USER_HEADER)
         assert r.status_code == 403
 
@@ -178,7 +176,8 @@ class TestAuthorization:
         self, sources_server, vault_dir: Path, tmp_path: Path
     ) -> None:
         client = _client(sources_server, vault_dir)
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         _create_local(client, "primary", target)
         r = client.delete("/api/v1/sources/primary", headers=USER_HEADER)
         assert r.status_code == 403
@@ -270,9 +269,7 @@ class TestCreateSource:
         assert "my-bucket" in persisted
         assert "us-east-1" in persisted
 
-    def test_create_s3_requires_bucket(
-        self, sources_server, vault_dir: Path
-    ) -> None:
+    def test_create_s3_requires_bucket(self, sources_server, vault_dir: Path) -> None:
         client = _client(sources_server, vault_dir)
         r = client.post(
             "/api/v1/sources",
@@ -462,12 +459,11 @@ class TestActivate:
         vault_dir: Path,
         tmp_path: Path,
     ) -> None:
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         client = _client(sources_server, vault_dir)
         _create_local(client, "primary", target)
-        r = client.post(
-            "/api/v1/sources/primary/activate", headers=ADMIN_HEADER
-        )
+        r = client.post("/api/v1/sources/primary/activate", headers=ADMIN_HEADER)
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["active_source_id"] == "primary"
@@ -494,9 +490,7 @@ class TestActivate:
         self, sources_server, vault_dir: Path
     ) -> None:
         client = _client(sources_server, vault_dir)
-        r = client.post(
-            "/api/v1/sources/never-existed/activate", headers=ADMIN_HEADER
-        )
+        r = client.post("/api/v1/sources/never-existed/activate", headers=ADMIN_HEADER)
         assert r.status_code == 404
 
 
@@ -508,13 +502,12 @@ class TestManualSync:
         vault_dir: Path,
         tmp_path: Path,
     ) -> None:
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         (target / "a.md").write_text("# A", encoding="utf-8")
         client = _client(sources_server, vault_dir)
         _create_local(client, "primary", target)
-        r = client.post(
-            "/api/v1/sources/primary/sync", headers=ADMIN_HEADER
-        )
+        r = client.post("/api/v1/sources/primary/sync", headers=ADMIN_HEADER)
         assert r.status_code == 202, r.text
         body = r.json()
         assert body["source_id"] == "primary"
@@ -530,13 +523,9 @@ class TestManualSync:
         ]
         assert any(e["action"] == "source.sync" for e in lines)
 
-    def test_sync_unknown_source_404s(
-        self, sources_server, vault_dir: Path
-    ) -> None:
+    def test_sync_unknown_source_404s(self, sources_server, vault_dir: Path) -> None:
         client = _client(sources_server, vault_dir)
-        r = client.post(
-            "/api/v1/sources/never-existed/sync", headers=ADMIN_HEADER
-        )
+        r = client.post("/api/v1/sources/never-existed/sync", headers=ADMIN_HEADER)
         assert r.status_code == 404
 
     def test_sync_requires_admin(
@@ -545,12 +534,11 @@ class TestManualSync:
         vault_dir: Path,
         tmp_path: Path,
     ) -> None:
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         client = _client(sources_server, vault_dir)
         _create_local(client, "primary", target)
-        r = client.post(
-            "/api/v1/sources/primary/sync", headers=USER_HEADER
-        )
+        r = client.post("/api/v1/sources/primary/sync", headers=USER_HEADER)
         assert r.status_code == 403
 
 
@@ -561,20 +549,17 @@ class TestGet:
         vault_dir: Path,
         tmp_path: Path,
     ) -> None:
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         client = _client(sources_server, vault_dir)
         _create_local(client, "primary", target)
         r = client.get("/api/v1/sources/primary", headers=USER_HEADER)
         assert r.status_code == 200
         assert r.json()["source_id"] == "primary"
 
-    def test_get_unknown_404s(
-        self, sources_server, vault_dir: Path
-    ) -> None:
+    def test_get_unknown_404s(self, sources_server, vault_dir: Path) -> None:
         client = _client(sources_server, vault_dir)
-        r = client.get(
-            "/api/v1/sources/never-existed", headers=USER_HEADER
-        )
+        r = client.get("/api/v1/sources/never-existed", headers=USER_HEADER)
         assert r.status_code == 404
 
     def test_get_active_404s_when_none_set(
@@ -592,7 +577,8 @@ class TestHealth:
         vault_dir: Path,
         tmp_path: Path,
     ) -> None:
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         (target / "alpha.md").write_text("# Alpha", encoding="utf-8")
         client = _client(sources_server, vault_dir)
         _create_local(client, "primary", target)
@@ -610,7 +596,8 @@ class TestDelete:
         vault_dir: Path,
         tmp_path: Path,
     ) -> None:
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         client = _client(sources_server, vault_dir)
         _create_local(client, "primary", target)
         r = client.delete("/api/v1/sources/primary", headers=ADMIN_HEADER)
@@ -665,7 +652,8 @@ class TestReadOnlyModeBlocks:
 
         monkeypatch.setattr(auth_mod, "_verify_api_key", _admin_user)
 
-        target = tmp_path / "v"; target.mkdir()
+        target = tmp_path / "v"
+        target.mkdir()
         client = _client(server_mod, vault_dir)
         r = client.post(
             "/api/v1/sources",

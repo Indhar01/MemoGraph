@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -12,12 +11,10 @@ from memograph.sources.base import (
     SourceConfig,
     SourceError,
     SourceKind,
-    SyncMode,
-    SyncStats,
 )
 from memograph.sources.local import LocalSource
 from memograph.sources.registry import SourceRegistry
-from memograph.sources.sync import SyncJobState, SyncScheduler
+from memograph.sources.sync import SyncScheduler
 
 
 def _local_config(path: Path, source_id: str = "primary") -> SourceConfig:
@@ -31,7 +28,8 @@ def _local_config(path: Path, source_id: str = "primary") -> SourceConfig:
 
 @pytest.mark.asyncio
 async def test_tick_runs_sync_when_never_synced(tmp_path: Path) -> None:
-    vault = tmp_path / "v"; vault.mkdir()
+    vault = tmp_path / "v"
+    vault.mkdir()
     (vault / "a.md").write_text("# A", encoding="utf-8")
     registry = SourceRegistry(global_root=tmp_path / "global")
     registry.register(_local_config(vault))
@@ -47,7 +45,8 @@ async def test_tick_runs_sync_when_never_synced(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_tick_skips_inside_interval(tmp_path: Path) -> None:
-    vault = tmp_path / "v"; vault.mkdir()
+    vault = tmp_path / "v"
+    vault.mkdir()
     registry = SourceRegistry(global_root=tmp_path / "global")
     registry.register(_local_config(vault))
     registry.get(None, "primary")
@@ -62,7 +61,8 @@ async def test_tick_skips_inside_interval(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_tick_records_failure(tmp_path: Path, monkeypatch) -> None:
-    vault = tmp_path / "v"; vault.mkdir()
+    vault = tmp_path / "v"
+    vault.mkdir()
     registry = SourceRegistry(global_root=tmp_path / "global")
     registry.register(_local_config(vault))
     source = registry.get(None, "primary")
@@ -81,7 +81,8 @@ async def test_tick_records_failure(tmp_path: Path, monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_opt_out_with_interval_zero(tmp_path: Path) -> None:
-    vault = tmp_path / "v"; vault.mkdir()
+    vault = tmp_path / "v"
+    vault.mkdir()
     config = SourceConfig(
         source_id="primary",
         kind=SourceKind.LOCAL,
@@ -100,7 +101,8 @@ async def test_opt_out_with_interval_zero(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_sync_now_bypasses_cadence(tmp_path: Path) -> None:
     # Even with a long sync_interval_seconds, sync_now must run.
-    vault = tmp_path / "v"; vault.mkdir()
+    vault = tmp_path / "v"
+    vault.mkdir()
     (vault / "a.md").write_text("# A", encoding="utf-8")
     config = SourceConfig(
         source_id="primary",
@@ -144,7 +146,8 @@ async def test_sync_now_records_error(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_start_stop_lifecycle(tmp_path: Path) -> None:
-    vault = tmp_path / "v"; vault.mkdir()
+    vault = tmp_path / "v"
+    vault.mkdir()
     registry = SourceRegistry(global_root=tmp_path / "global")
     registry.register(_local_config(vault))
     registry.get(None, "primary")

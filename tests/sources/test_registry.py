@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 
 from memograph.sources.base import (
-    Source,
     SourceConfig,
     SourceError,
     SourceKind,
@@ -72,8 +71,10 @@ class TestRegisterAndGet:
         assert again is source
 
     def test_re_register_overwrites(self, tmp_path: Path) -> None:
-        a = tmp_path / "a"; a.mkdir()
-        b = tmp_path / "b"; b.mkdir()
+        a = tmp_path / "a"
+        a.mkdir()
+        b = tmp_path / "b"
+        b.mkdir()
         registry = SourceRegistry(global_root=tmp_path / "global")
         registry.register(_config(path=a))
         # Re-register with a different path; the warm slot should be
@@ -100,7 +101,8 @@ class TestRegisterAndGet:
 
 class TestPersistence:
     def test_config_persists_to_disk(self, tmp_path: Path) -> None:
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         global_root = tmp_path / "global"
         registry = SourceRegistry(global_root=global_root)
         registry.register(_config(path=vault))
@@ -110,12 +112,11 @@ class TestPersistence:
         assert raw["source_id"] == "primary"
         assert raw["kind"] == "local"
 
-    def test_loads_existing_config_from_fresh_registry(
-        self, tmp_path: Path
-    ) -> None:
+    def test_loads_existing_config_from_fresh_registry(self, tmp_path: Path) -> None:
         # Register, throw away the registry, build a new one against
         # the same global_root, get the source — it should be there.
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         global_root = tmp_path / "global"
         SourceRegistry(global_root=global_root).register(_config(path=vault))
         fresh = SourceRegistry(global_root=global_root)
@@ -125,8 +126,10 @@ class TestPersistence:
 
 class TestListConfigs:
     def test_lists_alphabetically(self, tmp_path: Path) -> None:
-        v1 = tmp_path / "v1"; v1.mkdir()
-        v2 = tmp_path / "v2"; v2.mkdir()
+        v1 = tmp_path / "v1"
+        v1.mkdir()
+        v2 = tmp_path / "v2"
+        v2.mkdir()
         registry = SourceRegistry(global_root=tmp_path / "global")
         registry.register(_config("zeta", path=v1))
         registry.register(_config("alpha", path=v2))
@@ -139,7 +142,8 @@ class TestListConfigs:
         assert registry.list_configs(None) == []
 
     def test_skips_corrupt_files(self, tmp_path: Path) -> None:
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         global_root = tmp_path / "global"
         registry = SourceRegistry(global_root=global_root)
         registry.register(_config(path=vault))
@@ -152,7 +156,8 @@ class TestListConfigs:
 
 class TestActiveSource:
     def test_set_and_get(self, tmp_path: Path) -> None:
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         registry = SourceRegistry(global_root=tmp_path / "global")
         registry.register(_config(path=vault))
         assert registry.get_active(None) is None
@@ -165,7 +170,8 @@ class TestActiveSource:
             registry.set_active(None, "nope")
 
     def test_delete_clears_active(self, tmp_path: Path) -> None:
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         registry = SourceRegistry(global_root=tmp_path / "global")
         registry.register(_config(path=vault))
         registry.set_active(None, "primary")
@@ -181,7 +187,8 @@ class TestDelete:
         assert registry.delete(None, "nothing-here") is False
 
     def test_removes_disk_and_warm(self, tmp_path: Path) -> None:
-        vault = tmp_path / "v"; vault.mkdir()
+        vault = tmp_path / "v"
+        vault.mkdir()
         global_root = tmp_path / "global"
         registry = SourceRegistry(global_root=global_root)
         registry.register(_config(path=vault))
@@ -195,8 +202,10 @@ class TestDelete:
 
 class TestMultiTenantIsolation:
     def test_same_id_different_tenants(self, tmp_path: Path) -> None:
-        v_a = tmp_path / "a"; v_a.mkdir()
-        v_b = tmp_path / "b"; v_b.mkdir()
+        v_a = tmp_path / "a"
+        v_a.mkdir()
+        v_b = tmp_path / "b"
+        v_b.mkdir()
         global_root = tmp_path / "global"
         registry = SourceRegistry(global_root=global_root)
         registry.register(_config("primary", tenant_id="tenant-a", path=v_a))
@@ -209,7 +218,8 @@ class TestMultiTenantIsolation:
         assert a_path != b_path
 
     def test_tenant_isolation_holds_on_disk(self, tmp_path: Path) -> None:
-        v_a = tmp_path / "a"; v_a.mkdir()
+        v_a = tmp_path / "a"
+        v_a.mkdir()
         global_root = tmp_path / "global"
         registry = SourceRegistry(global_root=global_root)
         registry.register(_config("primary", tenant_id="tenant-a", path=v_a))
@@ -223,7 +233,8 @@ class TestLRUEviction:
         global_root = tmp_path / "global"
         registry = SourceRegistry(global_root=global_root, max_warm=2)
         for name in ("a", "b", "c"):
-            v = tmp_path / name; v.mkdir()
+            v = tmp_path / name
+            v.mkdir()
             registry.register(_config(name, path=v))
         # After registering three with capacity 2, only the latest two
         # are warm.
@@ -266,6 +277,7 @@ class TestFactoryDispatch:
             registry.register(config)
 
     def test_local_dispatch(self, tmp_path: Path) -> None:
-        v = tmp_path / "v"; v.mkdir()
+        v = tmp_path / "v"
+        v.mkdir()
         source = default_source_factory(_config(path=v))
         assert isinstance(source, LocalSource)

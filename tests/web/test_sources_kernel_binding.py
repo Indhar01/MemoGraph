@@ -133,9 +133,7 @@ class TestFirstSourceAutoActivate:
         """
         target = tmp_path / "notes"
         _seed_markdown(target, ["alpha", "beta", "gamma"])
-        app = sources_server.create_app(
-            vault_path=str(vault_dir), use_gam=False
-        )
+        app = sources_server.create_app(vault_path=str(vault_dir), use_gam=False)
         with TestClient(app) as client:
             r = _create_local(client, "primary", target)
             assert r.status_code == 201, r.text
@@ -144,9 +142,7 @@ class TestFirstSourceAutoActivate:
                 Path(app.state.vault_path).resolve() == target.resolve()
             ), f"kernel still on {app.state.vault_path}"
             nodes = await _poll_for_nodes(app, expected=3, timeout=5.0)
-            assert nodes >= 3, (
-                f"expected ≥3 nodes after ingest, got {nodes}"
-            )
+            assert nodes >= 3, f"expected ≥3 nodes after ingest, got {nodes}"
 
 
 class TestActivateSwapsKernel:
@@ -164,31 +160,19 @@ class TestActivateSwapsKernel:
         _seed_markdown(first, ["one", "two"])
         _seed_markdown(second, ["alpha", "beta", "gamma", "delta"])
 
-        app = sources_server.create_app(
-            vault_path=str(vault_dir), use_gam=False
-        )
+        app = sources_server.create_app(vault_path=str(vault_dir), use_gam=False)
         with TestClient(app) as client:
             _create_local(client, "first", first)
             await _poll_for_nodes(app, expected=2, timeout=5.0)
-            assert (
-                Path(app.state.vault_path).resolve() == first.resolve()
-            )
+            assert Path(app.state.vault_path).resolve() == first.resolve()
 
             r2 = _create_local(client, "second", second)
             assert r2.status_code == 201
             assert r2.json()["is_active"] is False
-            assert (
-                Path(app.state.vault_path).resolve() == first.resolve()
-            )
+            assert Path(app.state.vault_path).resolve() == first.resolve()
 
-            r3 = client.post(
-                "/api/v1/sources/second/activate", headers=ADMIN_HEADER
-            )
+            r3 = client.post("/api/v1/sources/second/activate", headers=ADMIN_HEADER)
             assert r3.status_code == 200, r3.text
-            assert (
-                Path(app.state.vault_path).resolve() == second.resolve()
-            )
+            assert Path(app.state.vault_path).resolve() == second.resolve()
             nodes = await _poll_for_nodes(app, expected=4, timeout=5.0)
-            assert nodes >= 4, (
-                f"expected ≥4 nodes after activate swap, got {nodes}"
-            )
+            assert nodes >= 4, f"expected ≥4 nodes after activate swap, got {nodes}"

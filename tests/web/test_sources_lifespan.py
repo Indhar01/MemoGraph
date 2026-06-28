@@ -75,8 +75,7 @@ def test_scheduler_started_when_sources_enabled(
     # After the context manager exits, the scheduler has been stopped.
     assert app.state.sync_scheduler is not None  # reference preserved
     assert (
-        app.state.sync_scheduler._task is None
-        or app.state.sync_scheduler._task.done()
+        app.state.sync_scheduler._task is None or app.state.sync_scheduler._task.done()
     )
 
 

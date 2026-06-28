@@ -39,8 +39,12 @@ class _FakeResponse:
         self.status_code = status_code
         self._payload = payload
         self.content = content
-        self.text = text if text is not None else (
-            str(payload) if payload else content.decode("utf-8", errors="replace")
+        self.text = (
+            text
+            if text is not None
+            else (
+                str(payload) if payload else content.decode("utf-8", errors="replace")
+            )
         )
 
     def json(self) -> Any:
@@ -89,9 +93,7 @@ class _FakeHttpx:
         )
         return self._lookup("POST", url)
 
-    async def delete(
-        self, url: str, params: dict | None = None
-    ) -> _FakeResponse:
+    async def delete(self, url: str, params: dict | None = None) -> _FakeResponse:
         self.calls.append({"method": "DELETE", "url": url, "params": params})
         return self._lookup("DELETE", url)
 
@@ -257,9 +259,7 @@ class TestGetConnection:
             _FakeResponse(424, {"error": "refresh exhausted"}),
         )
         with pytest.raises(SourceAuthError, match="refreshed"):
-            await client.get_connection(
-                connection_id="conn-1", kind=SourceKind.GDRIVE
-            )
+            await client.get_connection(connection_id="conn-1", kind=SourceKind.GDRIVE)
 
     @pytest.mark.asyncio
     async def test_auth_error_in_payload(self, client, fake_http) -> None:
@@ -281,9 +281,7 @@ class TestGetConnection:
             ),
         )
         with pytest.raises(SourceAuthError):
-            await client.get_connection(
-                connection_id="conn-1", kind=SourceKind.GDRIVE
-            )
+            await client.get_connection(connection_id="conn-1", kind=SourceKind.GDRIVE)
 
     @pytest.mark.asyncio
     async def test_404_is_not_found(self, client, fake_http) -> None:
@@ -293,9 +291,7 @@ class TestGetConnection:
             _FakeResponse(404, {"error": "not found"}),
         )
         with pytest.raises(SourceNotFoundError):
-            await client.get_connection(
-                connection_id="missing", kind=SourceKind.GDRIVE
-            )
+            await client.get_connection(connection_id="missing", kind=SourceKind.GDRIVE)
 
 
 # --- proxy ----------------------------------------------------------------
@@ -383,9 +379,7 @@ class TestWebhookSignature:
 
         body = b'{"type":"auth","operation":"creation"}'
         expected = hmac.new(b"whsec-test", body, hashlib.sha256).hexdigest()
-        assert client.verify_webhook_signature(
-            raw_body=body, signature=expected
-        )
+        assert client.verify_webhook_signature(raw_body=body, signature=expected)
         # Tolerates "sha256=..." prefix.
         assert client.verify_webhook_signature(
             raw_body=body, signature=f"sha256={expected}"
@@ -393,9 +387,7 @@ class TestWebhookSignature:
 
     def test_bad_signature_rejected(self, client) -> None:
         body = b'{"type":"auth"}'
-        assert not client.verify_webhook_signature(
-            raw_body=body, signature="0" * 64
-        )
+        assert not client.verify_webhook_signature(raw_body=body, signature="0" * 64)
 
     def test_missing_signature_rejected_when_secret_set(self, client) -> None:
         body = b'{"type":"auth"}'

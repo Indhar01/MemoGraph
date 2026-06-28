@@ -407,9 +407,7 @@ class NangoClient:
                 f"{payload}"
             )
         try:
-            expires_at = datetime.fromisoformat(
-                expires_at_raw.replace("Z", "+00:00")
-            )
+            expires_at = datetime.fromisoformat(expires_at_raw.replace("Z", "+00:00"))
         except (TypeError, ValueError) as exc:
             raise SourceError(
                 f"Nango returned malformed expires_at: {expires_at_raw!r}"
@@ -451,9 +449,7 @@ class NangoClient:
             params={"provider_config_key": provider_key},
         )
         if resp.status_code == 404:
-            raise SourceNotFoundError(
-                f"Nango connection not found: {connection_id}"
-            )
+            raise SourceNotFoundError(f"Nango connection not found: {connection_id}")
         if resp.status_code == 424:
             raise SourceAuthError(
                 f"Nango connection {connection_id} can no longer be "
@@ -615,9 +611,7 @@ class NangoClient:
         """
         provider_key = KIND_TO_PROVIDER_KEY.get(kind)
         if provider_key is None:
-            raise SourceError(
-                f"NangoClient: unknown kind {kind.value!r} for delete"
-            )
+            raise SourceError(f"NangoClient: unknown kind {kind.value!r} for delete")
         resp = await self._request(
             "DELETE",
             f"{self.config.base_url}/connections/{connection_id}",

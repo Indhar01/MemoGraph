@@ -75,8 +75,7 @@ def validate_source_id(source_id: str) -> str:
     """
     if not isinstance(source_id, str) or not _SOURCE_ID_PATTERN.match(source_id):
         raise InvalidSourceIdError(
-            f"invalid source_id: {source_id!r}; "
-            "must match ^[a-z0-9_-]{1,64}$"
+            f"invalid source_id: {source_id!r}; " "must match ^[a-z0-9_-]{1,64}$"
         )
     return source_id
 
@@ -114,9 +113,7 @@ def default_source_factory(config: SourceConfig) -> Source:
             "a NangoClient injected — go through SourceRegistry.get() "
             "rather than calling default_source_factory directly."
         )
-    raise SourceError(
-        f"no adapter registered for source kind {config.kind.value!r}"
-    )
+    raise SourceError(f"no adapter registered for source kind {config.kind.value!r}")
 
 
 class SourceRegistry:
@@ -295,9 +292,7 @@ class SourceRegistry:
         raw = json.loads(path.read_text(encoding="utf-8"))
         return _json_to_config(raw)
 
-    def get_config(
-        self, tenant_id: str | None, source_id: str
-    ) -> SourceConfig | None:
+    def get_config(self, tenant_id: str | None, source_id: str) -> SourceConfig | None:
         """Return the persisted config or None if it doesn't exist.
 
         Does NOT warm the source. Routes use this to answer GET
@@ -362,9 +357,7 @@ class SourceRegistry:
             except (OSError, json.JSONDecodeError, KeyError) as exc:
                 # A corrupt config file shouldn't 500 the whole list.
                 # Log and skip; the admin can inspect manually.
-                logger.warning(
-                    "skipping corrupt source config %s: %s", f, exc
-                )
+                logger.warning("skipping corrupt source config %s: %s", f, exc)
         return configs
 
     def warm_keys(self) -> Iterable[tuple[str | None, str]]:
@@ -433,9 +426,7 @@ class SourceRegistry:
             logger.warning("malformed _active.json at %s: %s", path, exc)
             return None
 
-    def notify_remote_swap(
-        self, tenant_id: str | None, source_id: str
-    ) -> None:
+    def notify_remote_swap(self, tenant_id: str | None, source_id: str) -> None:
         """Invalidate the in-memory active-source cache for this tenant.
 
         Called by the :class:`SwapCoordinator` subscriber when another

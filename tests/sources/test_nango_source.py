@@ -38,8 +38,12 @@ class _FakeResponse:
         self.status_code = status_code
         self._payload = payload
         self.content = content
-        self.text = text if text is not None else (
-            str(payload) if payload else content.decode("utf-8", errors="replace")
+        self.text = (
+            text
+            if text is not None
+            else (
+                str(payload) if payload else content.decode("utf-8", errors="replace")
+            )
         )
 
     def json(self) -> Any:
@@ -167,14 +171,14 @@ class TestDrive:
                 },
             ),
         )
-        source = NangoBackedSource(_config(SourceKind.GDRIVE), nango_client=nango_client)
+        source = NangoBackedSource(
+            _config(SourceKind.GDRIVE), nango_client=nango_client
+        )
         refs = [r async for r in source.list_documents()]
         assert {r.doc_id for r in refs} == {"f1", "f2"}
 
     @pytest.mark.asyncio
-    async def test_read_google_doc_uses_export(
-        self, nango_client, fake_http
-    ) -> None:
+    async def test_read_google_doc_uses_export(self, nango_client, fake_http) -> None:
         fake_http.stub(
             "GET",
             "/proxy/drive/v3/files/g1",
@@ -190,7 +194,9 @@ class TestDrive:
             ),
         )
         # The export call shares the same fragment-based stub.
-        source = NangoBackedSource(_config(SourceKind.GDRIVE), nango_client=nango_client)
+        source = NangoBackedSource(
+            _config(SourceKind.GDRIVE), nango_client=nango_client
+        )
         doc = await source.read_document("g1")
         # The fake serves the same response on both metadata and export
         # paths; what matters is that the second call hit the export
@@ -207,7 +213,9 @@ class TestDrive:
             "/proxy/drive/v3/files/x",
             _FakeResponse(401, {"error": "expired"}, text="expired"),
         )
-        source = NangoBackedSource(_config(SourceKind.GDRIVE), nango_client=nango_client)
+        source = NangoBackedSource(
+            _config(SourceKind.GDRIVE), nango_client=nango_client
+        )
         with pytest.raises(SourceAuthError):
             await source.read_document("x")
 
@@ -217,9 +225,7 @@ class TestDrive:
 
 class TestOneDrive:
     @pytest.mark.asyncio
-    async def test_list_filters_office_documents(
-        self, nango_client, fake_http
-    ) -> None:
+    async def test_list_filters_office_documents(self, nango_client, fake_http) -> None:
         fake_http.stub(
             "GET",
             "/proxy/me/drive/root/children",
@@ -270,9 +276,7 @@ class TestOneDrive:
             nango_client=nango_client,
         )
         _ = [r async for r in source.list_documents()]
-        assert any(
-            "/proxy/drives/" in c["url"] for c in fake_http.calls
-        )
+        assert any("/proxy/drives/" in c["url"] for c in fake_http.calls)
 
 
 # --- Notion ---------------------------------------------------------------
@@ -381,9 +385,7 @@ class TestNotion:
                     "results": [
                         {
                             "type": "heading_1",
-                            "heading_1": {
-                                "rich_text": [{"plain_text": "Title"}]
-                            },
+                            "heading_1": {"rich_text": [{"plain_text": "Title"}]},
                         },
                         {
                             "type": "paragraph",
@@ -413,7 +415,9 @@ class TestWriteIsReadOnly:
     async def test_write_raises(self, nango_client) -> None:
         from datetime import datetime, timezone
 
-        source = NangoBackedSource(_config(SourceKind.GDRIVE), nango_client=nango_client)
+        source = NangoBackedSource(
+            _config(SourceKind.GDRIVE), nango_client=nango_client
+        )
         ref = DocumentRef(doc_id="x", title="x", modified_at=datetime.now(timezone.utc))
         with pytest.raises(SourceReadOnlyError):
             await source.write_document(Document(ref=ref, content="hi"))
@@ -438,20 +442,22 @@ class TestHealth:
                 },
             ),
         )
-        source = NangoBackedSource(_config(SourceKind.GDRIVE), nango_client=nango_client)
+        source = NangoBackedSource(
+            _config(SourceKind.GDRIVE), nango_client=nango_client
+        )
         health = await source.health()
         assert health.status is SourceHealthStatus.OK
 
     @pytest.mark.asyncio
-    async def test_health_failed_on_auth_error(
-        self, nango_client, fake_http
-    ) -> None:
+    async def test_health_failed_on_auth_error(self, nango_client, fake_http) -> None:
         fake_http.stub(
             "GET",
             "/connections/conn-1",
             _FakeResponse(424, {"error": "expired"}),
         )
-        source = NangoBackedSource(_config(SourceKind.GDRIVE), nango_client=nango_client)
+        source = NangoBackedSource(
+            _config(SourceKind.GDRIVE), nango_client=nango_client
+        )
         health = await source.health()
         assert health.status is SourceHealthStatus.FAILED
         assert "refreshed" in (health.last_error or "")

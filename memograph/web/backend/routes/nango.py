@@ -217,8 +217,7 @@ async def nango_webhook(request: Request) -> None:
     signature = request.headers.get("x-nango-signature")
     if not client.verify_webhook_signature(raw_body=raw_body, signature=signature):
         logger.warning(
-            "rejecting Nango webhook with bad/missing signature "
-            "(content_length=%d)",
+            "rejecting Nango webhook with bad/missing signature " "(content_length=%d)",
             len(raw_body),
         )
         raise HTTPException(
@@ -281,8 +280,8 @@ async def nango_webhook(request: Request) -> None:
     # Re-key tags onto our internal fields.
     source_id = _coerce_tag(tags, "memograph_source_id") or _auto_source_id(kind)
     tenant_id = _coerce_tag(tags, "memograph_tenant_id")
-    display_name = (
-        _coerce_tag(tags, "memograph_display_name") or _default_display_name(kind)
+    display_name = _coerce_tag(tags, "memograph_display_name") or _default_display_name(
+        kind
     )
 
     try:

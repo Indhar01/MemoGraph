@@ -70,16 +70,20 @@ logger = logging.getLogger(__name__)
 # document. Kept here (not in the client) because they're a property of
 # the adapter, not of Nango.
 GOOGLE_DOC_MIME = "application/vnd.google-apps.document"
-GOOGLE_MARKDOWN_MIMES = frozenset({
-    "text/markdown",
-    "text/x-markdown",
-    "text/plain",
-})
-ONEDRIVE_MARKDOWN_MIMES = frozenset({
-    "text/markdown",
-    "text/x-markdown",
-    "text/plain",
-})
+GOOGLE_MARKDOWN_MIMES = frozenset(
+    {
+        "text/markdown",
+        "text/x-markdown",
+        "text/plain",
+    }
+)
+ONEDRIVE_MARKDOWN_MIMES = frozenset(
+    {
+        "text/markdown",
+        "text/x-markdown",
+        "text/plain",
+    }
+)
 
 
 class NangoBackedSource(Source):
@@ -164,9 +168,7 @@ class NangoBackedSource(Source):
 
     async def _list_onedrive(self) -> AsyncIterator[DocumentRef]:
         prefix = (
-            f"drives/{quote(self._drive_id, safe='')}"
-            if self._drive_id
-            else "me/drive"
+            f"drives/{quote(self._drive_id, safe='')}" if self._drive_id else "me/drive"
         )
         path = (
             f"{prefix}/items/{quote(self._folder_id, safe='')}/children"
@@ -298,9 +300,7 @@ class NangoBackedSource(Source):
 
     async def _read_onedrive(self, doc_id: str) -> Document:
         prefix = (
-            f"drives/{quote(self._drive_id, safe='')}"
-            if self._drive_id
-            else "me/drive"
+            f"drives/{quote(self._drive_id, safe='')}" if self._drive_id else "me/drive"
         )
         meta_path = f"{prefix}/items/{quote(doc_id, safe='')}"
         meta_resp = await self._client.proxy_get(
@@ -388,9 +388,11 @@ class NangoBackedSource(Source):
             safe = _safe_filename(ref.title) or ref.doc_id
             name = safe if safe.lower().endswith((".md", ".txt")) else f"{safe}.md"
             dst = vault / name
-            if dst.exists() and datetime.fromtimestamp(
-                dst.stat().st_mtime, tz=timezone.utc
-            ) >= ref.modified_at:
+            if (
+                dst.exists()
+                and datetime.fromtimestamp(dst.stat().st_mtime, tz=timezone.utc)
+                >= ref.modified_at
+            ):
                 continue
             try:
                 doc = await self.read_document(ref.doc_id)
@@ -476,9 +478,7 @@ class NangoBackedSource(Source):
                 snippet = resp.text[:400]
             except Exception:  # noqa: BLE001
                 snippet = "<unreadable>"
-            raise SourceError(
-                f"{op} failed ({resp.status_code}) via Nango: {snippet}"
-            )
+            raise SourceError(f"{op} failed ({resp.status_code}) via Nango: {snippet}")
 
 
 # --- pure helpers (no I/O) ------------------------------------------------
@@ -488,9 +488,7 @@ def _decode_utf8(content: bytes, doc_id: str) -> str:
     try:
         return content.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise SourceError(
-            f"document {doc_id!r} is not valid UTF-8"
-        ) from exc
+        raise SourceError(f"document {doc_id!r} is not valid UTF-8") from exc
 
 
 def _safe_filename(title: str) -> str:
@@ -588,7 +586,9 @@ def _extract_notion_title(page: dict[str, Any]) -> str | None:
         if isinstance(value, dict) and value.get("type") == "title":
             title_parts = value.get("title") or []
             text = "".join(
-                part.get("plain_text", "") for part in title_parts if isinstance(part, dict)
+                part.get("plain_text", "")
+                for part in title_parts
+                if isinstance(part, dict)
             )
             if text:
                 return text

@@ -83,12 +83,12 @@ class _StubNangoClient:
             {"unique_key": "google-drive", "provider": "google-drive"},
         ]
 
-    def verify_webhook_signature(self, *, raw_body: bytes, signature: str | None) -> bool:
+    def verify_webhook_signature(
+        self, *, raw_body: bytes, signature: str | None
+    ) -> bool:
         if not signature:
             return False
-        expected = hmac.new(
-            self._webhook_secret, raw_body, hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(self._webhook_secret, raw_body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature.split("=", 1)[-1].strip())
 
 
@@ -333,9 +333,7 @@ class TestNangoHealth:
         self, sources_server, vault_dir
     ) -> None:
         client = _client(sources_server, vault_dir)
-        r = client.get(
-            "/api/v1/nango/health", headers=USER_HEADER
-        )
+        r = client.get("/api/v1/nango/health", headers=USER_HEADER)
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["configured"] is True
@@ -344,9 +342,7 @@ class TestNangoHealth:
         self, sources_server, vault_dir
     ) -> None:
         client = _client(sources_server, vault_dir, with_nango=False)
-        r = client.get(
-            "/api/v1/nango/health", headers=USER_HEADER
-        )
+        r = client.get("/api/v1/nango/health", headers=USER_HEADER)
         assert r.status_code == 200
         body = r.json()
         assert body["configured"] is False
