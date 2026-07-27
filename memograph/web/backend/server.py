@@ -558,6 +558,21 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # set, so the [observability] extra is genuinely optional.
     init_telemetry(app)
 
+    # Plugin seam: discover and activate any installed out-of-tree plugins
+    # (entry-point group "memograph.plugins"). A stock install with no
+    # plugins is a no-op. Called last so plugins see the fully-built app
+    # (routes, kernel, telemetry) on app.state. The public package never
+    # imports plugin packages directly. See memograph/plugins.py.
+    try:
+        from ...plugins import load_plugins
+
+        active = load_plugins(app, extras={"vault_path": app.state.vault_path})
+        if active:
+            logger.info("MemoGraph plugins active: %s", ", ".join(active))
+    except Exception as exc:  # noqa: BLE001
+        # A failure in plugin discovery must never break a working server.
+        logger.warning("Plugin seam skipped due to error: %s", exc)
+
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
         """Liveness probe.
