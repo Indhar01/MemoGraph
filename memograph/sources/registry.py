@@ -41,7 +41,6 @@ from memograph.sources.base import (
     SourceError,
     SourceKind,
 )
-from memograph.sources.local import LocalSource
 
 logger = logging.getLogger(__name__)
 
@@ -89,20 +88,22 @@ to avoid touching real cloud APIs."""
 def default_source_factory(config: SourceConfig) -> Source:
     """Build a :class:`Source` from a config, dispatching on kind.
 
-    LOCAL and S3 are constructed directly from config. The cloud
-    OAuth kinds (GDRIVE / ONEDRIVE / NOTION) all funnel through
-    :class:`memograph.sources.nango_source.NangoBackedSource`, which
-    needs a :class:`NangoClient` injected at construction. The
-    registry's :meth:`SourceRegistry._build_with_context` handles
-    that injection; this branch only fires when callers bypass the
-    registry, in which case they must pre-build the source.
-    """
-    if config.kind is SourceKind.LOCAL:
-        return LocalSource(config)
-    if config.kind is SourceKind.S3:
-        from memograph.sources.s3 import S3Source
+    Dispatch goes through the adapter registry
+    (:mod:`memograph.sources.adapter_registry`). The public package ships
+    only the ``LOCAL`` adapter; optional/commercial adapters (S3, and the
+    Nango-backed cloud kinds) are registered by plugins at import time. A kind
+    with no registered adapter raises a clear error rather than being
+    hardcoded here.
 
-        return S3Source(config)
+    The cloud OAuth kinds (GDRIVE / ONEDRIVE / NOTION) need a
+    :class:`NangoClient` injected at construction and are built through
+    :meth:`SourceRegistry._build_with_context`, not this context-free factory.
+    """
+    from memograph.sources.adapter_registry import get_source_adapter
+
+    factory = get_source_adapter(config.kind)
+    if factory is not None:
+        return factory(config)
     if config.kind in (
         SourceKind.GDRIVE,
         SourceKind.ONEDRIVE,
@@ -110,10 +111,14 @@ def default_source_factory(config: SourceConfig) -> Source:
     ):
         raise SourceError(
             f"{config.kind.value!r} sources route through Nango and need "
-            "a NangoClient injected — go through SourceRegistry.get() "
+            "a NangoClient injected - go through SourceRegistry.get() "
             "rather than calling default_source_factory directly."
         )
-    raise SourceError(f"no adapter registered for source kind {config.kind.value!r}")
+    raise SourceError(
+        f"no adapter registered for source kind {config.kind.value!r}; "
+        "install the plugin that provides it (e.g. memograph-enterprise "
+        "for S3 and cloud sources)."
+    )
 
 
 class SourceRegistry:

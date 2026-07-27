@@ -244,30 +244,64 @@ class TestCreateSource:
     def test_create_s3_source(
         self, sources_server, vault_dir: Path, sources_root: Path
     ) -> None:
-        client = _client(sources_server, vault_dir)
-        r = client.post(
-            "/api/v1/sources",
-            json={
-                "source_id": "s3-primary",
-                "kind": "s3",
-                "display_name": "Primary S3",
-                "params": {
-                    "bucket": "my-bucket",
-                    "prefix": "memos",
-                    "region": "us-east-1",
+        # The S3 adapter is an out-of-tree plugin capability (moved to
+        # memograph-enterprise). Register a lightweight stub adapter into the
+        # public adapter registry so this test verifies the route + registry
+        # contract independently of whether the S3 plugin is installed.
+        from memograph.sources import adapter_registry
+        from memograph.sources.base import Source, SourceKind
+
+        class _StubS3(Source):
+            async def list_documents(self):  # pragma: no cover
+                if False:
+                    yield None
+
+            async def read_document(self, doc_id):  # pragma: no cover
+                raise NotImplementedError
+
+            async def write_document(self, doc):  # pragma: no cover
+                raise NotImplementedError
+
+            async def watch(self):  # pragma: no cover
+                if False:
+                    yield None
+
+            async def materialize_to_vault(self, vault_path):  # pragma: no cover
+                raise NotImplementedError
+
+            async def health(self):  # pragma: no cover
+                raise NotImplementedError
+
+        adapter_registry.register_source_adapter(
+            SourceKind.S3, _StubS3, override=True
+        )
+        try:
+            client = _client(sources_server, vault_dir)
+            r = client.post(
+                "/api/v1/sources",
+                json={
+                    "source_id": "s3-primary",
+                    "kind": "s3",
+                    "display_name": "Primary S3",
+                    "params": {
+                        "bucket": "my-bucket",
+                        "prefix": "memos",
+                        "region": "us-east-1",
+                    },
                 },
-            },
-            headers=ADMIN_HEADER,
-        )
-        assert r.status_code == 201, r.text
-        body = r.json()
-        assert body["kind"] == "s3"
-        # Only recognised fields persist — typos are dropped.
-        persisted = (sources_root / ".sources" / "s3-primary.json").read_text(
-            encoding="utf-8"
-        )
-        assert "my-bucket" in persisted
-        assert "us-east-1" in persisted
+                headers=ADMIN_HEADER,
+            )
+            assert r.status_code == 201, r.text
+            body = r.json()
+            assert body["kind"] == "s3"
+            # Only recognised fields persist - typos are dropped.
+            persisted = (sources_root / ".sources" / "s3-primary.json").read_text(
+                encoding="utf-8"
+            )
+            assert "my-bucket" in persisted
+            assert "us-east-1" in persisted
+        finally:
+            adapter_registry._reset_for_tests()
 
     def test_create_s3_requires_bucket(self, sources_server, vault_dir: Path) -> None:
         client = _client(sources_server, vault_dir)
