@@ -172,7 +172,7 @@ class TestHealth:
         # time without creating intermediate state.
         # Strategy: bypass the storage initialization by checking the
         # constructor's resolved path against a known-missing parent.
-        missing_parent = tmp_path / "no-parent" / "vault"
+        _missing_parent = tmp_path / "no-parent" / "vault"
         # Don't create it; the parent itself doesn't exist so VaultStorage
         # mkdir(parents=True) WILL create it. We need a different failure
         # mode: pass a path that resolves to an existing FILE, not a dir.

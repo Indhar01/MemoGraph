@@ -13,7 +13,6 @@ that keep the open-core boundary safe:
 
 from __future__ import annotations
 
-import pytest
 
 from memograph import plugins
 
@@ -43,9 +42,7 @@ def test_plugin_register_is_called_with_context(monkeypatch):
         seen["vault"] = context.extras.get("vault_path")
         context.app.state.plugin_touched = True
 
-    monkeypatch.setattr(
-        plugins, "discover_plugins", lambda: [("fake", fake_register)]
-    )
+    monkeypatch.setattr(plugins, "discover_plugins", lambda: [("fake", fake_register)])
     app = _FakeApp()
     active = plugins.load_plugins(app, extras={"vault_path": "/tmp/v"})  # type: ignore[arg-type]
 
@@ -61,9 +58,7 @@ def test_activation_is_idempotent(monkeypatch):
     def fake_register(context):
         calls["n"] += 1
 
-    monkeypatch.setattr(
-        plugins, "discover_plugins", lambda: [("fake", fake_register)]
-    )
+    monkeypatch.setattr(plugins, "discover_plugins", lambda: [("fake", fake_register)])
     app = _FakeApp()
     first = plugins.load_plugins(app)  # type: ignore[arg-type]
     second = plugins.load_plugins(app)  # type: ignore[arg-type]

@@ -87,9 +87,7 @@ def discover_plugins() -> list[tuple[str, Callable[[AppContext], None]]]:
             logger.warning("Failed to load plugin %r: %s", ep.name, exc)
             continue
         if not callable(register):
-            logger.warning(
-                "Plugin %r entry point is not callable; skipping", ep.name
-            )
+            logger.warning("Plugin %r entry point is not callable; skipping", ep.name)
             continue
         found.append((ep.name, register))
     return found

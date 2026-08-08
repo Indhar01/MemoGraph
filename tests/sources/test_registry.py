@@ -82,7 +82,7 @@ class TestRegisterAndGet:
         registry.register(
             _config(path=b),
         )
-        source = registry.get(None, "primary")
+        _source = registry.get(None, "primary")
         # LocalSource exposes the path indirectly via params; verify
         # by reading the persisted config.
         persisted = registry.get_config(None, "primary")

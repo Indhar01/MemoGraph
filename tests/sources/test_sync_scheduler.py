@@ -65,7 +65,7 @@ async def test_tick_records_failure(tmp_path: Path, monkeypatch) -> None:
     vault.mkdir()
     registry = SourceRegistry(global_root=tmp_path / "global")
     registry.register(_local_config(vault))
-    source = registry.get(None, "primary")
+    _source = registry.get(None, "primary")
 
     async def _boom(self, vault_path):
         raise SourceError("boom")

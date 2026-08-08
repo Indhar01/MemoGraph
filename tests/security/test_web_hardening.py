@@ -136,17 +136,13 @@ class TestReadOnlyMode:
         importlib.reload(server_mod)
         return _make_client(server_mod, vault_dir)
 
-    def test_post_rejected_with_403_and_stable_code(
-        self, monkeypatch, vault_dir
-    ):
+    def test_post_rejected_with_403_and_stable_code(self, monkeypatch, vault_dir):
         client = self._readonly_client(monkeypatch, vault_dir)
         r = client.post("/api/v1/memories", json={"title": "t", "content": "c"})
         assert r.status_code == 403
         assert r.json()["code"] == "READ_ONLY_MODE"
 
-    def test_put_and_delete_and_patch_also_rejected(
-        self, monkeypatch, vault_dir
-    ):
+    def test_put_and_delete_and_patch_also_rejected(self, monkeypatch, vault_dir):
         client = self._readonly_client(monkeypatch, vault_dir)
         for method in ("put", "delete", "patch"):
             r = getattr(client, method)("/api/v1/memories/some-id")

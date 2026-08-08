@@ -272,9 +272,7 @@ class TestCreateSource:
             async def health(self):  # pragma: no cover
                 raise NotImplementedError
 
-        adapter_registry.register_source_adapter(
-            SourceKind.S3, _StubS3, override=True
-        )
+        adapter_registry.register_source_adapter(SourceKind.S3, _StubS3, override=True)
         try:
             client = _client(sources_server, vault_dir)
             r = client.post(
