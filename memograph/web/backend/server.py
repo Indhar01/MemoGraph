@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -183,61 +184,26 @@ async def lifespan(app: FastAPI):
     # MEMOGRAPH_REDIS_URL is set. Started before the SyncScheduler so
     # an early activate-during-startup edge case has the coordinator
     # already listening.
+    # Source-adapter background loops (SwapCoordinator + SyncScheduler) are an
+    # enterprise feature and live in the private memograph-enterprise plugin,
+    # which starts them via a startup hook. The public engine only initialises
+    # the state slots so shutdown/readiness code can reference them safely.
     app.state.swap_coordinator = None
-    source_registry = getattr(app.state, "source_registry", None)
-    if source_registry is not None:
-        try:
-            from memograph.sources.swap_coordinator import coordinator_from_env
-
-            coordinator = coordinator_from_env()
-            await coordinator.start(source_registry)
-            app.state.swap_coordinator = coordinator
-            logger.info(
-                "SwapCoordinator started (%s)",
-                type(coordinator).__name__,
-            )
-        except Exception as exc:  # noqa: BLE001
-            # A misconfigured Redis is operator error worth surfacing
-            # via the readiness probe, but we don't want to crash the
-            # whole process — single-worker installs degrade to no
-            # coordination, multi-worker installs notice via /readyz.
-            logger.error("Failed to start SwapCoordinator: %s", exc)
-
-    # Source-adapter sync loop. Only starts when the feature flag is
-    # set AND the operator hasn't asked us to stay passive. The
-    # scheduler is fault-tolerant — bad sources are caught per-tick
-    # and don't kill the loop — so a partial start is safe even if
-    # some sources are unreachable.
     app.state.sync_scheduler = None
-    if source_registry is not None and not _SOURCES_SYNC_DISABLED:
+
+    for hook in getattr(app.state, "_memograph_startup_hooks", []):
         try:
-            from memograph.sources.kernel_binding import reindex_active_kernel
-            from memograph.sources.sync import SyncScheduler
-
-            poll = _env_int("MEMOGRAPH_SOURCES_SYNC_POLL_SECONDS", 30)
-
-            async def _on_synced(tenant_id: str | None, source_id: str) -> None:
-                # Re-ingest only when the just-synced source is the
-                # active one for that tenant. Non-active syncs just
-                # warm the cache.
-                if (
-                    source_registry is not None
-                    and source_registry.get_active(tenant_id) == source_id
-                ):
-                    await reindex_active_kernel(app, source_id)
-
-            scheduler = SyncScheduler(
-                registry=source_registry,
-                poll_interval_seconds=float(poll),
-                on_synced=_on_synced,
-            )
-            await scheduler.start()
-            app.state.sync_scheduler = scheduler
-            logger.info("SyncScheduler started (poll=%ds)", poll)
+            await hook(app)
         except Exception as exc:  # noqa: BLE001
-            logger.error("Failed to start SyncScheduler: %s", exc)
+            logger.error("startup hook failed: %s", exc)
 
     yield
+
+    for hook in getattr(app.state, "_memograph_shutdown_hooks", []):
+        try:
+            await hook(app)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("shutdown hook failed: %s", exc)
 
     # Shutdown
     app.state.is_ready = False
@@ -348,8 +314,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # admin routes are still mounted but return 503 (see admin._registry).
     app.state.tenant_registry = None
     if _TENANCY_ENABLED:
-        from ...core.tenant_registry import TenantRegistry
-        from ...storage.tenant_storage import TenantStorage
+        TenantRegistry: Any = None
+        TenantStorage: Any = None
+        try:
+            import importlib
+
+            _tr = importlib.import_module("...core.tenant_registry", __package__)
+            _ts = importlib.import_module("...storage.tenant_storage", __package__)
+            TenantRegistry = _tr.TenantRegistry
+            TenantStorage = _ts.TenantStorage
+        except Exception as exc:  # noqa: BLE001 - moved to private layer
+            logger.warning("tenancy modules unavailable (enterprise plugin): %s", exc)
 
         global_root = os.environ.get("MEMOGRAPH_GLOBAL_ROOT", str(vault_path_obj))
 
@@ -357,16 +332,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             return MemoryKernel(vault_path=tenant_vault_path, use_gam=use_gam)
 
         max_warm = _env_int("MEMOGRAPH_TENANT_MAX_WARM", 64)
-        app.state.tenant_registry = TenantRegistry(
-            storage=TenantStorage(global_root=global_root),
-            kernel_factory=_kernel_factory,
-            max_warm=max_warm,
-        )
-        logger.info(
-            "Multi-tenancy enabled: global_root=%s max_warm=%d",
-            global_root,
-            max_warm,
-        )
+        if TenantRegistry is not None and TenantStorage is not None:
+            app.state.tenant_registry = TenantRegistry(
+                storage=TenantStorage(global_root=global_root),
+                kernel_factory=_kernel_factory,
+                max_warm=max_warm,
+            )
+            logger.info(
+                "Multi-tenancy enabled: global_root=%s max_warm=%d",
+                global_root,
+                max_warm,
+            )
 
     # ADR 0002 v1.1+: source registry. Lives on app.state.source_registry
     # when the feature flag is set. Routes 503 with a clear message
@@ -374,7 +350,14 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     app.state.source_registry = None
     app.state.nango_client = None
     if _SOURCES_ENABLED:
-        from memograph.sources.registry import SourceRegistry
+        SourceRegistry: Any = None
+        try:
+            import importlib
+
+            _sr = importlib.import_module("memograph.sources.registry")
+            SourceRegistry = _sr.SourceRegistry
+        except Exception as exc:  # noqa: BLE001 - moved to private layer
+            logger.warning("sources modules unavailable (enterprise plugin): %s", exc)
 
         sources_global_root = os.environ.get(
             "MEMOGRAPH_SOURCES_ROOT",
@@ -425,17 +408,18 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
                 logger.error("Failed to initialise Nango client: %s", exc)
         app.state.nango_client = nango_client
 
-        app.state.source_registry = SourceRegistry(
-            global_root=sources_global_root,
-            max_warm=sources_max_warm,
-            nango_client=nango_client,
-        )
-        logger.info(
-            "Source adapters enabled: global_root=%s max_warm=%d " "nango=%s",
-            sources_global_root,
-            sources_max_warm,
-            "configured" if nango_client else "not configured",
-        )
+        if SourceRegistry is not None:
+            app.state.source_registry = SourceRegistry(
+                global_root=sources_global_root,
+                max_warm=sources_max_warm,
+                nango_client=nango_client,
+            )
+            logger.info(
+                "Source adapters enabled: global_root=%s max_warm=%d " "nango=%s",
+                sources_global_root,
+                sources_max_warm,
+                "configured" if nango_client else "not configured",
+            )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
@@ -502,11 +486,27 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # mount time so individual route bodies don't have to remember. When
     # MEMOGRAPH_AUTH_PROVIDER=none, require_user returns an anonymous
     # user rather than 401-ing — preserves local-dev workflows.
-    from .routes import admin, ai, analytics, graph, memories, search
+    from .routes import ai, analytics, graph, memories, search
 
+    # Enterprise-bound routers may be absent (moved to the private plugin).
+    # Import via importlib into Any-typed locals so mypy doesn't treat a
+    # missing submodule as a type error; None => not mounted (routes 404).
+    import importlib
+
+    _admin_routes: Any = None
+    nango_routes: Any = None
+    sources_routes: Any = None
+    try:
+        _admin_routes = importlib.import_module(".routes.admin", __package__)
+    except Exception:  # noqa: BLE001 - module moved to private layer
+        _admin_routes = None
     if _SOURCES_ENABLED:
-        from .routes import nango as nango_routes
-        from .routes import sources as sources_routes
+        try:
+            nango_routes = importlib.import_module(".routes.nango", __package__)
+            sources_routes = importlib.import_module(".routes.sources", __package__)
+        except Exception:  # noqa: BLE001 - modules moved to private layer
+            nango_routes = None
+            sources_routes = None
 
     auth_dep = [Depends(require_user)]
     # Admin router is gated by an additional `admin` scope. The scope
@@ -528,18 +528,16 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             analytics.router, prefix=prefix, tags=["analytics"], dependencies=auth_dep
         )
         app.include_router(ai.router, prefix=prefix, tags=["ai"], dependencies=auth_dep)
-        app.include_router(admin.router, prefix=prefix, dependencies=admin_dep)
-        if _SOURCES_ENABLED:
-            # Sources router applies its own per-route scope checks
-            # (read = require_user, mutating = require_scope("admin"))
-            # so we mount with auth_dep only.
+        # Enterprise routers: mount only when present (defensive import above).
+        if _admin_routes is not None:
+            app.include_router(
+                _admin_routes.router, prefix=prefix, dependencies=admin_dep
+            )
+        if _SOURCES_ENABLED and sources_routes is not None:
             app.include_router(
                 sources_routes.router, prefix=prefix, dependencies=auth_dep
             )
-            # Nango router: connect-session is admin-scoped internally;
-            # the webhook is public (Nango hits it directly with an
-            # HMAC signature as the legitimacy proof). Mount WITHOUT
-            # auth_dep so the webhook isn't blocked.
+        if _SOURCES_ENABLED and nango_routes is not None:
             app.include_router(nango_routes.router, prefix=prefix)
 
     if _METRICS_ENABLED:
@@ -566,7 +564,11 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     try:
         from ...plugins import load_plugins
 
-        active = load_plugins(app, extras={"vault_path": app.state.vault_path})
+        active = load_plugins(
+            app,
+            extras={"vault_path": app.state.vault_path},
+            kernel=getattr(app.state, "kernel", None),
+        )
         if active:
             logger.info("MemoGraph plugins active: %s", ", ".join(active))
     except Exception as exc:  # noqa: BLE001

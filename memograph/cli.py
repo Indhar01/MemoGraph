@@ -41,6 +41,8 @@ from .cli_infrastructure_helpers import (
     run_backup_command,
     run_config_command,
     run_stats_command,
+    run_eval_command,
+    run_reorganize_command,
 )
 
 
@@ -1144,6 +1146,67 @@ def main():
         help="Output format (default: text)",
     )
 
+    eval_parser = subparsers.add_parser(
+        "eval", help="Evaluate retrieval quality against a gold set (offline)"
+    )
+    eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
+    eval_retrieval_parser = eval_subparsers.add_parser(
+        "retrieval",
+        help="Score ranking quality (P/R/F1/MRR/nDCG) against a gold set",
+    )
+    eval_retrieval_parser.add_argument("gold", help="Path to gold-set JSON file")
+    eval_retrieval_parser.add_argument(
+        "--top-k", type=int, default=8, help="Top-k for metrics (default: 8)"
+    )
+    eval_retrieval_parser.add_argument(
+        "--depth", type=int, default=2, help="Graph traversal depth (default: 2)"
+    )
+    eval_retrieval_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+    eval_retrieval_parser.add_argument(
+        "--fail-under",
+        type=float,
+        default=None,
+        metavar="F1",
+        help="Exit non-zero if mean f1@k is below this threshold (for CI)",
+    )
+
+    reorganize_parser = subparsers.add_parser(
+        "reorganize",
+        help="Reorganize existing notes into a folder hierarchy (dry-run by default)",
+    )
+    reorganize_parser.add_argument(
+        "--strategy",
+        choices=["flat", "by_type"],
+        default="by_type",
+        help="Target hierarchy layout (default: by_type)",
+    )
+    reorganize_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually move files (without this flag, only prints the plan)",
+    )
+    reorganize_parser.add_argument(
+        "--backfill-ids",
+        action="store_true",
+        help="Write id: into frontmatter of notes missing it before moving",
+    )
+    reorganize_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the confirmation prompt when using --apply",
+    )
+    reorganize_parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format (default: text)",
+    )
+
     args = parser.parse_args()
     kernel = MemoryKernel(args.vault)
 
@@ -1309,8 +1372,16 @@ def main():
         return
 
     if args.command == "nango-doctor":
-        from memograph.cli_nango_doctor import run_doctor as run_nango_doctor
-
+        # Nango cloud sources are an enterprise feature (memograph-enterprise).
+        try:
+            from memograph.cli_nango_doctor import run_doctor as run_nango_doctor
+        except ImportError:
+            print(
+                "nango-doctor requires the memograph-enterprise plugin "
+                "(cloud sources are an enterprise feature). "
+                "See https://github.com/Indhar01/MemoGraph#enterprise."
+            )
+            sys.exit(2)
         sys.exit(run_nango_doctor())
 
     if args.command == "setup-mcp":
@@ -1567,6 +1638,14 @@ def main():
 
     if args.command == "stats":
         run_stats_command(kernel, args)
+        return
+
+    if args.command == "eval":
+        run_eval_command(kernel, args)
+        return
+
+    if args.command == "reorganize":
+        run_reorganize_command(kernel, args)
         return
 
     if args.command == "analyze-knowledge":
