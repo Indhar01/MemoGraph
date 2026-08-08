@@ -26,9 +26,18 @@ def temp_vault(tmp_path):
 
 @pytest.fixture
 def mcp_server(temp_vault):
-    """Create an MCP server instance with a temp vault."""
+    """Create an MCP server instance with a temp vault.
+
+    Yields the server and ALWAYS closes it on teardown so the advisory vault
+    lock is released. Without this, the lock file / OS handle leaked between
+    tests and could block a subsequent server construction on the same vault
+    (a hang on Windows CI runners).
+    """
     server = MemoGraphMCPServer(vault_path=str(temp_vault))
-    return server
+    try:
+        yield server
+    finally:
+        server.close()
 
 
 @pytest.fixture
@@ -54,7 +63,10 @@ def populated_server(temp_vault):
         )
 
     server = MemoGraphMCPServer(vault_path=str(temp_vault))
-    return server
+    try:
+        yield server
+    finally:
+        server.close()
 
 
 class TestServerInitialization:
