@@ -273,6 +273,8 @@ class MemoryKernel:
         enable_disk_cache: bool = True,
         query_cache_ttl: int = 300,
         query_cache_size: int = 100,
+        enable_swarm: bool = False,
+        swarm_config: Any | None = None,
     ) -> None:
         """
         Initialize the memory kernel.
@@ -382,7 +384,110 @@ class MemoryKernel:
         self._graph_lock = threading.RLock()
         self._graph_version = 0
 
+        # Swarm intelligence (opt-in). Tracks nodes created/modified since the
+        # last swarm cycle so agents can prioritise "dirty" nodes.
+        self.dirty_node_ids: set[str] = set()
+        self.swarm: Any | None = None
+        self._enable_swarm = enable_swarm
+        if enable_swarm:
+            self._init_swarm(swarm_config)
+
         logger.info("MemoGraph kernel initialized successfully")
+
+    def _init_swarm(self, swarm_config: Any | None = None) -> None:
+        """Build the SwarmOrchestrator and register the five default agents.
+
+        Called from ``__init__`` when ``enable_swarm=True``. The pheromone
+        persistence path defaults to ``<vault>/.swarm/pheromones.json`` when
+        the config does not set one.
+        """
+        from memograph.swarm.agents import (
+            GapAgent,
+            LinkerAgent,
+            SalienceAgent,
+            SummarizerAgent,
+            TaggerAgent,
+        )
+        from memograph.swarm.config import SwarmConfig
+        from memograph.swarm.orchestrator import SwarmOrchestrator
+
+        config = swarm_config or SwarmConfig()
+        # Default the pheromone persistence path under the vault so trails
+        # survive restarts without the caller having to configure it.
+        if not config.pheromone_persist_path:
+            config.pheromone_persist_path = str(
+                self.vault_path / ".swarm" / "pheromones.json"
+            )
+
+        orchestrator = SwarmOrchestrator(kernel=self, config=config)
+        # Register the five default agents. Each reads its per-agent config
+        # off the SwarmConfig (summarizer is disabled by default there).
+        orchestrator.register(
+            TaggerAgent(self, orchestrator.pheromone, config, config.tagger)
+        )
+        orchestrator.register(
+            LinkerAgent(self, orchestrator.pheromone, config, config.linker)
+        )
+        orchestrator.register(
+            GapAgent(self, orchestrator.pheromone, config, config.gap)
+        )
+        orchestrator.register(
+            SalienceAgent(self, orchestrator.pheromone, config, config.salience)
+        )
+        orchestrator.register(
+            SummarizerAgent(self, orchestrator.pheromone, config, config.summarizer)
+        )
+        self.swarm = orchestrator
+        logger.info(
+            "Swarm intelligence enabled with %d agents", len(orchestrator._agents)
+        )
+
+    async def run_swarm_cycle(self) -> dict[str, Any]:
+        """Run one swarm curation cycle and return the report as a dict.
+
+        Raises:
+            RuntimeError: if the swarm was not enabled at construction.
+        """
+        if self.swarm is None:
+            raise RuntimeError(
+                "Swarm not enabled. Pass enable_swarm=True to MemoryKernel."
+            )
+        report = await self.swarm.run_cycle()
+        # A cycle has processed the current dirty set; clear it.
+        self.dirty_node_ids.clear()
+        return report.to_dict()
+
+    async def start_swarm(self) -> None:
+        """Start the background swarm scheduler.
+
+        Raises:
+            RuntimeError: if the swarm was not enabled at construction.
+        """
+        if self.swarm is None:
+            raise RuntimeError(
+                "Swarm not enabled. Pass enable_swarm=True to MemoryKernel."
+            )
+        self.swarm.start()
+
+    async def stop_swarm(self) -> None:
+        """Stop the background swarm scheduler (no-op if not running).
+
+        Raises:
+            RuntimeError: if the swarm was not enabled at construction.
+        """
+        if self.swarm is None:
+            raise RuntimeError(
+                "Swarm not enabled. Pass enable_swarm=True to MemoryKernel."
+            )
+        await self.swarm.stop()
+
+    def get_swarm_status(self) -> dict[str, Any]:
+        """Return swarm status. ``{"enabled": False}`` when the swarm is off."""
+        if self.swarm is None:
+            return {"enabled": False}
+        status = self.swarm.status()
+        status["enabled"] = True
+        return status
 
     @classmethod
     def from_config(cls, config_path: str) -> "MemoryKernel":
