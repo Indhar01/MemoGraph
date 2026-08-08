@@ -64,8 +64,17 @@ def parse_file(path: Path, vault_root: Path) -> MemoryNode | None:
         ]
         tags = TAG_RE.findall(content)
 
-        node_id = path.relative_to(vault_root).with_suffix("").as_posix()
-        node_id = node_id.lower().replace(" ", "-")
+        # Identity is decoupled from file PATH so a note can be moved into a
+        # folder hierarchy without breaking inbound [[wikilinks]] (which
+        # resolve to slug-form ids). Prefer an explicit frontmatter ``id``;
+        # fall back to the filename STEM (never the full relative path).
+        # For legacy flat vaults, stem == slug == the historical id, so this
+        # is fully backward compatible. See docs/ADR_SELF_ORGANIZING_HIERARCHY.md.
+        fm_id = frontmatter.get("id")
+        if isinstance(fm_id, str) and fm_id.strip():
+            node_id = fm_id.strip().lower().replace(" ", "-")
+        else:
+            node_id = path.stem.lower().replace(" ", "-")
 
         stat = path.stat()
 

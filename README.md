@@ -16,10 +16,7 @@
 [![Tests](https://img.shields.io/badge/tests-pytest-orange)](https://docs.pytest.org/)
 [![Code Quality](https://img.shields.io/badge/code%20quality-A+-brightgreen)](https://github.com/Indhar01/MemoGraph)
 [![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blue)](https://indhar01.github.io/MemoGraph/)
-<!-- Hosted demo: replace the placeholder URL once the Hugging Face Space is live. See deploy/huggingface/SETUP.md. -->
-[![Try the live demo](https://img.shields.io/badge/demo-Hugging%20Face%20Space-yellow?logo=huggingface)](https://huggingface.co/spaces)
-<!-- Discord: replace the placeholder URL once the server is live. See docs/community/COMMUNITY.md. -->
-[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://github.com/Indhar01/MemoGraph/discussions)
+[![Community](https://img.shields.io/badge/Community-GitHub%20Discussions-5865F2?logo=github&logoColor=white)](https://github.com/Indhar01/MemoGraph/discussions)
 [![Benchmarks: MRA 81.8%](https://img.shields.io/badge/MRA-81.8%25-success)](BENCHMARKS.md)
 [![CRS 3.04 vs 2.66 in-context](https://img.shields.io/badge/CRS-3.04%20vs%202.66-success)](BENCHMARKS.md)
 
@@ -55,15 +52,17 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 
 ### As an AI agent / IDE user
 
-- A first-class **Model Context Protocol (MCP) server** with 30+ tools, working out of the box with Claude Desktop, Claude Code, Cursor, Cline, Windsurf, Continue, Zed, VS Code, Goose, Gemini CLI, OpenAI Codex CLI, and others.
+- A first-class **Model Context Protocol (MCP) server** with 44 tools, working out of the box with Claude Desktop, Claude Code, Cursor, Cline, Windsurf, Continue, Zed, VS Code, Goose, Gemini CLI, OpenAI Codex CLI, and others.
 - Autonomous "auto-save" hooks that capture decisions and context from your AI conversations into the vault automatically.
 - Per-conversation memory recall — your assistant can pull "what did we decide last week about X" without you copy-pasting context every time.
 
 ### As an enterprise / SaaS operator
 
+> ⚠️ **Experimental / pre-1.0.** The enterprise features below exist in-tree and have test coverage, but they are **not yet production-hardened** and are not covered by any stability or compliance guarantee. Validate them against your own requirements before relying on them. Single-tenant, self-hosted usage is the supported path today.
+
 - **Multi-tenant deployment** with filesystem-level isolation per tenant, end-to-end isolation tests, and a warm-LRU kernel cache.
 - **OIDC + API-key authentication** with JWKS support (Auth0, Clerk, WorkOS, Keycloak, Azure AD, Okta), restrictive CORS, request-size caps, and rate limiting.
-- **GDPR-compliant scheduled deletion**: tombstone-with-grace-period flow, automatic final backups, daily reaper, and an audit log of every deletion.
+- **GDPR-oriented scheduled deletion** (tooling to support Art. 17 workflows, not a compliance guarantee): tombstone-with-grace-period flow, automatic final backups, daily reaper, and an audit log of every deletion.
 - **Observability built in**: OpenTelemetry traces + Prometheus `/metrics`, structured JSON logging with request IDs, and a separate `/healthz` / `/readyz` for orchestration.
 - **Operations runbooks** shipped with the code: install, SSO setup, RBAC, backup-restore, and GDPR procedures.
 
@@ -76,8 +75,8 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 | Connect related ideas without manual cross-linking | AI link suggestions, backlink graph, BFS traversal |
 | Discover what's missing in your knowledge base | Gap detector + topic clustering + learning-path suggestions |
 | Self-host a memory backend for a team or product | Web UI, FastAPI HTTP API, OpenAPI v1 contract, Docker compose |
-| Ship MemoGraph to multiple paying customers | Multi-tenant kernel registry, OIDC, quotas (roadmap), GDPR runbook |
-| Survive an SOC 2 audit conversation | Audit log with user + tenant binding, observability, security workflow, compliance roadmap doc |
+| Ship MemoGraph to multiple paying customers | Experimental multi-tenant kernel registry, OIDC, quotas (roadmap), GDPR runbook — validate before production |
+| Have the building blocks for a future SOC 2 conversation | Audit log with user + tenant binding, observability hooks, a security CI workflow, and a compliance *roadmap* doc (not a certification) |
 
 > **Stability promise.** From 1.0 onwards, anything in
 > `memograph.__all__`, any `/api/v1/...` route, any documented env var,
@@ -118,7 +117,7 @@ Re-run `memograph quickstart --force` any time to reset to a fresh demo. When yo
 
 ### Enterprise & SaaS readiness
 
-- **Source adapters** — connect a local folder, S3-compatible bucket (AWS / MinIO / R2 / B2), Notion workspace, Google Drive folder, or OneDrive / SharePoint library. OAuth for cloud providers is brokered through a self-hosted [Nango](https://nango.dev) instance (encrypted token storage, automatic refresh, REST proxy); per-source health probes; admin-scoped REST + a wizard in the web UI. Default-on; set `MEMOGRAPH_SOURCES_ENABLED=0` to opt out.
+- **Source adapters** (experimental) — connect a local folder or S3-compatible bucket (AWS / MinIO / R2 / B2). OAuth cloud sources (Notion, Google Drive, OneDrive / SharePoint) are **in progress**: connection and listing work through a self-hosted [Nango](https://nango.dev) instance, but two-way *sync* (pull/push) is not yet implemented. Includes per-source health probes, admin-scoped REST, and a wizard in the web UI. Default-on; set `MEMOGRAPH_SOURCES_ENABLED=0` to opt out.
 - **Multi-tenancy** with filesystem-isolated tenants, an LRU registry of warm kernels, per-tenant audit logs, and end-to-end isolation tests gating release.
 - **Authentication** via OIDC (JWKS) or hashed API keys; per-route auth scope; identity bound into the audit log.
 - **Web hardening** — restrictive CORS, slowapi rate limiting, request-size caps, structured JSON logging with request IDs, info-leak-free 500 handler.
@@ -209,20 +208,22 @@ MemoGraph includes a full-featured MCP server for seamless integration with AI a
 
 **🚨 Having connection issues?** See **[Setup & Troubleshooting Guide](docs/MCP_SETUP_TROUBLESHOOTING.md)** - Common fixes for "cannot connect" errors!
 
-### 19 Available Tools
+### 44 Available Tools
 
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Search** | `search_vault`, `query_with_context` | Semantic search and context retrieval |
-| **Create** | `create_memory`, `import_document` | Add memories and import documents |
-| **Read** | `list_memories`, `get_memory`, `get_vault_info` | Browse and retrieve memories |
-| **Update** | `update_memory` | Modify existing memories |
-| **Delete** | `delete_memory` | Remove memories by ID |
-| **Analytics** | `get_vault_stats` | Vault statistics and insights |
-| **Discovery** | `list_available_tools` | List all available tools |
-| **Autonomous** | `auto_hook_query`, `auto_hook_response`, `configure_autonomous_mode`, `get_autonomous_config` | Autonomous memory management |
-| **Graph** | `relate_memories`, `search_by_graph`, `find_path` | Graph-native linking and traversal |
-| **Bulk** | `bulk_create` | Create multiple memories in one call |
+| **Create** | `create_memory`, `import_document`, `bulk_create` | Add memories, import documents, batch-create |
+| **Read** | `list_memories`, `get_memory`, `get_vault_info`, `get_vault_stats` | Browse, retrieve, and inspect the vault |
+| **Update** | `update_memory`, `batch_update` | Modify one or many memories |
+| **Delete** | `delete_memory`, `batch_delete` | Remove one or many memories |
+| **Graph** | `relate_memories`, `search_by_graph`, `find_path` | Wikilink graph linking and traversal |
+| **AI / Analysis** | `suggest_tags`, `suggest_links`, `detect_knowledge_gaps`, `analyze_knowledge_base` | Tag/link suggestions, gap detection, knowledge analysis |
+| **Data** | `export_vault_tool`, `import_backup_tool`, `create_backup_tool` | Export, backup, and restore |
+| **Config / Profiles** | `get_config_value`, `set_config_value`, `list_config_all`, `create_profile_config`, `use_profile_config`, `list_profiles_config`, `delete_profile_config` | Runtime configuration and named profiles |
+| **Conversation capture** | `auto_hook_query`, `auto_hook_response`, `auto_hook_turn`, `configure_autonomous_mode`, `get_autonomous_config`, `configure_capture_mode`, `get_capture_mode` | Save conversation turns into the vault (client-driven) |
+| **Save diagnostics** | `verify_last_save`, `get_save_stats`, `get_auto_save_analytics`, `get_monitor_status` | Inspect and verify the auto-save pipeline |
+| **Discovery** | `list_available_tools` | Enumerate every available tool |
 
 ### Supported Clients
 
@@ -320,7 +321,7 @@ For **Claude Code, Cursor, Windsurf, Continue, Zed, VS Code, Goose, Gemini CLI, 
 
 **NEW**: MemoGraph is now available in the official MCP Registry! 🎉
 
-**Registry URL**: [https://github.com/modelcontextprotocol/servers/tree/main/src/memograph](https://github.com/modelcontextprotocol/servers)
+**Registry ID**: `io.github.Indhar01/memograph` — published to the official [MCP Registry](https://registry.modelcontextprotocol.io). Search for `memograph` in any registry-aware client.
 
 ```bash
 pip install memograph
@@ -812,15 +813,13 @@ We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for deta
 - ⭐ Star the repository on [GitHub](https://github.com/Indhar01/MemoGraph)
 - 👁️ Watch for updates and releases
 - 📦 Follow the project on [PyPI](https://pypi.org/project/memograph/)
-- 🔗 Check out the [MCP Registry listing](https://github.com/modelcontextprotocol/servers/tree/main/src/memograph)
+- 🔗 Check out the [MCP Registry listing](https://registry.modelcontextprotocol.io)
 
 ## 🚦 Status
 
-**Current version**: 0.3.0
+**Current version**: 0.4.1 (alpha)
 
-Single-tenant deployments are stable and recommended for production use.
-Multi-tenant deployments are feature-complete with end-to-end isolation
-tests gating the release; the public API will stabilise at v1.0.
+MemoGraph is pre-1.0 alpha software. Single-tenant, local/self-hosted usage is the supported, well-tested path. Multi-tenant, authentication, and compliance features exist in-tree but are **not yet production-hardened** — treat them as experimental until the v1.0 stability contract lands. The public API may change in any minor release until v1.0.
 
 - ✅ Core functionality stable and tested (172+ tests across security, contract, and tenancy suites)
 - ✅ Whole-package type-checked with MyPy
@@ -837,7 +836,7 @@ tests gating the release; the public API will stabilise at v1.0.
 - **Phase 2** — OpenTelemetry + Prometheus, structured JSON logging, concurrency audit, stress tests.
 - **Phase 1** — OIDC + API-key auth, slowapi rate limiting, restrictive CORS, request-size caps, vault size caps, schema-versioned caches, OpenAPI v1 contract, security test suite.
 - **Phase 0** — path-traversal-safe vault writes, info-leak-free error handlers, pinned dependencies, Docker compose, security CI workflow.
-- 📦 **Published to the official MCP Registry** ([io.github.indhar01/memograph](https://github.com/modelcontextprotocol/servers/tree/main/src/memograph))
+- 📦 **Published to the official MCP Registry** ([io.github.indhar01/memograph](https://registry.modelcontextprotocol.io))
 
 ---
 

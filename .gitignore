@@ -158,3 +158,13 @@ memories/
 
 # Archive directories
 archive_*/
+
+# --- Open-core split: private enterprise layer (Option A local layout) ---
+# The private `memograph-enterprise` repo may be cloned INTO this checkout at
+# ./memograph_enterprise/ for a one-directory dev experience. It has its own
+# git remote + CI; this rule guarantees the PUBLIC repo can never commit or
+# push proprietary code. See docs/ADR_REPO_TOPOLOGY.md and
+# docs/PUBLIC_VS_PRIVATE_SPLIT.md. Do NOT remove without understanding the
+# leak risk.
+/memograph_enterprise/
+/.enterprise/

@@ -1,0 +1,15 @@
+{
+  "_comment": "Public gold set for the deterministic retrieval eval harness (memograph eval retrieval). Ids match the shipped sample vault (memograph quickstart). This is NOT the LLM-judged benchmark in BENCHMARKS.md; it measures ranking quality offline.",
+  "cases": [
+    {"query": "dependency injection", "relevant_ids": ["fastapi-dependencies"]},
+    {"query": "async await coroutines", "relevant_ids": ["python-async", "async-pitfalls"]},
+    {"query": "static type checking", "relevant_ids": ["mypy", "type-hints"]},
+    {"query": "linting and formatting", "relevant_ids": ["ruff", "python-dev-tooling"]},
+    {"query": "background jobs and task queues", "relevant_ids": ["task-queues"]},
+    {"query": "parallelism with processes", "relevant_ids": ["multiprocessing", "concurrency-decision"]},
+    {"query": "unit testing framework", "relevant_ids": ["testing-pytest"]},
+    {"query": "packaging and dependency management", "relevant_ids": ["poetry-vs-uv", "python-version-policy"]},
+    {"query": "data models validation", "relevant_ids": ["dataclasses-vs-pydantic"]},
+    {"query": "request handlers routing", "relevant_ids": ["fastapi-handlers"]}
+  ]
+}

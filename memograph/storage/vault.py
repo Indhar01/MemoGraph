@@ -115,6 +115,39 @@ class VaultStorage:
         target.write_bytes(encoded)
         return target
 
+    def move(self, src_relative: str, dst_relative: str) -> Path:
+        """Move a file within the vault, re-validating BOTH endpoints.
+
+        Used by the FolderAgent to reorganize existing notes into the folder
+        hierarchy. Both paths are run through ``_safe_path`` so neither can
+        escape the vault root (symlink or ``..`` tricks are rejected on both
+        ends). The destination parent is created; empty source directories are
+        left in place (cheap to prune separately, and avoids racing writers).
+
+        Because a note's identity lives in frontmatter ``id`` (not its path),
+        moving a file does NOT change its id — inbound ``[[wikilinks]]`` keep
+        resolving with no rewriting. See docs/ADR_SELF_ORGANIZING_HIERARCHY.md.
+
+        Raises:
+            FileNotFoundError: if the source does not exist.
+            FileExistsError: if the destination already exists.
+            ValueError: if either path is unsafe.
+        """
+        src = self._safe_path(src_relative)
+        dst = self._safe_path(dst_relative)
+
+        if not src.is_file():
+            raise FileNotFoundError(f"source is not a file: {src_relative!r}")
+        if src == dst:
+            return dst
+        if dst.exists():
+            raise FileExistsError(f"destination already exists: {dst_relative!r}")
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        # Path.replace is atomic on the same filesystem (POSIX + Windows).
+        src.replace(dst)
+        return dst
+
     def _safe_path(self, relative_path: str) -> Path:
         if not isinstance(relative_path, str) or not relative_path:
             raise ValueError("relative_path must be a non-empty string")

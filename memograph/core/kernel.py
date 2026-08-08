@@ -17,9 +17,10 @@ from .extractor import SmartAutoOrganizer
 from .gam_retriever import GAMRetriever
 from .gam_scorer import GAMConfig
 from .graph import VaultGraph
+from .hierarchy import HierarchyResolver
 from .indexer import VaultIndexer
 from .node import MemoryNode
-from .retriever import HybridRetriever
+from .retriever import HybridRetriever, bm25_scores
 from .validation import (
     validate_depth,
     validate_query,
@@ -275,6 +276,7 @@ class MemoryKernel:
         query_cache_size: int = 100,
         enable_swarm: bool = False,
         swarm_config: Any | None = None,
+        hierarchy_strategy: str | None = None,
     ) -> None:
         """
         Initialize the memory kernel.
@@ -296,6 +298,10 @@ class MemoryKernel:
             enable_disk_cache: Whether to enable disk-based caching.
             query_cache_ttl: Query cache TTL in seconds.
             query_cache_size: Max queries to cache.
+            hierarchy_strategy: How new notes are filed on disk. One of
+                "flat" (default; all notes in the vault root) or "by_type"
+                (notes filed under <memory_type>/). Overridable via
+                MEMOGRAPH_HIERARCHY_STRATEGY. See docs/ADR_SELF_ORGANIZING_HIERARCHY.md.
         """
         self.vault_path = Path(vault_path).expanduser()
         self.vault_path.mkdir(parents=True, exist_ok=True)
@@ -329,6 +335,29 @@ class MemoryKernel:
                 self.graph, embedding_adapter=embedding_adapter
             )
             logger.info("Standard hybrid retrieval enabled")
+
+        # Max number of seed nodes fed into graph traversal per query. Seeds
+        # are the top BM25-scored nodes; capping keeps traversal focused on a
+        # relevant neighborhood instead of the whole vault. Overridable via
+        # MEMOGRAPH_MAX_SEEDS.
+        try:
+            self._max_seeds = max(1, int(os.environ.get("MEMOGRAPH_MAX_SEEDS", "20")))
+        except ValueError:
+            self._max_seeds = 20
+
+        # Hierarchy: where new notes are filed on disk. Default "flat" keeps the
+        # historical behavior (everything in the vault root); "by_type" files
+        # under <memory_type>/. Env overrides the arg only when the arg is None.
+        strategy = hierarchy_strategy or os.environ.get(
+            "MEMOGRAPH_HIERARCHY_STRATEGY", "flat"
+        )
+        try:
+            self.hierarchy = HierarchyResolver(strategy)
+        except ValueError:
+            logger.warning(
+                "Invalid hierarchy strategy %r; falling back to 'flat'.", strategy
+            )
+            self.hierarchy = HierarchyResolver("flat")
 
         # Auto-extraction setup
         self.auto_extract = auto_extract
@@ -678,6 +707,86 @@ class MemoryKernel:
                     pass  # Best effort cleanup
             raise
 
+    def backfill_ids(self, dry_run: bool = False) -> dict[str, int]:
+        """Ensure every note carries an explicit ``id`` in its frontmatter.
+
+        Identity is decoupled from file path (see
+        docs/ADR_SELF_ORGANIZING_HIERARCHY.md): a note's ``id`` lives in
+        frontmatter and is immutable, so the file can later be moved into a
+        folder hierarchy without breaking inbound ``[[wikilinks]]``.
+
+        This migration pins identity for legacy / hand-authored / imported
+        notes that lack an ``id`` by writing ``id: <stem-slug>`` — the same
+        value the parser would otherwise derive from the filename — so the
+        backfill never changes any node's identity. It is idempotent and safe
+        to re-run.
+
+        Args:
+            dry_run: If True, report what would change without writing.
+
+        Returns:
+            Dict with ``scanned``, ``updated``, and ``skipped`` counts.
+        """
+        from .parser import FRONTMATTER_RE
+
+        scanned = updated = skipped = 0
+        for md_file in self.vault_path.rglob("*.md"):
+            # Skip cache/lock/dotfiles living inside the vault.
+            if md_file.name.startswith(".") or any(
+                part.startswith(".")
+                for part in md_file.relative_to(self.vault_path).parts
+            ):
+                continue
+            scanned += 1
+            try:
+                raw = md_file.read_text(encoding="utf-8").lstrip("\ufeff")
+            except (OSError, UnicodeDecodeError):
+                skipped += 1
+                continue
+
+            match = FRONTMATTER_RE.match(raw)
+            desired_id = md_file.stem.lower().replace(" ", "-")
+
+            if match:
+                try:
+                    fm = yaml.safe_load(match.group(1)) or {}
+                except yaml.YAMLError:
+                    skipped += 1
+                    continue
+                if not isinstance(fm, dict):
+                    skipped += 1
+                    continue
+                existing = fm.get("id")
+                if isinstance(existing, str) and existing.strip():
+                    skipped += 1
+                    continue
+                # Insert id first for readability, preserve the rest.
+                new_fm = {"id": desired_id, **fm}
+                body = raw[match.end() :]
+                new_front = (
+                    "---\n"
+                    + yaml.safe_dump(new_fm, sort_keys=False).strip()
+                    + "\n---\n"
+                )
+                new_raw = new_front + body
+            else:
+                # No frontmatter at all: prepend a minimal block.
+                new_front = f"---\nid: {desired_id}\n---\n\n"
+                new_raw = new_front + raw
+
+            updated += 1
+            if not dry_run:
+                self._atomic_write(md_file, new_raw)
+
+        logger.info(
+            "backfill_ids: scanned=%d updated=%d skipped=%d (dry_run=%s)",
+            scanned,
+            updated,
+            skipped,
+            dry_run,
+        )
+        return {"scanned": scanned, "updated": updated, "skipped": skipped}
+
     def ingest(
         self, force: bool = False, auto_extract: bool | None = None
     ) -> dict[str, int]:
@@ -1023,21 +1132,33 @@ class MemoryKernel:
         # Process tags
         normalized_tags = self._normalize_tags(tags)
 
-        # Generate slug and handle collisions
+        # Generate slug, resolve its on-disk location via the hierarchy
+        # strategy, and handle filename collisions WITHIN the target folder.
+        #
+        # Identity (``memory_id``) stays the slug and is written into
+        # frontmatter, so it is independent of the folder the file lands in —
+        # inbound ``[[wikilinks]]`` keep resolving even under by_type/by_topic
+        # layouts and across future moves. See ADR_SELF_ORGANIZING_HIERARCHY.md.
         slug = self._slugify(title)
-        file_path = self.vault_path / f"{slug}.md"
+        rel_path = self.hierarchy.relative_path_for(slug, memory_type, normalized_tags)
+        file_path = self.vault_path / rel_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
 
+        memory_id = slug
         counter = 2
         while file_path.exists():
-            file_path = self.vault_path / f"{slug}-{counter}.md"
+            candidate_slug = f"{slug}-{counter}"
+            rel_path = self.hierarchy.relative_path_for(
+                candidate_slug, memory_type, normalized_tags
+            )
+            file_path = self.vault_path / rel_path
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            memory_id = candidate_slug
             counter += 1
 
         # Create frontmatter
         created_at = datetime.now(timezone.utc).isoformat()
         tags_line = " ".join(f"#{tag}" for tag in normalized_tags)
-
-        # Generate unique ID from slug
-        memory_id = slug
 
         payload = {
             "id": memory_id,
@@ -1467,13 +1588,30 @@ class MemoryKernel:
             except Exception as e:
                 raise RuntimeError(f"Auto-ingest failed: {e}") from e
 
-        # Keyword-based seed finding
-        query_words = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
-        seed_ids = []
-        for node in self.graph._nodes.values():
-            haystack = f"{node.title} {node.content}".lower()
-            if any(word in haystack for word in query_words):
-                seed_ids.append(node.id)
+        # Scored, capped seed selection.
+        #
+        # Previously any single query word appearing ANYWHERE in a node made it
+        # a seed. On a large vault that selected most of the graph, so graph
+        # traversal degenerated into "almost everything" and the graph
+        # structure contributed nothing. Instead, rank ALL nodes by BM25
+        # relevance to the query and take only the top ``_max_seeds`` as seeds.
+        # Strong seeds -> a relevant neighborhood to traverse. If BM25 finds no
+        # term overlap at all, fall back to the highest-salience nodes so the
+        # traversal still has somewhere to start.
+        all_nodes = list(self.graph._nodes.values())
+        scores = bm25_scores(query, all_nodes)
+        scored_nodes = [(scores.get(n.id, 0.0), n) for n in all_nodes]
+        positive = [(s, n) for s, n in scored_nodes if s > 0.0]
+        if positive:
+            positive.sort(key=lambda sn: (sn[0], sn[1].salience), reverse=True)
+            seed_ids = [n.id for _, n in positive[: self._max_seeds]]
+        else:
+            # No lexical overlap; seed from the most salient nodes so semantic
+            # rerank still has candidates to work with.
+            fallback = sorted(
+                all_nodes, key=lambda n: (n.salience, n.access_count), reverse=True
+            )
+            seed_ids = [n.id for n in fallback[: self._max_seeds]]
 
         logger.debug(f"Found {len(seed_ids)} seed nodes for query: '{query}'")
 

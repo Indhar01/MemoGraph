@@ -35,20 +35,18 @@ ActionType = Literal["create", "update", "delete", "boost", "link", "merge", "ta
 
 
 def _identity_from_context() -> tuple[str | None, str | None]:
-    """Look up the authenticated user from the web auth context, if any.
+    """Look up the acting identity via the public identity seam.
 
-    Returns ``(user_id, tenant_id)`` — both ``None`` when called outside
-    a web request, when auth is disabled, or when the auth module isn't
-    importable (e.g. minimal install without the ``[web]`` extra).
+    Returns ``(user_id, tenant_id)`` — both ``None`` when called outside a web
+    request, when auth is disabled/anonymous, or when no identity provider is
+    installed. The public core does NOT import the auth module directly (auth
+    is an enterprise concern post-split); instead an auth plugin registers a
+    provider via ``memograph.core.identity.set_identity_provider``. See
+    docs/EXTRACTION_MANIFEST.md.
     """
-    try:
-        from memograph.web.backend.auth import current_user
-    except ImportError:
-        return (None, None)
-    user = current_user.get()
-    if user is None or user.id == "anonymous":
-        return (None, None)
-    return (user.id, user.organization_id or None)
+    from memograph.core.identity import current_identity
+
+    return current_identity()
 
 
 @dataclass

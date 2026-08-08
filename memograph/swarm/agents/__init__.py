@@ -5,6 +5,7 @@ from memograph.swarm.agents.linker_agent import LinkerAgent
 from memograph.swarm.agents.gap_agent import GapAgent
 from memograph.swarm.agents.salience_agent import SalienceAgent
 from memograph.swarm.agents.summarizer_agent import SummarizerAgent
+from memograph.swarm.agents.folder_agent import FolderAgent
 
 __all__ = [
     "TaggerAgent",

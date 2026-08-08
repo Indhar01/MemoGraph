@@ -140,12 +140,30 @@ class VaultIndexer:
                     graph.add_node(node)
                     indexed += 1
 
-            # Remove nodes for deleted files
+            # Remove nodes for deleted files.
+            #
+            # Node identity is decoupled from path (frontmatter ``id`` may
+            # differ from the filename stem, and the file lives in an
+            # arbitrary subfolder). The deleted file is already gone, so we
+            # can't re-parse it — instead resolve rel_path -> node_id from the
+            # in-memory graph, which knows each node's ``source_path``.
+            # Falling back to the stem preserves the legacy behaviour for
+            # flat vaults whose nodes predate ``source_path`` tracking.
+            rel_to_id: dict[str, str] = {}
+            for node in graph.all_nodes():
+                if node.source_path:
+                    try:
+                        node_rel = (
+                            Path(node.source_path).relative_to(self.root).as_posix()
+                        )
+                    except ValueError:
+                        continue
+                    rel_to_id[node_rel] = node.id
+
             cached_files = set(self._mtime_cache.keys())
             deleted_files = cached_files - current_files
             for deleted_rel in deleted_files:
-                # Extract node ID from relative path
-                node_id = Path(deleted_rel).stem
+                node_id = rel_to_id.get(deleted_rel) or Path(deleted_rel).stem
                 if graph.get(node_id):
                     graph.remove_node(node_id)
         else:
