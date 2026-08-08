@@ -97,9 +97,14 @@ docs/.doctrees/
 *.ipynb
 
 # Environment variables
+# Environment files: ignore ALL .env variants (incl. .env.nango, .env.dev, ...)
+# so no populated secret file can be committed again. The tracked *.example
+# templates are explicitly re-included below.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+!deploy/.env.example
 
 # Project specific
 .memograph_cache.json
