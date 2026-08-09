@@ -183,6 +183,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-timeout>=2.2.0",
     "pytest-benchmark>=4.0.0",
     # Tool versions below are PINNED (== not >=) on purpose: they must match
     # the versions in .github/workflows/{ci,security}.yml so the pre-push
@@ -378,6 +379,12 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    # Force-kill any test that hangs (e.g. a background thread/observer that
+    # never joins on Windows) so CI fails fast with a traceback instead of
+    # silently hanging until the runner sends KeyboardInterrupt. thread method
+    # works cross-platform incl. Windows.
+    "--timeout=120",
+    "--timeout-method=thread",
     "--cov=memograph",
     "--cov-report=term-missing:skip-covered",
     "--cov-report=html",
