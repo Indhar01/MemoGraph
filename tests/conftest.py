@@ -1,12 +1,52 @@
 """Pytest configuration and fixtures for MemoGraph tests."""
 
+import faulthandler
+import sys
 import tempfile
+import threading
 from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 
 from memograph import MemoryKernel, MemoryType
+
+# --- Windows teardown-hang diagnostic -------------------------------------
+# Some Windows CI runs report "N passed" then hang at interpreter teardown
+# (a non-daemon thread stuck in join()) until the runner sends
+# KeyboardInterrupt. Arm faulthandler to dump ALL thread stacks if the
+# process is still alive after a grace period, so the offending thread is
+# named in the CI log. Repeats so it fires even during shutdown. This is a
+# diagnostic; remove once the culprit is fixed.
+faulthandler.enable()
+_HANG_DUMP_SECONDS = 480
+try:
+    faulthandler.dump_traceback_later(
+        _HANG_DUMP_SECONDS, repeat=True, exit=False, file=sys.stderr
+    )
+except (RuntimeError, ValueError):  # pragma: no cover - platform quirks
+    pass
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+    """After the session, list any non-daemon threads still alive.
+
+    A lingering non-daemon thread is what blocks interpreter exit on Windows;
+    printing the roster here points straight at the leaker.
+    """
+    alive = [
+        t
+        for t in threading.enumerate()
+        if t is not threading.main_thread() and not t.daemon and t.is_alive()
+    ]
+    if alive:
+        print(
+            "\n[conftest] non-daemon threads still alive at session finish "
+            "(these block process exit):",
+            file=sys.stderr,
+        )
+        for t in alive:
+            print(f"  - name={t.name!r} ident={t.ident} class={type(t)}", file=sys.stderr)
 
 
 @pytest.fixture
