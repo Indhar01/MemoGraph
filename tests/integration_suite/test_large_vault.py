@@ -13,14 +13,27 @@ Test Coverage:
 - Resource utilization
 """
 
-import pytest
-import time
-import psutil
 import os
+import time
 from pathlib import Path
 
-from memograph.integrations.obsidian.sync import ObsidianSync
+import psutil
+import pytest
+
 from memograph.integrations.obsidian.conflict_resolver import ConflictStrategy
+from memograph.integrations.obsidian.sync import ObsidianSync
+
+# These are performance/throughput BENCHMARKS with wall-clock and memory
+# assertions that are inherently unreliable on shared CI runners (load,
+# virtualization, and slow macOS/Windows agents make timings vary wildly).
+# They are valuable locally and in a dedicated perf environment, but must not
+# gate the correctness test matrix. Skip the whole module under CI
+# (GitHub Actions sets CI=true); run locally with CI unset to exercise them.
+pytestmark = pytest.mark.skipif(
+    os.environ.get("CI", "").lower() in {"1", "true", "yes"},
+    reason="performance benchmark suite: timing/memory assertions are unstable "
+    "on shared CI runners; run locally or in the dedicated perf job.",
+)
 
 
 @pytest.fixture

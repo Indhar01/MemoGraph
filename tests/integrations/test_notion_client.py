@@ -33,17 +33,27 @@ class TestNotionClient:
                 NotionClient()
 
     def test_init_missing_package_raises_error(self):
-        """Test that missing notion-client package raises ImportError."""
-        with patch("notion_client.Client", side_effect=ImportError):
-            with pytest.raises(
-                ImportError, match="notion-client package not installed"
-            ):
-                # Force the import error
-                import sys
+        """Test that a missing notion-client package raises a clear ImportError.
 
-                if "notion_client" in sys.modules:
-                    del sys.modules["notion_client"]
-                NotionClient(auth_token="test")
+        Simulate the package being absent by making ``from notion_client
+        import Client`` fail: block the import so the ``except ImportError``
+        branch in ``NotionClient.__init__`` runs.
+        """
+        import builtins
+
+        real_import = builtins.__import__
+
+        def _blocked_import(name, *args, **kwargs):
+            if name == "notion_client" or name.startswith("notion_client."):
+                raise ImportError("No module named 'notion_client'")
+            return real_import(name, *args, **kwargs)
+
+        with patch.dict("sys.modules", {"notion_client": None}):
+            with patch("builtins.__import__", side_effect=_blocked_import):
+                with pytest.raises(
+                    ImportError, match="notion-client package not installed"
+                ):
+                    NotionClient(auth_token="test")
 
     def test_test_connection_success(self):
         """Test successful connection test."""

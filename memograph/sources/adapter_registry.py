@@ -51,7 +51,9 @@ def register_source_adapter(
     """
     with _lock:
         if kind in _adapters and not override:
-            logger.debug("source adapter for %s already registered; skipping", kind.value)
+            logger.debug(
+                "source adapter for %s already registered; skipping", kind.value
+            )
             return
         _adapters[kind] = factory
         logger.info("registered source adapter: kind=%s", kind.value)

@@ -183,6 +183,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-timeout>=2.2.0",
     "pytest-benchmark>=4.0.0",
     # Tool versions below are PINNED (== not >=) on purpose: they must match
     # the versions in .github/workflows/{ci,security}.yml so the pre-push
@@ -397,6 +398,14 @@ filterwarnings = [
     "error",
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",
+    # asyncio's event loop leaves an internal self-pipe/socketpair that the
+    # GC reaps late, surfacing as an unclosed-socket ResourceWarning during
+    # test teardown — most visibly for async pub/sub tests on the Windows
+    # Proactor loop. It is a loop-teardown artifact, not a product resource
+    # leak, so don't let "error" escalate it into a CI failure.
+    "ignore:unclosed <socket:ResourceWarning",
+    "ignore:unclosed event loop:ResourceWarning",
+    "ignore:unclosed transport:ResourceWarning",
 ]
 
 # Coverage configuration

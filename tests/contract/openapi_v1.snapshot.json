@@ -3,6 +3,7 @@
     "DELETE /api/v1/admin/tenants/{tenant_id}",
     "DELETE /api/v1/admin/tenants/{tenant_id}/schedule-delete",
     "DELETE /api/v1/memories/{memory_id}",
+    "DELETE /api/v1/sources/{source_id}",
     "GET /api/v1/admin/tenants",
     "GET /api/v1/admin/tenants/{tenant_id}",
     "GET /api/v1/admin/tenants/{tenant_id}/usage",
@@ -15,7 +16,12 @@
     "GET /api/v1/health",
     "GET /api/v1/memories",
     "GET /api/v1/memories/{memory_id}",
+    "GET /api/v1/nango/health",
     "GET /api/v1/search/autocomplete",
+    "GET /api/v1/sources",
+    "GET /api/v1/sources/active",
+    "GET /api/v1/sources/{source_id}",
+    "GET /api/v1/sources/{source_id}/health",
     "POST /api/v1/admin/tenants",
     "POST /api/v1/admin/tenants/{tenant_id}/schedule-delete",
     "POST /api/v1/ai/feedback",
@@ -23,6 +29,11 @@
     "POST /api/v1/ai/suggest-tags",
     "POST /api/v1/memories",
     "POST /api/v1/search",
+    "POST /api/v1/sources",
+    "POST /api/v1/sources/connect-session",
+    "POST /api/v1/sources/webhook",
+    "POST /api/v1/sources/{source_id}/activate",
+    "POST /api/v1/sources/{source_id}/sync",
     "PUT /api/v1/memories/{memory_id}"
   ]
 }
