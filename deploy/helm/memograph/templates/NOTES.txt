@@ -6,9 +6,9 @@ MemoGraph {{ .Chart.AppVersion }} installed as release "{{ .Release.Name }}".
 
 2. Reach the API:
 {{- if .Values.ingress.enabled }}
-   {{- range .Values.ingress.hosts }}
-   {{- range .paths }}
-   https://{{ $.Values.ingress.hosts | first | get "host" }}{{ .path }}
+   {{- range $host := .Values.ingress.hosts }}
+   {{- range $host.paths }}
+   https://{{ $host.host }}{{ .path }}
    {{- end }}
    {{- end }}
 {{- else if contains "LoadBalancer" .Values.service.type }}
