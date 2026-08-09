@@ -81,6 +81,10 @@ class ObsidianWatcher(FileSystemEventHandler):
             asyncio.set_event_loop(self.loop)
 
         self.observer = Observer()
+        # Run the watchdog observer as a daemon thread so a caller that forgets
+        # to stop() (or a crashed teardown) can never keep the interpreter
+        # alive at exit — a common cause of hangs on Windows CI runners.
+        self.observer.daemon = True
         self.observer.schedule(self, str(self.vault_path), recursive=True)
         self.observer.start()
         logger.info(f"Started watching vault: {self.vault_path}")
@@ -101,7 +105,9 @@ class ObsidianWatcher(FileSystemEventHandler):
         self._pending_events.clear()
 
         self.observer.stop()
-        self.observer.join()
+        # Bounded join: on Windows a stuck observer thread must not block
+        # shutdown indefinitely (it's a daemon, so exit is safe regardless).
+        self.observer.join(timeout=5)
         self.observer = None
         logger.info(f"Stopped watching vault: {self.vault_path}")
 
@@ -192,6 +198,8 @@ class ObsidianWatcher(FileSystemEventHandler):
                         del self._pending_events[event_path]
 
             timer = threading.Timer(self.debounce_delay, execute_sync_callback)
+            # Daemon so a pending debounce timer never blocks interpreter exit.
+            timer.daemon = True
             timer.start()
 
             # Store with timer reference
