@@ -46,7 +46,9 @@ def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
             file=sys.stderr,
         )
         for t in alive:
-            print(f"  - name={t.name!r} ident={t.ident} class={type(t)}", file=sys.stderr)
+            print(
+                f"  - name={t.name!r} ident={t.ident} class={type(t)}", file=sys.stderr
+            )
 
 
 @pytest.fixture
