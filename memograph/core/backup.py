@@ -309,7 +309,7 @@ def restore_backup(
     dest = Path(destination).expanduser().resolve()
     dest.mkdir(parents=True, exist_ok=True)
 
-    if not overwrite and any(dest.iterdir()):
+    if not overwrite and any(list(dest.iterdir())):
         raise BackupError(
             f"destination is not empty: {dest}; pass overwrite=True to merge"
         )

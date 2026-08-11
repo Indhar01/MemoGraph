@@ -117,7 +117,7 @@ class VaultIndexer:
             # Graph loaded from cache, now check for changes
             current_files = set()
 
-            for md_file in self.root.rglob("*.md"):
+            for md_file in list(self.root.rglob("*.md")):
                 if md_file.name in [
                     CACHE_FILE,
                     GRAPH_CACHE_FILE,
@@ -168,7 +168,7 @@ class VaultIndexer:
                     graph.remove_node(node_id)
         else:
             # Force rebuild or no cache - parse all files
-            for md_file in self.root.rglob("*.md"):
+            for md_file in list(self.root.rglob("*.md")):
                 if md_file.name in [
                     CACHE_FILE,
                     GRAPH_CACHE_FILE,

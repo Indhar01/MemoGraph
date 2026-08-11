@@ -730,7 +730,7 @@ class MemoryKernel:
         from .parser import FRONTMATTER_RE
 
         scanned = updated = skipped = 0
-        for md_file in self.vault_path.rglob("*.md"):
+        for md_file in list(self.vault_path.rglob("*.md")):
             # Skip cache/lock/dotfiles living inside the vault.
             if md_file.name.startswith(".") or any(
                 part.startswith(".")
@@ -2116,7 +2116,7 @@ class MemoryKernel:
             with tempfile.TemporaryDirectory() as tmpdir:
                 with zipfile.ZipFile(backup, "r") as zipf:
                     zipf.extractall(tmpdir)
-                for md_file in Path(tmpdir).rglob("*.md"):
+                for md_file in list(Path(tmpdir).rglob("*.md")):
                     try:
                         content = md_file.read_text(encoding="utf-8")
                         if content.startswith("---\n"):
@@ -2158,7 +2158,7 @@ class MemoryKernel:
 
         if not merge:
             logger.warning("Clearing existing vault (merge=False)")
-            for md_file in self.vault_path.rglob("*.md"):
+            for md_file in list(self.vault_path.rglob("*.md")):
                 md_file.unlink()
 
         imported = 0
@@ -2224,7 +2224,7 @@ class MemoryKernel:
             backup_path.parent.mkdir(parents=True, exist_ok=True)
             logger.info(f"Creating compressed backup: {backup_path}")
             with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-                for md_file in self.vault_path.rglob("*.md"):
+                for md_file in list(self.vault_path.rglob("*.md")):
                     arcname = md_file.relative_to(self.vault_path)
                     zipf.write(md_file, arcname)
         else:

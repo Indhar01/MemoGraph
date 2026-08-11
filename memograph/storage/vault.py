@@ -82,7 +82,7 @@ class VaultStorage:
         vault, consistent with the path-traversal defense in ``write``.
         """
         total = 0
-        for path in self.root.rglob("*"):
+        for path in list(self.root.rglob("*")):
             if path.is_file() and not path.is_symlink():
                 try:
                     total += path.stat().st_size
