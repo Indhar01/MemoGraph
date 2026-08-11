@@ -40,11 +40,13 @@ jobs:
     # Cap the job so a Windows interpreter-teardown hang (tests pass, then the
     # process fails to exit) fails fast instead of burning the 360-min default.
     timeout-minutes: 20
-    # Windows exhibits a known post-suite teardown hang (all tests pass, then
-    # the process is interrupted at exit) that is not reproducible on Linux/mac
-    # and does not reflect a correctness problem. Keep it visible but
-    # non-blocking so the authoritative Ubuntu + macOS matrices gate merges.
-    # Tracked for a real fix; remove continue-on-error once resolved.
+    # Windows intermittently reports STATUS_CONTROL_C_EXIT (0xC000013A) at
+    # process teardown for the MCP-server suite (real servers + advisory vault
+    # locks + OS signal probing) even though every test PASSES. It is a Windows
+    # console-signal artifact, not a correctness problem, and is not seen on
+    # Linux/macOS. The MCP suite is run isolated (see test steps) to remove
+    # cross-file interaction; Windows stays advisory so the authoritative
+    # Ubuntu + macOS matrices gate merges. Tracked for a full root-cause fix.
     continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
@@ -65,9 +67,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,all]"
 
-      - name: Run tests
+      - name: Run tests (MCP server suite, isolated)
+        # test_mcp_server.py creates real MCP servers (kernel init + advisory
+        # vault locking + OS process/signal probing). Left in the same process
+        # as the FastAPI TestClient / importlib.reload web-boot tests, it
+        # intermittently leaves global signal/loop state that surfaces as a
+        # spurious KeyboardInterrupt (Windows: STATUS_CONTROL_C_EXIT) during
+        # teardown even though every test PASSES. Running it in its own process
+        # removes the cross-file interaction. Tracked for a full root-cause fix.
         run: |
-          pytest --ignore=tests/stress/ --cov=memograph --cov-report=xml --cov-report=term
+          pytest tests/test_mcp_server.py
+      - name: Run tests (remaining suite)
+        run: |
+          pytest --ignore=tests/stress/ --ignore=tests/test_mcp_server.py --cov-append
 
       - name: Check coverage threshold
         run: |
