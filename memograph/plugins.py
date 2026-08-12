@@ -53,15 +53,60 @@ class AppContext:
     """Everything a plugin is allowed to touch, in one object.
 
     Passing a single context (rather than the raw ``app``) means we can widen
-    the surface later — add a kernel handle, a source registry, a hook bus —
-    without breaking the ``register(context)`` signature every plugin depends
-    on. That signature is the load-bearing stable contract.
+    the surface WITHOUT breaking the ``register(context)`` signature every
+    plugin depends on. That signature is the load-bearing stable contract; new
+    capabilities are added as optional fields / helper methods here.
+
+    Fields:
+        app:     The FastAPI application being built.
+        extras:  Free-form key/value bag (back-compat; e.g. ``vault_path``).
+        kernel:  The process-wide (single-tenant) ``MemoryKernel``, if the
+                 host passed one. Enterprise plugins wrap or replace kernel
+                 resolution (e.g. per-tenant) from here.
+
+    Helpers:
+        vault_path:    Convenience accessor (from field or extras).
+        override_auth: Register a replacement for the ``require_user`` FastAPI
+                       dependency so an enterprise auth plugin can enforce
+                       OIDC/API-key/RBAC without the public core importing it.
     """
 
     app: "FastAPI"
-    # Free-form key/value bag for future seams (kernel, registries, config).
-    # Kept generic on purpose so the contract stays stable as seams grow.
+    # Free-form key/value bag for future seams. Kept for back-compat: existing
+    # callers pass e.g. ``extras={"vault_path": ...}``.
     extras: dict[str, Any] = field(default_factory=dict)
+    # First-class optional handles (populated by the host when available).
+    kernel: Any | None = None
+
+    @property
+    def vault_path(self) -> Any | None:
+        """Vault path from the ``kernel``, the app state, or ``extras``."""
+        if self.kernel is not None:
+            vp = getattr(self.kernel, "vault_path", None)
+            if vp is not None:
+                return vp
+        state_vp = getattr(getattr(self.app, "state", None), "vault_path", None)
+        if state_vp is not None:
+            return state_vp
+        return self.extras.get("vault_path")
+
+    def override_auth(self, dependency: Callable[..., Any]) -> None:
+        """Replace the public ``require_user`` dependency with ``dependency``.
+
+        The public build ships a permissive/anonymous ``require_user`` (see
+        ``memograph.web.backend.auth``). An enterprise auth plugin calls this
+        to install real OIDC/API-key/RBAC enforcement via FastAPI's
+        ``dependency_overrides`` — no public module ever imports the plugin.
+        No-op-safe if the public auth module isn't importable (e.g. the
+        ``[web]`` extra isn't installed).
+        """
+        try:
+            from memograph.web.backend.auth import require_user
+        except Exception as exc:  # pragma: no cover - web extra optional
+            logger.warning("override_auth skipped (auth unavailable): %s", exc)
+            return
+        # FastAPI resolves overrides by the original callable object.
+        self.app.dependency_overrides[require_user] = dependency
 
 
 def discover_plugins() -> list[tuple[str, Callable[[AppContext], None]]]:
@@ -93,8 +138,19 @@ def discover_plugins() -> list[tuple[str, Callable[[AppContext], None]]]:
     return found
 
 
-def load_plugins(app: "FastAPI", extras: dict[str, Any] | None = None) -> list[str]:
+def load_plugins(
+    app: "FastAPI",
+    extras: dict[str, Any] | None = None,
+    kernel: Any | None = None,
+) -> list[str]:
     """Discover and activate all installed MemoGraph plugins against ``app``.
+
+    Args:
+        app:    The FastAPI app being built.
+        extras: Free-form context bag (back-compat, e.g. ``vault_path``).
+        kernel: Optional process-wide ``MemoryKernel`` handle passed to
+                plugins via ``AppContext.kernel``. Backward compatible —
+                existing callers that omit it get ``kernel=None``.
 
     Returns the list of plugin names that activated successfully. Idempotent
     per app instance. Safe to call when no plugins are installed (returns []).
@@ -102,7 +158,7 @@ def load_plugins(app: "FastAPI", extras: dict[str, Any] | None = None) -> list[s
     if getattr(app.state, _LOADED_FLAG, False):
         return list(getattr(app.state, "_memograph_active_plugins", []))
 
-    context = AppContext(app=app, extras=extras or {})
+    context = AppContext(app=app, extras=extras or {}, kernel=kernel)
     activated: list[str] = []
     for name, register in discover_plugins():
         try:

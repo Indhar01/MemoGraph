@@ -7,6 +7,165 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Open-core repo topology decided + seam validated end-to-end.**
+  `docs/ADR_REPO_TOPOLOGY.md` evaluates 5 options (separate repo / copy-
+  monorepo / fork / workspace / gitignore-hide) and selects Option A:
+  a separate private `memograph-enterprise` package that DEPENDS ON the
+  public engine and attaches via the `memograph.plugins` seam, with an
+  ignored `/memograph_enterprise/` subfolder for one-directory local dev.
+  Added that ignore rule to `.gitignore` as a leak safety rail. Built a
+  minimal enterprise plugin scaffold and PROVED the seam: with the plugin
+  pip-installed, the public app auto-activates it, serves
+  `/api/v1/enterprise/ping`, and enforces the plugin-provided auth
+  override on core routes (401 without / 200 with credential) — public
+  engine importing nothing private throughout.
+
+- **Open-core seam prep (extraction step 4).** `web/backend/server.py`
+  de-wired from the enterprise modules: admin/tenancy, sources, and nango
+  routers + the tenant/source registry setup now import DEFENSIVELY and
+  mount only when present. When those modules move to the private product
+  package, a stock public build degrades gracefully (routers simply 404 /
+  registries stay None) instead of failing to boot; the enterprise plugin
+  re-mounts them via the `memograph.plugins` seam. `create_app` now passes
+  the kernel handle to `load_plugins`. Behavior unchanged when the modules
+  are present. New guardrail: `tests/web/test_single_tenant_boot.py`
+  (lean single-tenant, zero-plugin boot) + verified the app builds with the
+  enterprise modules simulated absent.
+
+- **Open-core seam prep (extraction steps 2-3).** `AppContext` widened with
+  a first-class optional `kernel` handle, a `vault_path` helper, and an
+  `override_auth()` method so an enterprise auth plugin can install real
+  OIDC/API-key/RBAC via FastAPI `dependency_overrides` (signature of
+  `register(context)` unchanged; `load_plugins` gained an optional `kernel`
+  kwarg). New `memograph.core.identity` seam (`set_identity_provider` /
+  `current_identity`) lets the core audit logger capture the acting user
+  WITHOUT importing the (soon-private) auth module; `web.backend.auth`
+  self-registers the provider so public behavior is unchanged. All
+  backward compatible; the open-core import-guard stays green.
+
+- **Open-core boundary guard.** New `tests/test_open_core_boundary.py`
+  fails if the public package ever statically imports the private product
+  layer (`memograph_enterprise` / `memograph.enterprise`); enterprise
+  features must attach through the `memograph.plugins` seam. Also asserts
+  the seam stays importable. Locks the split boundary before extraction.
+- **Extraction manifest** (`docs/EXTRACTION_MANIFEST.md`): file-by-file
+  public/private classification + coupling audit + a safe, test-guarded
+  extraction order. Key finding: `web/backend/server.py::create_app`
+  already calls the plugin seam, so enterprise routers can attach without
+  new seam work — the main effort is moving modules and de-wiring server.py.
+
+- **`memograph reorganize` CLI (Step 6).** File existing notes into a
+  folder hierarchy from the terminal: `memograph reorganize --strategy
+  by_type` prints the move plan (dry-run by default); `--apply` performs the
+  moves (with a confirmation prompt unless `--yes`), `--backfill-ids` pins
+  identity first, `--format json` emits a machine-readable plan. Drives the
+  HierarchyResolver + VaultStorage.move directly (no swarm needed) and
+  re-indexes after moving. Collision-safe; wikilinks preserved.
+
+- **FolderAgent: agentic reorganization of existing notes (Steps 4-5).**
+  New `VaultStorage.move()` (safe atomic rename, both endpoints
+  path-validated) and a `FolderAgent` swarm agent that files EXISTING notes
+  into the hierarchy defined by `kernel.hierarchy`. Disabled + dry-run by
+  default (like SummarizerAgent); read-only aware; per-cycle move ceiling.
+  Because identity lives in frontmatter, moves need no wikilink rewriting.
+  Registered as `SwarmConfig.folder`. Validated end-to-end: a flat 16-note
+  vault reorganized into type folders with retrieval-eval metrics unchanged.
+
+- **Self-organizing vault hierarchy (opt-in).** New `HierarchyResolver`
+  (`memograph/core/hierarchy.py`) and a `hierarchy_strategy` kernel arg /
+  `MEMOGRAPH_HIERARCHY_STRATEGY` env var control where `remember()` files
+  new notes on disk: `flat` (default; unchanged — everything in the vault
+  root) or `by_type` (notes filed under `<memory_type>/`, e.g.
+  `semantic/python-async.md`). A note's `id` stays its slug regardless of
+  folder, so `[[wikilinks]]` and graph resolution are unaffected — verified
+  by running the retrieval eval harness on a `by_type` vault (metrics
+  unchanged vs flat). Built on the Step-1 id/path decoupling.
+
+- **Retrieval quality: scored, capped seed selection (R1).**
+  ``retrieve_nodes`` previously treated any node containing any query word as a
+  graph-traversal seed, which on large vaults seeded almost the entire graph
+  and made graph structure meaningless. Seeds are now the top ``_max_seeds``
+  (default 20, ``MEMOGRAPH_MAX_SEEDS``) nodes ranked by BM25, with a
+  salience-based fallback when there is no lexical overlap.
+- **Retrieval quality: true hybrid fusion via Reciprocal Rank Fusion (R2).**
+  When both a query and an embedding adapter are present, ``HybridRetriever``
+  now computes BOTH a lexical (BM25) and a semantic (cosine) ranking and fuses
+  them with RRF (k=60) instead of using only one signal. New reusable
+  module functions ``bm25_scores`` and ``reciprocal_rank_fusion``. Cosine
+  embedding now uses a single batched ``embed_batch`` call when available.
+- **Retrieval quality: deterministic offline eval harness (R7).** New
+  `memograph.eval` package + `memograph eval retrieval <gold.json>` CLI
+  command scoring ranking quality (precision/recall/F1/MRR/nDCG/hit@k)
+  against a gold set with NO LLM calls — suitable for CI regression gating
+  via `--fail-under`. Complementary to (not a fork of) the LLM-judged
+  MRA/CRS benchmark in `benchmarks/`. Ships a sample gold set
+  (`benchmarks/retrieval_gold_sample.json`) matched to the quickstart vault.
+
+- **Identity decoupled from file path (foundation for self-organizing
+  hierarchy).** The parser now prefers an explicit frontmatter ``id`` and
+  falls back to the filename *stem* (never the full relative path), so a note
+  can be moved into a folder hierarchy without breaking inbound
+  ``[[wikilinks]]``. Fully backward compatible for existing flat vaults
+  (stem == slug == historical id). See docs/ADR_SELF_ORGANIZING_HIERARCHY.md.
+- ``MemoryKernel.backfill_ids(dry_run=False)`` migration: writes ``id:`` into
+  the frontmatter of any note missing it (idempotent), pinning identity before
+  any future file moves.
+- Design docs: ADR_SELF_ORGANIZING_HIERARCHY.md (hierarchy + FolderAgent +
+  tiered promotion), RETRIEVAL_QUALITY_PLAN.md (scored seeds, RRF fusion,
+  graph-blend, eval harness), PUBLIC_VS_PRIVATE_SPLIT.md (open-core boundary).
+
+### Fixed
+
+- Retrieval tag/type/salience filters are now RESTRICTIVE (intersect with the
+  candidate set) instead of additive. Previously, seed-neighbors that failed an
+  active filter could leak into results; ``retrieve_nodes(query=..., tags=[t])``
+  now returns only nodes carrying ``t``.
+- Indexer delete path no longer guesses a node's id from the filename stem
+  (a latent bug once subfolders exist). It now resolves ``rel_path -> id`` from
+  the in-memory graph's ``source_path`` map, so deleting a note whose ``id``
+  differs from its filename (or that lives in a subfolder) correctly removes it.
+
+### Security
+
+- Web API auth now **fails closed on the `admin` scope** when
+  `MEMOGRAPH_AUTH_PROVIDER=none`. Previously the anonymous user was
+  granted `admin`, so a deployment that merely forgot to configure auth
+  silently exposed admin-gated routes (source registration,
+  connect-session, tenant deletes). Anonymous users now receive only the
+  `anonymous` scope; set `MEMOGRAPH_ALLOW_INSECURE_ADMIN=1` (with a loud
+  warning) to opt back into insecure admin for throwaway local demos.
+  Added unit tests locking in the fail-closed default and the escape hatch.
+
+### Changed
+
+- Notion integration docstring and README now state honestly that
+  two-way sync is **experimental/incomplete** (pull only counts pages,
+  push is a no-op). Source adapters section reworded: local folder + S3
+  are usable; OAuth cloud sources (Notion, Google Drive, OneDrive) are
+  in progress.
+- Enterprise/SaaS README claims reframed as pre-1.0 and experimental.
+  "GDPR-compliant" → "GDPR-oriented tooling"; "Survive an SOC 2 audit" →
+  "building blocks for a future SOC 2 conversation" (explicitly not a
+  certification); multi-tenant labelled experimental. Added an
+  experimental disclaimer to the enterprise capabilities section.
+
+### Fixed
+
+- README `## Status` version corrected from `0.3.0` to `0.4.1`.
+- MCP tool count corrected: the "19 Available Tools" table was stale;
+  the server exposes 44 tools. Table rebuilt to list every tool grouped
+  by category, and the "30+ tools" prose made exact ("44 tools").
+- Removed the placeholder "Try the live demo" Hugging Face badge (linked
+  to a generic `huggingface.co/spaces` URL) and relabelled the Discord
+  badge as "Community · GitHub Discussions" to match where it actually
+  points.
+- MCP Registry links corrected: they pointed at a non-existent
+  `modelcontextprotocol/servers/tree/main/src/memograph` path. Now point
+  at the official registry (`registry.modelcontextprotocol.io`) with the
+  real registry ID `io.github.Indhar01/memograph`.
+
 ## [0.4.1] — 2026-06-25
 
 Polish patch responding to v0.4.0 reviewer feedback. No new features;
@@ -301,7 +460,7 @@ None - fully backward compatible with previous versions
 ## [0.1.1] - 2026-04-02
 
 ### Added
-- 🎉 **Published to Official MCP Registry** at [io.github.indhar01/memograph](https://github.com/modelcontextprotocol/servers/tree/main/src/memograph)
+- 🎉 **Published to Official MCP Registry** at [io.github.indhar01/memograph](https://registry.modelcontextprotocol.io)
 - Community & Feedback section in README with multiple engagement channels
 - Enhanced registry installation instructions with step-by-step setup
 - VERSIONING.md document with semantic versioning guidelines

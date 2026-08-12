@@ -938,14 +938,17 @@ class TestVaultLock:
         # on Windows it's reserved). We fake host="not-our-host" so the PID
         # liveness check is bypassed and the file is treated as foreign+stale.
         import json
-        import socket
 
         lock_file = temp_vault / ".memograph.lock"
         lock_file.write_text(
             json.dumps(
                 {
                     "pid": 999999,  # almost certainly not alive
-                    "host": socket.gethostname(),  # same host so we hit the alive-check
+                    # Foreign host: acquire() treats a different host as stale
+                    # WITHOUT probing PID liveness (os.kill on a fabricated PID
+                    # is unreliable across OSes and, on some platforms, routes a
+                    # signal into this process). Matches the documented intent.
+                    "host": "not-our-host",
                     "role": "mcp-server",
                     "started_at": "1970-01-01T00:00:00+00:00",
                 }

@@ -115,3 +115,32 @@ paper/
     scoring_v6.log                ← scoring log
     vaults/condition_c/*.md       ← MemoGraph's final vault state
 ```
+
+
+## Fast offline retrieval eval (complementary, not a fork)
+
+The results above come from the **LLM-judged** pipeline (MRA / CRS via Claude
+judges) — the authoritative measure of end-to-end *answer* quality. Do not fork
+it.
+
+For a **different question** — "does the retriever *rank* the right notes
+highly?" — there is now a deterministic, offline harness that needs **no model
+calls** and runs in milliseconds, so it can gate ranking regressions in CI:
+
+```bash
+# Score ranking quality against a gold set (ids match the quickstart vault)
+memograph --vault ~/memograph-quickstart eval retrieval \
+    benchmarks/retrieval_gold_sample.json --top-k 5
+
+# CI gate: exit non-zero if mean f1@k drops below a threshold
+memograph --vault ~/memograph-quickstart eval retrieval \
+    benchmarks/retrieval_gold_sample.json --top-k 5 --fail-under 0.30
+```
+
+Metrics reported: `precision@k`, `recall@k`, `f1@k`, `hit@k`, `ndcg@k`, `mrr`
+(macro-averaged across gold cases). Implementation: `memograph/eval/retrieval.py`.
+Gold-set format is a JSON list of `{"query": ..., "relevant_ids": [...]}`.
+
+This measures *retrieval ranking only* — it does not judge generated answers.
+The two harnesses answer complementary questions and are kept separate on
+purpose.

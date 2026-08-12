@@ -1,0 +1,26 @@
+# gitleaks configuration for MemoGraph
+#
+# Extends gitleaks' built-in ruleset (useDefault = true) and adds a narrow,
+# audited allowlist for a single historical file.
+#
+# Background: `.env.nango` was briefly committed (added in 8fafee5, removed in
+# 50bf249) with three local-only development secrets:
+#   NANGO_ENCRYPTION_KEY, NANGO_DB_PASSWORD, MEMOGRAPH_NANGO_WEBHOOK_SECRET
+# These values were only ever used against a throwaway local Nango stack, were
+# never deployed, and carry no production exposure (confirmed by the maintainer;
+# no rotation required). The file is no longer tracked and `.env.*` is
+# git-ignored, so this only concerns the git *history* that gitleaks scans with
+# fetch-depth: 0. The allowlist is scoped to that exact path so real secret
+# detection elsewhere is unaffected.
+
+title = "MemoGraph gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Historical, local-only .env.nango dev secrets (never deployed; not rotated by design)"
+# Match the historical file path anywhere in history.
+paths = [
+  '''(^|/)\.env\.nango$''',
+]

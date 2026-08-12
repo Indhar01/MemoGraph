@@ -85,3 +85,6 @@ class SwarmConfig:
     summarizer: AgentConfig = field(
         default_factory=lambda: AgentConfig(enabled=False)
     )  # LLM-gated
+    folder: AgentConfig = field(
+        default_factory=lambda: AgentConfig(enabled=False, dry_run=True)
+    )  # reorganizes existing notes into the hierarchy; opt-in + dry-run first

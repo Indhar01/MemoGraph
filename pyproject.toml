@@ -129,38 +129,10 @@ integrations = [
     "watchdog>=3.0.0,<7",
     "python-frontmatter>=1.0.0,<2",
 ]
-# --- Source adapters (ADR 0002 v1.1+) ---
-# Each adapter has its own extra so an operator who only wants S3
-# doesn't pull in the Notion SDK and vice versa. The `sources` meta-
-# extra pulls them all; `[all]` continues to leave them out so the
-# default install stays lean. Phase 3-4 adapters (gdrive, onedrive)
-# will be added here when those land.
-sources-s3 = [
-    # boto3 1.26+ matches modern python; 1.40+ in deployments today.
-    # Cap at a single major to avoid surprise API churn.
-    "boto3>=1.26.0,<2",
-]
-sources-cloud = [
-    # All OAuth cloud sources (Google Drive, OneDrive / SharePoint,
-    # Notion) route through a self-hosted Nango instance. The
-    # backend talks to Nango's REST API over httpx; the encrypted
-    # token store, OAuth dance, and per-provider quirks live in
-    # Nango. So one extra replaces the previous per-provider
-    # extras (sources-gdrive, sources-onedrive, sources-notion).
-    "httpx>=0.27.0,<1",
-]
-redis = [
-    # Multi-worker uvicorn deployments use redis pub/sub to propagate
-    # source-activation events across workers. Single-worker installs
-    # don't need it — the in-memory active-source cache stays
-    # consistent without coordination. Pinned to a single major to
-    # avoid surprise breakage; 5.0 is the first version with the
-    # native asyncio shim under ``redis.asyncio``.
-    "redis>=5.0,<7",
-]
-sources = [
-    "memograph[sources-s3,sources-cloud]",
-]
+# NOTE: The source-adapter extras (sources-s3, sources-cloud, redis) and the
+# `sources` meta-extra moved to the private `memograph-enterprise` package
+# along with the sources subsystem (see docs/EXTRACTION_MANIFEST.md). The
+# public engine reads a local vault directly and needs none of them.
 observability = [
     # OpenTelemetry (traces + metrics over OTLP/HTTP). Pinning to a single
     # release line because OTel still ships breaking changes on the SDK.

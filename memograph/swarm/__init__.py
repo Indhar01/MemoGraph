@@ -10,6 +10,7 @@ from memograph.swarm.agents import (
     GapAgent,
     SalienceAgent,
     SummarizerAgent,
+    FolderAgent,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "GapAgent",
     "SalienceAgent",
     "SummarizerAgent",
+    "FolderAgent",
 ]
