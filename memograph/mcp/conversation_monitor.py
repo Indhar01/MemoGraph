@@ -130,8 +130,8 @@ class ConversationMonitor:
 
         self.tool_sequence.append(record)
 
-        # Track explicit Layer 1 saves
-        if tool_name == "auto_hook_response":
+        # Track explicit Layer 1 saves (both legacy and the unified turn tool)
+        if tool_name in ("auto_hook_response", "auto_hook_turn"):
             self.last_layer1_save = datetime.now(timezone.utc)
             logger.debug("Layer 1 save detected - resetting duplicate detection window")
 
@@ -153,6 +153,12 @@ class ConversationMonitor:
 
         # Pattern 3: query → create_memory (May be manual, LOW confidence)
         self._detect_pattern_query_create(recent_tools)
+
+        # Pattern 4: any vault-question activity without a Layer 1 save in
+        # this window. Best-effort stub so a forgetful client at least leaves
+        # *some* breadcrumb. Cannot capture AI response text — that's not in
+        # the tool stream. Lower confidence; tagged ``layer2-stub`` for audit.
+        self._detect_pattern_stub_orphan(recent_tools)
 
     def _detect_pattern_search_query(self, recent_tools: list[ToolCallRecord]) -> None:
         """Detect: search_vault → query_with_context pattern."""
@@ -221,6 +227,46 @@ class ConversationMonitor:
                     )
 
                     self._buffer_exchange(exchange)
+
+    def _detect_pattern_stub_orphan(self, recent_tools: list[ToolCallRecord]) -> None:
+        """Fallback: buffer a stub if any question-like activity has no Layer 1 save.
+
+        Looks for the most recent ``query_with_context`` or ``search_vault``
+        call and buffers a low-confidence stub if no ``auto_hook_response`` /
+        ``auto_hook_turn`` call has been seen in the same window. The save
+        will only include the question + tool sequence — the AI's reply is
+        not visible from the MCP tool stream.
+        """
+        # Skip if a Layer 1 save happened within the last 2 minutes.
+        if self.last_layer1_save:
+            seconds_since = (
+                datetime.now(timezone.utc) - self.last_layer1_save
+            ).total_seconds()
+            if seconds_since < 120:
+                return
+
+        # Find the most recent question-bearing call.
+        for record in reversed(recent_tools):
+            if record.tool_name not in ("query_with_context", "search_vault"):
+                continue
+            question = record.args.get("question") or record.args.get("query") or ""
+            if len(question) < self.min_question_length:
+                continue
+
+            exchange = ConversationExchange(
+                question=question,
+                context=record.result.get("context", "")
+                if isinstance(record.result, dict)
+                else "",
+                timestamp=record.timestamp,
+                sources=record.result.get("sources", [])
+                if isinstance(record.result, dict)
+                else [],
+                tool_sequence=[record.tool_name, "stub-orphan"],
+                confidence=0.5,  # Low-medium: enough to save but flagged as stub.
+            )
+            self._buffer_exchange(exchange)
+            return
 
     def _buffer_exchange(self, exchange: ConversationExchange) -> None:
         """Add exchange to buffer if not duplicate.
@@ -386,8 +432,17 @@ class ConversationMonitor:
             self.stats["skipped_duplicates"] += 1
             return
 
-        title = f"Auto-detected: {exchange.question[:50]}..."
+        is_stub = "stub-orphan" in exchange.tool_sequence
+        title = (
+            f"Stub: {exchange.question[:50]}..."
+            if is_stub
+            else f"Auto-detected: {exchange.question[:50]}..."
+        )
         content = self._format_exchange_content(exchange)
+
+        tags = ["conversation", "auto-detected", "monitor-layer2"]
+        if is_stub:
+            tags.append("layer2-stub")
 
         # Use asyncio.to_thread to avoid blocking
         await asyncio.to_thread(
@@ -395,7 +450,7 @@ class ConversationMonitor:
             title=title,
             content=content,
             memory_type=MemoryType.EPISODIC,
-            tags=["conversation", "auto-detected", "monitor-layer2"],
+            tags=tags,
             salience=0.5 + (exchange.confidence * 0.2),  # 0.5-0.7 based on confidence
         )
 

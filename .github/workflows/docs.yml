@@ -1,0 +1,70 @@
+name: Docs site
+
+# Build the MkDocs Material site and publish it to GitHub Pages.
+# Triggers on every push to main that touches docs/, mkdocs.yml, or
+# this workflow itself — keeps PR builds fast by only running on merge.
+# Manual dispatch lets you republish without a doc change.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Cancel an in-flight Pages build if a new push lands — only one
+# concurrent deployment is allowed by the Pages backend anyway.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # MkDocs git-revision plugins (if enabled later) need full history.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install MkDocs Material
+        # Pinned so the site renders byte-identically across runs. Bump
+        # deliberately when refreshing the theme.
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'mkdocs-material==9.5.42'
+
+      - name: Build site
+        run: mkdocs build --strict --site-dir _site
+        # --strict treats warnings as errors (broken links, missing nav
+        # targets). Catches docs-only regressions before they go live.
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

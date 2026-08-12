@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,7 +18,12 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from ...core.kernel import MemoryKernel
 from .auth import AuthProvider, require_scope, require_user
-from .middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from .middleware import (
+    BodySizeLimitMiddleware,
+    ReadOnlyMiddleware,
+    RequestIdMiddleware,
+    is_readonly_enabled,
+)
 from .observability import init_telemetry, metrics_endpoint, record_request
 from .rate_limit import limiter, rate_limit_exceeded_handler
 
@@ -47,6 +53,26 @@ _TENANCY_ENABLED = os.environ.get("MEMOGRAPH_TENANCY_ENABLED", "").lower() in {
     "true",
     "yes",
 }
+
+# ADR 0002 v1.1 sources subsystem: default ON since 2026-06-27.
+# Set MEMOGRAPH_SOURCES_ENABLED=0 (or =false / =no) to keep the routes
+# unmounted and the registry uninitialized — an opt-out kill-switch for
+# operators who need to disable in a hurry without rolling back code.
+_SOURCES_ENABLED = os.environ.get("MEMOGRAPH_SOURCES_ENABLED", "1").lower() not in {
+    "0",
+    "false",
+    "no",
+}
+
+# When source adapters are enabled, the in-process SyncScheduler ticks
+# every poll_interval_seconds and runs each source's
+# ``materialize_to_vault`` on its configured cadence. Set
+# ``MEMOGRAPH_SOURCES_SYNC_DISABLED=1`` to keep the registry available
+# (so the UI can list / probe sources) without running automatic syncs
+# — useful when an operator wants to drive ingestion from cron / CI.
+_SOURCES_SYNC_DISABLED = os.environ.get(
+    "MEMOGRAPH_SOURCES_SYNC_DISABLED", ""
+).lower() in {"1", "true", "yes"}
 
 
 def _configure_logging() -> None:
@@ -152,10 +178,54 @@ async def lifespan(app: FastAPI):
         # itself stays up so /healthz still returns 200 (the orchestrator
         # can decide whether to restart).
 
+    # Swap coordinator — propagates source-activation events across
+    # uvicorn workers. NullSwapCoordinator (the default) is a no-op
+    # and costs nothing; RedisSwapCoordinator engages when
+    # MEMOGRAPH_REDIS_URL is set. Started before the SyncScheduler so
+    # an early activate-during-startup edge case has the coordinator
+    # already listening.
+    # Source-adapter background loops (SwapCoordinator + SyncScheduler) are an
+    # enterprise feature and live in the private memograph-enterprise plugin,
+    # which starts them via a startup hook. The public engine only initialises
+    # the state slots so shutdown/readiness code can reference them safely.
+    app.state.swap_coordinator = None
+    app.state.sync_scheduler = None
+
+    for hook in getattr(app.state, "_memograph_startup_hooks", []):
+        try:
+            await hook(app)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("startup hook failed: %s", exc)
+
     yield
+
+    for hook in getattr(app.state, "_memograph_shutdown_hooks", []):
+        try:
+            await hook(app)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("shutdown hook failed: %s", exc)
 
     # Shutdown
     app.state.is_ready = False
+    scheduler = getattr(app.state, "sync_scheduler", None)
+    if scheduler is not None:
+        try:
+            await scheduler.stop()
+            logger.info("SyncScheduler stopped")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("SyncScheduler shutdown error: %s", exc)
+    coordinator = getattr(app.state, "swap_coordinator", None)
+    if coordinator is not None:
+        try:
+            await coordinator.stop()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("SwapCoordinator shutdown error: %s", exc)
+    nango_client = getattr(app.state, "nango_client", None)
+    if nango_client is not None:
+        try:
+            await nango_client.aclose()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("NangoClient shutdown error: %s", exc)
     logger.info("Shutting down MemoGraph server...")
 
 
@@ -215,6 +285,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(BodySizeLimitMiddleware)
 
+    # Read-only gate runs AFTER body-size + request-id (added first =
+    # runs last; Starlette applies middleware in reverse-add order). The
+    # demo sandbox sets MEMOGRAPH_READONLY=true; in normal deployments
+    # the env var is unset and this middleware is a no-op.
+    if is_readonly_enabled():
+        logger.info(
+            "Read-only mode enabled (MEMOGRAPH_READONLY=true). "
+            "Body-mutating methods will be rejected with 403."
+        )
+        app.add_middleware(ReadOnlyMiddleware)
+
     # Initialize kernel
     vault_path_obj = Path(vault_path).expanduser()
     logger.info(f"Initializing kernel with vault: {vault_path_obj}")
@@ -233,8 +314,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # admin routes are still mounted but return 503 (see admin._registry).
     app.state.tenant_registry = None
     if _TENANCY_ENABLED:
-        from ...core.tenant_registry import TenantRegistry
-        from ...storage.tenant_storage import TenantStorage
+        TenantRegistry: Any = None
+        TenantStorage: Any = None
+        try:
+            import importlib
+
+            _tr = importlib.import_module("...core.tenant_registry", __package__)
+            _ts = importlib.import_module("...storage.tenant_storage", __package__)
+            TenantRegistry = _tr.TenantRegistry
+            TenantStorage = _ts.TenantStorage
+        except Exception as exc:  # noqa: BLE001 - moved to private layer
+            logger.warning("tenancy modules unavailable (enterprise plugin): %s", exc)
 
         global_root = os.environ.get("MEMOGRAPH_GLOBAL_ROOT", str(vault_path_obj))
 
@@ -242,16 +332,94 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             return MemoryKernel(vault_path=tenant_vault_path, use_gam=use_gam)
 
         max_warm = _env_int("MEMOGRAPH_TENANT_MAX_WARM", 64)
-        app.state.tenant_registry = TenantRegistry(
-            storage=TenantStorage(global_root=global_root),
-            kernel_factory=_kernel_factory,
-            max_warm=max_warm,
+        if TenantRegistry is not None and TenantStorage is not None:
+            app.state.tenant_registry = TenantRegistry(
+                storage=TenantStorage(global_root=global_root),
+                kernel_factory=_kernel_factory,
+                max_warm=max_warm,
+            )
+            logger.info(
+                "Multi-tenancy enabled: global_root=%s max_warm=%d",
+                global_root,
+                max_warm,
+            )
+
+    # ADR 0002 v1.1+: source registry. Lives on app.state.source_registry
+    # when the feature flag is set. Routes 503 with a clear message
+    # otherwise so callers can detect the disabled state.
+    app.state.source_registry = None
+    app.state.nango_client = None
+    if _SOURCES_ENABLED:
+        SourceRegistry: Any = None
+        try:
+            import importlib
+
+            _sr = importlib.import_module("memograph.sources.registry")
+            SourceRegistry = _sr.SourceRegistry
+        except Exception as exc:  # noqa: BLE001 - moved to private layer
+            logger.warning("sources modules unavailable (enterprise plugin): %s", exc)
+
+        sources_global_root = os.environ.get(
+            "MEMOGRAPH_SOURCES_ROOT",
+            os.environ.get("MEMOGRAPH_GLOBAL_ROOT", str(vault_path_obj)),
         )
-        logger.info(
-            "Multi-tenancy enabled: global_root=%s max_warm=%d",
-            global_root,
-            max_warm,
-        )
+        sources_max_warm = _env_int("MEMOGRAPH_SOURCES_MAX_WARM", 128)
+
+        # Nango handles OAuth + cloud-provider plumbing for GDRIVE /
+        # ONEDRIVE / NOTION. The client is optional — installs that
+        # only use LOCAL + S3 sources don't need Nango — but if it's
+        # configured, we inject it into the registry so cloud kinds
+        # can be materialized.
+        nango_client = None
+        if os.environ.get("MEMOGRAPH_NANGO_BASE_URL", "").strip():
+            try:
+                from memograph.sources.nango_client import (
+                    NangoClient,
+                    NangoConfigError,
+                )
+
+                nango_client = NangoClient.from_env()
+                logger.info(
+                    "Nango client configured (base_url=%s public_url=%s)",
+                    nango_client.config.base_url,
+                    nango_client.config.public_url,
+                )
+                # The Nango stack ALWAYS signs outbound webhooks with
+                # the encryption secret set on its side. If we don't
+                # match it, the webhook handler 401s every delivery
+                # silently and no cloud source ever registers.
+                # Refuse to keep going quietly in that state.
+                if not nango_client.config.webhook_secret:
+                    logger.error(
+                        "MEMOGRAPH_NANGO_WEBHOOK_SECRET is not set but "
+                        "Nango is configured. Webhook deliveries will be "
+                        "rejected with 401 and cloud sources will never "
+                        "appear. Set the env var to the same value used "
+                        "for MEMOGRAPH_NANGO_WEBHOOK_SECRET in the Nango "
+                        "stack and restart."
+                    )
+            except NangoConfigError as exc:
+                logger.error(
+                    "Nango is partially configured but unusable: %s. "
+                    "Cloud sources will return 503 until you fix the env vars.",
+                    exc,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed to initialise Nango client: %s", exc)
+        app.state.nango_client = nango_client
+
+        if SourceRegistry is not None:
+            app.state.source_registry = SourceRegistry(
+                global_root=sources_global_root,
+                max_warm=sources_max_warm,
+                nango_client=nango_client,
+            )
+            logger.info(
+                "Source adapters enabled: global_root=%s max_warm=%d " "nango=%s",
+                sources_global_root,
+                sources_max_warm,
+                "configured" if nango_client else "not configured",
+            )
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
@@ -318,7 +486,27 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # mount time so individual route bodies don't have to remember. When
     # MEMOGRAPH_AUTH_PROVIDER=none, require_user returns an anonymous
     # user rather than 401-ing — preserves local-dev workflows.
-    from .routes import admin, ai, analytics, graph, memories, search
+    from .routes import ai, analytics, graph, memories, search
+
+    # Enterprise-bound routers may be absent (moved to the private plugin).
+    # Import via importlib into Any-typed locals so mypy doesn't treat a
+    # missing submodule as a type error; None => not mounted (routes 404).
+    import importlib
+
+    _admin_routes: Any = None
+    nango_routes: Any = None
+    sources_routes: Any = None
+    try:
+        _admin_routes = importlib.import_module(".routes.admin", __package__)
+    except Exception:  # noqa: BLE001 - module moved to private layer
+        _admin_routes = None
+    if _SOURCES_ENABLED:
+        try:
+            nango_routes = importlib.import_module(".routes.nango", __package__)
+            sources_routes = importlib.import_module(".routes.sources", __package__)
+        except Exception:  # noqa: BLE001 - modules moved to private layer
+            nango_routes = None
+            sources_routes = None
 
     auth_dep = [Depends(require_user)]
     # Admin router is gated by an additional `admin` scope. The scope
@@ -340,7 +528,17 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
             analytics.router, prefix=prefix, tags=["analytics"], dependencies=auth_dep
         )
         app.include_router(ai.router, prefix=prefix, tags=["ai"], dependencies=auth_dep)
-        app.include_router(admin.router, prefix=prefix, dependencies=admin_dep)
+        # Enterprise routers: mount only when present (defensive import above).
+        if _admin_routes is not None:
+            app.include_router(
+                _admin_routes.router, prefix=prefix, dependencies=admin_dep
+            )
+        if _SOURCES_ENABLED and sources_routes is not None:
+            app.include_router(
+                sources_routes.router, prefix=prefix, dependencies=auth_dep
+            )
+        if _SOURCES_ENABLED and nango_routes is not None:
+            app.include_router(nango_routes.router, prefix=prefix)
 
     if _METRICS_ENABLED:
 
@@ -357,6 +555,25 @@ def create_app(vault_path: str, use_gam: bool = True) -> FastAPI:
     # Wire OpenTelemetry exporter if configured. No-op when env vars aren't
     # set, so the [observability] extra is genuinely optional.
     init_telemetry(app)
+
+    # Plugin seam: discover and activate any installed out-of-tree plugins
+    # (entry-point group "memograph.plugins"). A stock install with no
+    # plugins is a no-op. Called last so plugins see the fully-built app
+    # (routes, kernel, telemetry) on app.state. The public package never
+    # imports plugin packages directly. See memograph/plugins.py.
+    try:
+        from ...plugins import load_plugins
+
+        active = load_plugins(
+            app,
+            extras={"vault_path": app.state.vault_path},
+            kernel=getattr(app.state, "kernel", None),
+        )
+        if active:
+            logger.info("MemoGraph plugins active: %s", ", ".join(active))
+    except Exception as exc:  # noqa: BLE001
+        # A failure in plugin discovery must never break a working server.
+        logger.warning("Plugin seam skipped due to error: %s", exc)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:

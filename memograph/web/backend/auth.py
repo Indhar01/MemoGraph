@@ -242,6 +242,35 @@ def _warn_open_api_once() -> None:
     )
 
 
+_warned_insecure_admin = False
+
+
+def _anonymous_scopes() -> tuple[str, ...]:
+    """Scopes granted to the anonymous user when auth is disabled.
+
+    Fails closed on ``admin`` by default. Only when
+    ``MEMOGRAPH_ALLOW_INSECURE_ADMIN`` is set to a truthy value do we
+    add ``admin`` to the anonymous scope set — and we warn loudly, once,
+    when we do. This keeps ``docker compose up`` on localhost usable for
+    read/write flows while ensuring a forgotten auth config can't quietly
+    hand admin routes to the world.
+    """
+    global _warned_insecure_admin
+    allow_admin = os.environ.get(
+        "MEMOGRAPH_ALLOW_INSECURE_ADMIN", ""
+    ).strip().lower() in ("1", "true", "yes", "on")
+    if allow_admin:
+        if not _warned_insecure_admin:
+            _warned_insecure_admin = True
+            logger.warning(
+                "MEMOGRAPH_ALLOW_INSECURE_ADMIN is set with auth 'none' — "
+                "the anonymous user now has the 'admin' scope. NEVER do this "
+                "outside a throwaway local environment."
+            )
+        return ("anonymous", "admin")
+    return ("anonymous",)
+
+
 async def require_user(
     request: Request,
     bearer: HTTPAuthorizationCredentials | None = Depends(_bearer),
@@ -257,7 +286,18 @@ async def require_user(
 
     if provider is AuthProvider.NONE:
         _warn_open_api_once()
-        anon = User(id="anonymous", email="", scopes=("anonymous",))
+        # When auth is off we return an anonymous user so read routes work
+        # for local dev. We FAIL CLOSED on the `admin` scope by default:
+        # admin-gated routes (source registration, connect-session, tenant
+        # deletes) still 403 even in `none` mode. This prevents a prod
+        # deployment that merely *forgot* to set MEMOGRAPH_AUTH_PROVIDER
+        # from silently exposing admin surfaces to unauthenticated callers.
+        #
+        # If you genuinely need admin access without auth (e.g. a throwaway
+        # local demo of the source wizard), set MEMOGRAPH_ALLOW_INSECURE_ADMIN=1
+        # explicitly. The extra warning below makes that choice loud.
+        scopes = _anonymous_scopes()
+        anon = User(id="anonymous", email="", scopes=scopes)
         current_user.set(anon)
         request.state.user = anon
         return anon
@@ -304,6 +344,30 @@ async def optional_user(
         current_user.set(user)
         request.state.user = user
     return user
+
+
+def _identity_provider() -> tuple[str | None, str | None]:
+    """Identity provider for the core audit seam (memograph.core.identity).
+
+    Reads the per-request ``current_user`` ContextVar set by the auth
+    dependencies. Anonymous/absent -> (None, None). Registered at import so
+    the public build captures identity when auth is active, without the core
+    importing this module directly.
+    """
+    user = current_user.get()
+    if user is None or user.id == "anonymous":
+        return (None, None)
+    return (user.id, user.organization_id or None)
+
+
+# Register with the public identity seam at import time. Best-effort: never let
+# a seam problem break auth import.
+try:
+    from memograph.core.identity import set_identity_provider as _set_identity_provider
+
+    _set_identity_provider(_identity_provider)
+except Exception:  # pragma: no cover - defensive
+    pass
 
 
 def require_scope(*needed: str):

@@ -1,9 +1,11 @@
 """Authentication helpers for Notion integration."""
 
-import os
-from typing import Optional, Dict, Any
-from pathlib import Path
 import json
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import requests
 
 
 class NotionAuth:
@@ -88,14 +90,6 @@ class NotionAuth:
             requests.exceptions.RequestException: If API request fails
             ValueError: If response is invalid
         """
-        try:
-            import requests
-        except ImportError:
-            raise ImportError(
-                "requests package required for OAuth. "
-                "Install with: pip install requests"
-            )
-
         response = requests.post(
             "https://api.notion.com/v1/oauth/token",
             auth=(client_id, client_secret),

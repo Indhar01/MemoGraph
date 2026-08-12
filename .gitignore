@@ -44,6 +44,16 @@ env/
 *~
 .DS_Store
 
+# Local MCP client configs with hardcoded paths (one per machine).
+# Templates for these live under memograph/mcp/*_config.json.
+cline_mcp_settings.json
+.cline/
+~/
+
+# Cline session logs sometimes land here under "~" on Windows when
+# tools mishandle expanduser; rule above keeps them out, but be
+# explicit so the intent survives gitignore refactors.
+
 # Archived planning documents (completed work)
 archive_planning_docs/
 
@@ -87,9 +97,14 @@ docs/.doctrees/
 *.ipynb
 
 # Environment variables
+# Environment files: ignore ALL .env variants (incl. .env.nango, .env.dev, ...)
+# so no populated secret file can be committed again. The tracked *.example
+# templates are explicitly re-included below.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+!deploy/.env.example
 
 # Project specific
 .memograph_cache.json
@@ -114,6 +129,7 @@ PRE-PUSH-GUIDE.md
 
 .bobignore
 .aider*
+mcp-pub*
 
 # Stray test/scratch scripts at root
 quick_test.py
@@ -142,3 +158,13 @@ memories/
 
 # Archive directories
 archive_*/
+
+# --- Open-core split: private enterprise layer (Option A local layout) ---
+# The private `memograph-enterprise` repo may be cloned INTO this checkout at
+# ./memograph_enterprise/ for a one-directory dev experience. It has its own
+# git remote + CI; this rule guarantees the PUBLIC repo can never commit or
+# push proprietary code. See docs/ADR_REPO_TOPOLOGY.md and
+# docs/PUBLIC_VS_PRIVATE_SPLIT.md. Do NOT remove without understanding the
+# leak risk.
+/memograph_enterprise/
+/.enterprise/

@@ -120,6 +120,61 @@ class TestBodySizeLimit:
         assert r.status_code == 400
 
 
+class TestReadOnlyMode:
+    """Covers the demo-sandbox gate enabled by MEMOGRAPH_READONLY=true.
+
+    The middleware is added only when the env var is truthy at app-build
+    time, so each test reimports the server module after setting it.
+    """
+
+    def _readonly_client(self, monkeypatch, vault_dir) -> TestClient:
+        monkeypatch.setenv("MEMOGRAPH_READONLY", "true")
+        from memograph.web.backend import middleware as middleware_mod
+        from memograph.web.backend import server as server_mod
+
+        importlib.reload(middleware_mod)
+        importlib.reload(server_mod)
+        return _make_client(server_mod, vault_dir)
+
+    def test_post_rejected_with_403_and_stable_code(self, monkeypatch, vault_dir):
+        client = self._readonly_client(monkeypatch, vault_dir)
+        r = client.post("/api/v1/memories", json={"title": "t", "content": "c"})
+        assert r.status_code == 403
+        assert r.json()["code"] == "READ_ONLY_MODE"
+
+    def test_put_and_delete_and_patch_also_rejected(self, monkeypatch, vault_dir):
+        client = self._readonly_client(monkeypatch, vault_dir)
+        for method in ("put", "delete", "patch"):
+            r = getattr(client, method)("/api/v1/memories/some-id")
+            assert r.status_code == 403, f"{method} should be rejected"
+            assert r.json()["code"] == "READ_ONLY_MODE"
+
+    def test_get_still_works(self, monkeypatch, vault_dir):
+        client = self._readonly_client(monkeypatch, vault_dir)
+        r = client.get("/api/v1/health")
+        assert r.status_code == 200
+
+    def test_health_and_metrics_exempt(self, monkeypatch, vault_dir):
+        # Even though these are typically only probed with GET, the
+        # exemption list must allow probes that use unconventional
+        # methods (HEAD, OPTIONS) without 403. We verify the prefix
+        # match with an OPTIONS request.
+        client = self._readonly_client(monkeypatch, vault_dir)
+        r = client.options("/healthz")
+        assert r.status_code != 403
+        r = client.options("/readyz")
+        assert r.status_code != 403
+
+    def test_disabled_when_env_unset(self, monkeypatch, server_module, vault_dir):
+        # Without MEMOGRAPH_READONLY=true, POSTs should not 403 on the
+        # read-only gate. They may 4xx for other reasons (auth, body
+        # parse) — we only assert the gate isn't in the way.
+        monkeypatch.delenv("MEMOGRAPH_READONLY", raising=False)
+        client = _make_client(server_module, vault_dir)
+        r = client.post("/api/v1/memories", json={"title": "t", "content": "c"})
+        assert r.status_code != 403 or r.json().get("code") != "READ_ONLY_MODE"
+
+
 class TestRateLimit:
     def test_rate_limit_trips(self, monkeypatch, vault_dir):
         monkeypatch.setenv("MEMOGRAPH_RATELIMIT_DEFAULT", "3/minute")

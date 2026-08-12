@@ -573,3 +573,169 @@ def _print_stats_text(stats: dict[str, Any], detailed: bool) -> None:
         for tag, count in top_tags:
             bar = "#" * min(int(count / stats["total_memories"] * 50), 50)
             print(f"{tag:15} {bar} {count}")
+
+
+def run_eval_command(kernel: MemoryKernel, args: Any) -> None:
+    """Run `memograph eval retrieval <gold.json>`.
+
+    Deterministic, offline retrieval-ranking evaluation (no LLM). Complements
+    the LLM-judged benchmark in benchmarks/ — this guards ranking regressions
+    in CI. Exits non-zero when --fail-under is set and mean f1@k is below it.
+    """
+    import sys
+
+    from .eval.retrieval import evaluate_retrieval, load_gold_set
+
+    sub = getattr(args, "eval_command", None)
+    if sub != "retrieval":
+        print(
+            "Usage: memograph eval retrieval <gold.json> [--top-k N] [--format text|json]"
+        )
+        sys.exit(2)
+
+    # Make sure the graph is populated before scoring.
+    kernel.ingest(force=False)
+
+    try:
+        gold = load_gold_set(args.gold)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Failed to load gold set {args.gold!r}: {exc}")
+        sys.exit(2)
+
+    if not gold:
+        print("Gold set is empty; nothing to evaluate.")
+        sys.exit(2)
+
+    report = evaluate_retrieval(kernel, gold, top_k=args.top_k, depth=args.depth)
+
+    if args.format == "json":
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print(f"=== Retrieval eval: {len(report.cases)} cases, k={report.k} ===")
+        print("Aggregate (macro-averaged):")
+        for name, value in sorted(report.aggregate.items()):
+            print(f"  {name:14} {value:.4f}")
+        print("\nPer-query:")
+        for case in report.cases:
+            f1 = case.metrics.get(f"f1@{report.k}", 0.0)
+            hit = case.metrics.get(f"hit@{report.k}", 0.0)
+            flag = "" if hit else "  <-- MISS"
+            print(f"  f1={f1:.3f} mrr={case.metrics['mrr']:.3f} | {case.query}{flag}")
+
+    if args.fail_under is not None:
+        mean_f1 = report.aggregate.get(f"f1@{report.k}", 0.0)
+        if mean_f1 < args.fail_under:
+            print(
+                f"\nFAIL: mean f1@{report.k}={mean_f1:.4f} < "
+                f"--fail-under={args.fail_under}"
+            )
+            sys.exit(1)
+        print(f"\nPASS: mean f1@{report.k}={mean_f1:.4f} >= {args.fail_under}")
+
+
+def run_reorganize_command(kernel: MemoryKernel, args: Any) -> None:
+    """Run `memograph reorganize` — file existing notes into a folder hierarchy.
+
+    Dry-run by default (prints the move plan). Pass --apply to move files.
+    Drives the HierarchyResolver + VaultStorage.move directly (no swarm
+    dependency). Identity lives in frontmatter, so moves never break
+    [[wikilinks]]. See docs/ADR_SELF_ORGANIZING_HIERARCHY.md.
+    """
+    import sys
+    from pathlib import Path
+
+    from .core.hierarchy import HierarchyResolver
+    from .core.parser import parse_file
+    from .storage.vault import VaultStorage
+
+    strategy = getattr(args, "strategy", "by_type")
+    apply = getattr(args, "apply", False)
+    fmt = getattr(args, "format", "text")
+
+    if getattr(args, "backfill_ids", False):
+        result = kernel.backfill_ids(dry_run=not apply)
+        if fmt == "text":
+            verb = "would backfill" if not apply else "backfilled"
+            print(f"id backfill: {verb} {result['updated']} note(s).")
+
+    try:
+        resolver = HierarchyResolver(strategy)
+    except ValueError as exc:
+        print(f"Invalid strategy: {exc}")
+        sys.exit(2)
+
+    vault_root = kernel.vault_path
+    storage = VaultStorage(vault_root)
+
+    # Build the move plan by re-parsing each note (so slug/type reflect disk).
+    plan: list[tuple[str, str]] = []
+    for md in sorted(vault_root.rglob("*.md")):
+        rel = md.relative_to(vault_root)
+        # Skip dotfiles / cache / lock files living in the vault.
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        node = parse_file(md, vault_root)
+        if node is None:
+            continue
+        slug = md.stem
+        target = resolver.relative_path_for(slug, node.memory_type, node.tags)
+        current = rel.as_posix()
+        if current != target:
+            plan.append((current, target))
+
+    if fmt == "json":
+        print(
+            json.dumps(
+                {
+                    "strategy": strategy,
+                    "apply": apply,
+                    "moves": [{"from": a, "to": b} for a, b in plan],
+                    "count": len(plan),
+                },
+                indent=2,
+            )
+        )
+    else:
+        if not plan:
+            print(f"Nothing to reorganize — all notes already match '{strategy}'.")
+        else:
+            header = "Planned moves" if not apply else "Applying moves"
+            print(f"=== {header} ({strategy}): {len(plan)} ===")
+            for src, dst in plan:
+                print(f"  {src}  ->  {dst}")
+
+    if not plan or not apply:
+        if plan and not apply and fmt == "text":
+            print("\nDry-run only. Re-run with --apply to move files.")
+        return
+
+    # Confirmation gate for the destructive path.
+    if not getattr(args, "yes", False):
+        reply = input(f"\nMove {len(plan)} file(s)? [y/N] ").strip().lower()
+        if reply not in ("y", "yes"):
+            print("Aborted.")
+            return
+
+    moved = 0
+    errors = 0
+    for src, dst in plan:
+        # Collision-safe: if the destination exists, append -2, -3, ...
+        final_dst = dst
+        counter = 2
+        while (vault_root / final_dst).exists():
+            stem = Path(dst).stem
+            parent = Path(dst).parent.as_posix()
+            name = f"{stem}-{counter}.md"
+            final_dst = f"{parent}/{name}" if parent != "." else name
+            counter += 1
+        try:
+            storage.move(src, final_dst)
+            moved += 1
+        except (FileNotFoundError, FileExistsError, ValueError, OSError) as exc:
+            errors += 1
+            print(f"  ! failed to move {src}: {exc}")
+
+    # Re-index so the graph reflects new locations (mtime cache was keyed on
+    # old paths). Ids are unchanged, so wikilinks reconcile.
+    kernel.ingest(force=True)
+    print(f"\nMoved {moved} file(s), {errors} error(s). Vault re-indexed.")

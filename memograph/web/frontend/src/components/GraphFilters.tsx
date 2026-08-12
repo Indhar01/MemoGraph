@@ -1,43 +1,32 @@
-import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, X, Search, Filter } from 'lucide-react'
-
-// ============================================================================
-// Types
-// ============================================================================
+import { useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp, X, Search, Filter, Sparkles } from 'lucide-react';
+import { MEMORY_TYPE_HEX } from '../lib/utils';
 
 export interface GraphFilterState {
-  minSalience: number
-  maxSalience: number
-  tags: string[]
-  memoryTypes: string[]
-  limit: number
-  focusNode: string
+  minSalience: number;
+  maxSalience: number;
+  tags: string[];
+  memoryTypes: string[];
+  limit: number;
+  focusNode: string;
 }
 
 interface GraphFiltersProps {
-  filters: GraphFilterState
-  availableTags: string[]
-  onFiltersChange: (filters: GraphFilterState) => void
-  onReset: () => void
-  isLoadingTags?: boolean
+  filters: GraphFilterState;
+  availableTags: string[];
+  onFiltersChange: (filters: GraphFilterState) => void;
+  onReset: () => void;
+  isLoadingTags?: boolean;
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
-
 const MEMORY_TYPES = [
-  { value: 'episodic', label: 'Episodic', color: '#3b82f6' },
-  { value: 'semantic', label: 'Semantic', color: '#10b981' },
-  { value: 'procedural', label: 'Procedural', color: '#f59e0b' },
-  { value: 'fact', label: 'Fact', color: '#8b5cf6' },
-]
+  { value: 'episodic', label: 'Episodic' },
+  { value: 'semantic', label: 'Semantic' },
+  { value: 'procedural', label: 'Procedural' },
+  { value: 'fact', label: 'Fact' },
+] as const;
 
-const LIMIT_OPTIONS = [50, 100, 200, 500]
-
-// ============================================================================
-// GraphFilters Component
-// ============================================================================
+const LIMIT_OPTIONS = [50, 100, 200, 500];
 
 export default function GraphFilters({
   filters,
@@ -46,278 +35,253 @@ export default function GraphFilters({
   onReset,
   isLoadingTags = false,
 }: GraphFiltersProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
-  const [tagSearchQuery, setTagSearchQuery] = useState('')
-  const [showTagDropdown, setShowTagDropdown] = useState(false)
+  const [expanded, setExpanded] = useState(true);
+  const [tagSearch, setTagSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  // Filter available tags based on search query
-  const filteredTags = availableTags.filter(
-    (tag) =>
-      tag.toLowerCase().includes(tagSearchQuery.toLowerCase()) &&
-      !filters.tags.includes(tag)
-  )
+  const filtered = availableTags.filter(
+    (t) => t.toLowerCase().includes(tagSearch.toLowerCase()) && !filters.tags.includes(t),
+  );
 
-  // Update a filter value
-  const updateFilter = <K extends keyof GraphFilterState>(
-    key: K,
-    value: GraphFilterState[K]
-  ) => {
-    onFiltersChange({ ...filters, [key]: value })
-  }
+  const update = <K extends keyof GraphFilterState>(key: K, value: GraphFilterState[K]) =>
+    onFiltersChange({ ...filters, [key]: value });
 
-  // Toggle memory type selection
-  const toggleMemoryType = (type: string) => {
-    const newTypes = filters.memoryTypes.includes(type)
-      ? filters.memoryTypes.filter((t) => t !== type)
-      : [...filters.memoryTypes, type]
-    updateFilter('memoryTypes', newTypes)
-  }
+  const toggleType = (t: string) => {
+    const next = filters.memoryTypes.includes(t)
+      ? filters.memoryTypes.filter((x) => x !== t)
+      : [...filters.memoryTypes, t];
+    update('memoryTypes', next);
+  };
 
-  // Add tag to filters
-  const addTag = (tag: string) => {
-    if (!filters.tags.includes(tag)) {
-      updateFilter('tags', [...filters.tags, tag])
-      setTagSearchQuery('')
-      setShowTagDropdown(false)
-    }
-  }
+  const addTag = (t: string) => {
+    if (!filters.tags.includes(t)) update('tags', [...filters.tags, t]);
+    setTagSearch('');
+    setShowDropdown(false);
+  };
+  const removeTag = (t: string) => update('tags', filters.tags.filter((x) => x !== t));
 
-  // Remove tag from filters
-  const removeTag = (tag: string) => {
-    updateFilter('tags', filters.tags.filter((t) => t !== tag))
-  }
-
-  // Check if filters are active (non-default)
-  const hasActiveFilters =
+  const hasActive =
     filters.minSalience > 0 ||
     filters.maxSalience < 1 ||
     filters.tags.length > 0 ||
     filters.memoryTypes.length > 0 ||
     filters.limit !== 200 ||
-    filters.focusNode !== ''
+    filters.focusNode !== '';
 
-  // Close tag dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (!target.closest('.tag-search-container')) {
-        setShowTagDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.closest('.tag-picker')) setShowDropdown(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   return (
-    <div className="mb-4 card">
-      {/* Header */}
-      <div
-        className="flex items-center justify-between cursor-pointer"
-        onClick={() => setIsExpanded(!isExpanded)}
+    <aside className="card">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between"
+        aria-expanded={expanded}
       >
-        <div className="flex items-center">
-          <Filter className="w-5 h-5 mr-2 text-gray-600" />
-          <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
-          {hasActiveFilters && (
-            <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-              Active
-            </span>
+        <span className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-primary-500" />
+          <span className="text-sm font-semibold font-display text-fg">Filters</span>
+          {hasActive && (
+            <span className="badge badge-accent text-[10px]">Active</span>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          {hasActiveFilters && (
-            <button
+        </span>
+        <span className="flex items-center gap-2">
+          {hasActive && (
+            <span
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
-                e.stopPropagation()
-                onReset()
+                e.stopPropagation();
+                onReset();
               }}
-              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.stopPropagation();
+                  onReset();
+                }
+              }}
+              className="text-xs text-muted-fg hover:text-fg transition-colors"
             >
               Reset
-            </button>
+            </span>
           )}
-          {isExpanded ? (
-            <ChevronUp className="w-5 h-5 text-gray-600" />
+          {expanded ? (
+            <ChevronUp className="w-4 h-4 text-muted-fg" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-gray-600" />
+            <ChevronDown className="w-4 h-4 text-muted-fg" />
           )}
-        </div>
-      </div>
+        </span>
+      </button>
 
-      {/* Filters Content */}
-      {isExpanded && (
-        <div className="mt-4 space-y-4 pt-4 border-t">
-          {/* Salience Range */}
+      {expanded && (
+        <div className="mt-4 space-y-5 pt-4 border-t border-border">
+          {/* Salience range */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Salience Range
+            <label className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-fg mb-2">
+              <Sparkles className="w-3.5 h-3.5" />
+              Salience range
             </label>
-            <div className="space-y-2">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <label className="text-xs text-gray-600 mb-1 block">Min</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={filters.minSalience}
-                    onChange={(e) => updateFilter('minSalience', parseFloat(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                  />
-                  <div className="text-xs text-gray-600 mt-1 text-center">
-                    {(filters.minSalience * 100).toFixed(0)}%
-                  </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-[11px] text-muted-fg mb-1">
+                  <span>Min</span>
+                  <span className="font-mono">{(filters.minSalience * 100).toFixed(0)}%</span>
                 </div>
-                <div className="flex-1">
-                  <label className="text-xs text-gray-600 mb-1 block">Max</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={filters.maxSalience}
-                    onChange={(e) => updateFilter('maxSalience', parseFloat(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                  />
-                  <div className="text-xs text-gray-600 mt-1 text-center">
-                    {(filters.maxSalience * 100).toFixed(0)}%
-                  </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={filters.minSalience}
+                  onChange={(e) => update('minSalience', parseFloat(e.target.value))}
+                  className="w-full h-1.5 rounded-full bg-border accent-primary-500 cursor-pointer"
+                  aria-label="Minimum salience"
+                />
+              </div>
+              <div>
+                <div className="flex justify-between text-[11px] text-muted-fg mb-1">
+                  <span>Max</span>
+                  <span className="font-mono">{(filters.maxSalience * 100).toFixed(0)}%</span>
                 </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={filters.maxSalience}
+                  onChange={(e) => update('maxSalience', parseFloat(e.target.value))}
+                  className="w-full h-1.5 rounded-full bg-border accent-primary-500 cursor-pointer"
+                  aria-label="Maximum salience"
+                />
               </div>
             </div>
           </div>
 
-          {/* Tags Multi-Select */}
+          {/* Memory types */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tags {isLoadingTags && <span className="text-xs text-gray-500">(loading...)</span>}
+            <label className="block text-xs uppercase tracking-wider font-semibold text-muted-fg mb-2">
+              Memory types
             </label>
-
-            {/* Selected Tags */}
-            {filters.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {filters.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center px-2 py-1 text-sm bg-blue-100 text-blue-800 rounded"
+            <div className="grid grid-cols-2 gap-1.5">
+              {MEMORY_TYPES.map(({ value, label }) => {
+                const selected = filters.memoryTypes.includes(value);
+                const swatch = MEMORY_TYPE_HEX[value];
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleType(value)}
+                    aria-pressed={selected}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-all ${
+                      selected
+                        ? 'glass-strong ring-1 ring-primary-500/50 text-fg'
+                        : 'glass text-muted-fg hover:text-fg'
+                    }`}
                   >
-                    {tag}
-                    <button
-                      onClick={() => removeTag(tag)}
-                      className="ml-1 hover:text-blue-900"
-                    >
-                      <X className="w-3 h-3" />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{
+                        background: `linear-gradient(135deg, ${swatch.from}, ${swatch.to})`,
+                      }}
+                    />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-xs uppercase tracking-wider font-semibold text-muted-fg mb-2">
+              Tags {isLoadingTags && <span className="ml-1 normal-case">(loading…)</span>}
+            </label>
+            {filters.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {filters.tags.map((t) => (
+                  <span key={t} className="badge badge-primary inline-flex items-center gap-1 text-[10px]">
+                    #{t}
+                    <button type="button" onClick={() => removeTag(t)} aria-label={`Remove ${t}`}>
+                      <X className="w-2.5 h-2.5" />
                     </button>
                   </span>
                 ))}
               </div>
             )}
-
-            {/* Tag Search Input */}
-            <div className="tag-search-container relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={tagSearchQuery}
-                  onChange={(e) => {
-                    setTagSearchQuery(e.target.value)
-                    setShowTagDropdown(true)
-                  }}
-                  onFocus={() => setShowTagDropdown(true)}
-                  placeholder="Search tags..."
-                  className="input pl-10"
-                  disabled={isLoadingTags}
-                />
-              </div>
-
-              {/* Tag Dropdown */}
-              {showTagDropdown && tagSearchQuery && filteredTags.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
-                  {filteredTags.map((tag) => (
-                    <button
-                      key={tag}
-                      onClick={() => addTag(tag)}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 transition-colors"
-                    >
-                      {tag}
-                    </button>
+            <div className="tag-picker relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-fg" />
+              <input
+                type="text"
+                value={tagSearch}
+                onChange={(e) => {
+                  setTagSearch(e.target.value);
+                  setShowDropdown(true);
+                }}
+                onFocus={() => setShowDropdown(true)}
+                placeholder="Search tags…"
+                className="input pl-9 py-1.5 text-sm"
+                disabled={isLoadingTags}
+              />
+              {showDropdown && tagSearch && filtered.length > 0 && (
+                <ul className="absolute z-20 w-full mt-1 glass-strong rounded-md border border-border shadow-glass-md max-h-48 overflow-y-auto">
+                  {filtered.slice(0, 8).map((t) => (
+                    <li key={t}>
+                      <button
+                        type="button"
+                        onClick={() => addTag(t)}
+                        className="w-full text-left px-3 py-1.5 text-sm hover:bg-surface/70"
+                      >
+                        #{t}
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
           </div>
 
-          {/* Memory Type Checkboxes */}
+          {/* Node limit */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Memory Types
-            </label>
-            <div className="space-y-2">
-              {MEMORY_TYPES.map((type) => (
-                <label
-                  key={type.value}
-                  className="flex items-center cursor-pointer hover:bg-gray-50 p-2 rounded transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={filters.memoryTypes.includes(type.value)}
-                    onChange={() => toggleMemoryType(type.value)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div
-                    className="w-3 h-3 rounded-full ml-2"
-                    style={{ backgroundColor: type.color }}
-                  />
-                  <span className="ml-2 text-sm text-gray-700">{type.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Limit Dropdown */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Node Limit
+            <label htmlFor="node-limit" className="block text-xs uppercase tracking-wider font-semibold text-muted-fg mb-2">
+              Node limit
             </label>
             <select
+              id="node-limit"
               value={filters.limit}
-              onChange={(e) => updateFilter('limit', parseInt(e.target.value))}
-              className="input"
+              onChange={(e) => update('limit', parseInt(e.target.value))}
+              className="input py-1.5 text-sm"
             >
-              {LIMIT_OPTIONS.map((limit) => (
-                <option key={limit} value={limit}>
-                  {limit} nodes
+              {LIMIT_OPTIONS.map((l) => (
+                <option key={l} value={l}>
+                  {l} nodes
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-gray-500">
-              Higher limits may affect performance
-            </p>
           </div>
 
-          {/* Focus Node Search */}
+          {/* Focus node */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Focus Node (Optional)
+            <label htmlFor="focus-node" className="block text-xs uppercase tracking-wider font-semibold text-muted-fg mb-2">
+              Focus node ID
             </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={filters.focusNode}
-                onChange={(e) => updateFilter('focusNode', e.target.value)}
-                placeholder="Enter node ID to focus..."
-                className="input pl-10"
-              />
-            </div>
-            <p className="mt-1 text-xs text-gray-500">
-              Shows only the specified node and its neighbors
-            </p>
+            <input
+              id="focus-node"
+              type="text"
+              value={filters.focusNode}
+              onChange={(e) => update('focusNode', e.target.value)}
+              placeholder="Node ID…"
+              className="input py-1.5 text-sm font-mono"
+            />
           </div>
         </div>
       )}
-    </div>
-  )
+    </aside>
+  );
 }

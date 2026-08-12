@@ -88,6 +88,50 @@ def _looks_like_request_id(value: str) -> bool:
     return all(c.isalnum() or c == "-" for c in value)
 
 
+class ReadOnlyMiddleware(BaseHTTPMiddleware):
+    """Reject body-mutating methods when the server is running read-only.
+
+    Activated by ``MEMOGRAPH_READONLY=true``. Used by the hosted demo
+    (Hugging Face Space, public sandbox) so anonymous visitors can browse,
+    search, and traverse the graph but cannot mutate the vault.
+
+    Safe methods (``GET``, ``HEAD``, ``OPTIONS``) pass through. Everything
+    else returns 403 with a stable error code so the frontend can show a
+    "this is a demo, fork it to write" hint instead of a generic failure.
+
+    Health and metrics routes are exempted unconditionally — orchestrators
+    poll them with HEAD/GET only, but the exemption is documented so the
+    list doesn't drift if future probes use POST.
+    """
+
+    _EXEMPT_PREFIXES = ("/healthz", "/readyz", "/metrics", "/api/health")
+    _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if request.method in self._SAFE_METHODS:
+            return await call_next(request)
+        path = request.url.path
+        if any(path.startswith(prefix) for prefix in self._EXEMPT_PREFIXES):
+            return await call_next(request)
+        return JSONResponse(
+            status_code=403,
+            content={
+                "error": "Server is running in read-only mode",
+                "code": "READ_ONLY_MODE",
+                "hint": "Set MEMOGRAPH_READONLY=false (or unset) to allow writes.",
+            },
+        )
+
+
+def is_readonly_enabled() -> bool:
+    """Return True if MEMOGRAPH_READONLY is set to a truthy value."""
+    return os.environ.get("MEMOGRAPH_READONLY", "").lower() in {"1", "true", "yes"}
+
+
 class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     """Reject requests whose declared body exceeds the configured cap.
 
@@ -135,6 +179,8 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 __all__ = [
     "RequestIdMiddleware",
     "BodySizeLimitMiddleware",
+    "ReadOnlyMiddleware",
+    "is_readonly_enabled",
     "DEFAULT_MAX_BODY_BYTES",
     "REQUEST_ID_HEADER",
 ]

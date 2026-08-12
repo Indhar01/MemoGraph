@@ -10,6 +10,7 @@ import SearchPage from './pages/SearchPage'
 import GraphPage from './pages/GraphPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import CreateMemoryPage from './pages/CreateMemoryPage'
+import SourcesPage from './pages/SourcesPage'
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
               <Route path="/search" element={<SearchPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/sources" element={<SourcesPage />} />
             </Routes>
           </Layout>
           <ToastContainer />

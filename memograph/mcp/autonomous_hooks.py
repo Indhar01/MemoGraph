@@ -1,21 +1,33 @@
-"""Autonomous hooks for MemoGraph MCP Server.
+"""Conversation-save hooks for the MemoGraph MCP server.
 
-⚠️ IMPORTANT: Despite the name "autonomous", these hooks are NOT automatically triggered.
-They are TOOLS that the AI client must explicitly call.
+The name "autonomous_hooks" is historical and misleading: the hooks are
+NOT automatically triggered. They are MCP tools that the AI client (Claude
+Desktop, Cursor, Cline, etc.) must explicitly call — MCP is a
+request/response protocol and the server has no way to intercept
+conversation turns on its own. The module name is preserved for back-compat
+and will be renamed to ``conversation_hooks`` in 0.5 with an alias for the
+deprecation window.
 
-This module provides hook tools for the MCP server that enable:
-- Searching the vault when queries are received (auto_hook_query)
-- Saving conversations when responses are generated (auto_hook_response)
+What this module exposes:
 
-However, the AI client (e.g., Claude Desktop) must explicitly call these tools.
-They do NOT automatically intercept messages due to MCP protocol limitations.
+- ``auto_hook_query(user_query, ...)`` — when called at the *start* of a
+  turn, optionally searches the vault and returns relevant context.
+- ``auto_hook_response(user_query, ai_response, ...)`` — when called at
+  the *end* of a turn, saves the exchange to the vault.
 
-To make these hooks work automatically:
-1. Enable: MEMOGRAPH_AUTONOMOUS_MODE=true (enables save when called)
-2. Guide the AI: Add custom instructions telling Claude to call auto_hook_response
-3. See docs/AUTONOMOUS_HOOKS_GUIDE.md for complete setup instructions
+Making the hooks actually fire requires telling the client to call them.
+The README's "Conversation-save hooks" section has the instructions.
 
-The term "autonomous" means "self-configured" not "automatic".
+Default behaviour, called out explicitly because it surprised users in
+0.4.0:
+
+- ``auto_save_queries`` is **False** by default — short ack queries like
+  "ok" or "thanks" would otherwise flood the vault.
+- ``auto_save_responses`` is **True** by default — model responses are
+  where the value lives.
+- ``min_query_length=10`` skips short queries. ``auto_hook_query``
+  returns ``status="skipped"`` with a ``reason`` so clients can react
+  rather than silently dropping the call.
 """
 
 import logging
@@ -23,6 +35,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..core.enums import MemoryType
+from .capture_filter import CaptureDecision, should_save
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +92,23 @@ class AutonomousHooks:
             Dictionary with context, sources, and actions performed
         """
         try:
-            # Check if query is long enough
+            # Check if query is long enough. Return an explicit "skipped"
+            # status so the caller can branch on it — previously this
+            # returned success=True with no signal, which left clients
+            # unable to distinguish "no context found" from "we didn't
+            # even try."
             if len(user_query.strip()) < self.min_query_length:
                 return {
                     "success": True,
-                    "message": "Query too short for autonomous processing",
+                    "status": "skipped",
+                    "reason": "query_too_short",
+                    "min_query_length": self.min_query_length,
+                    "message": (
+                        f"Query is shorter than min_query_length="
+                        f"{self.min_query_length}; skipping vault search. "
+                        "Adjust via configure_autonomous_mode if this is "
+                        "unexpected."
+                    ),
                     "context": None,
                     "sources": [],
                     "actions": [],
@@ -316,6 +341,159 @@ class AutonomousHooks:
                 "success": False,
                 "error": str(e),
                 "saved": False,
+            }
+
+    async def auto_hook_turn(
+        self,
+        user_query: str,
+        ai_response: str,
+        sources_used: list[dict[str, Any]] | None = None,
+        conversation_id: str | None = None,
+        mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Unified end-of-turn capture: applies capture-mode filter, then saves.
+
+        Tier-B entry point used by MCP clients that lack native harness
+        hooks (Claude Desktop, Cursor, Cline, Codex, ChatGPT, Gemini). One
+        call per turn replaces the auto_hook_query + auto_hook_response
+        pair, so a forgotten call costs only one missed save instead of two.
+
+        Args:
+            user_query: User's verbatim message.
+            ai_response: Assistant's complete reply.
+            sources_used: Optional vault sources cited in the reply.
+            conversation_id: Optional stable conversation identifier.
+            mode: Per-call override of capture mode. None uses the server's
+                configured mode (``self.server.capture_mode``).
+
+        Returns:
+            Dict with ``decision`` (the CaptureDecision), and ``saved`` /
+            ``path`` if a write occurred.
+        """
+        # Track save attempt eagerly so analytics see the call even on filter-drop.
+        self.save_attempts += 1
+        timestamp = datetime.now(timezone.utc)
+
+        effective_mode = mode or getattr(self.server, "capture_mode", "mid")
+        decision: CaptureDecision = should_save(
+            user_query=user_query,
+            ai_response=ai_response,
+            mode=effective_mode,
+            sources_cited=bool(sources_used),
+        )
+
+        if not decision.save:
+            self._add_to_history(
+                {
+                    "timestamp": timestamp,
+                    "success": True,
+                    "skipped": True,
+                    "reason": decision.reason,
+                }
+            )
+            return {
+                "success": True,
+                "saved": False,
+                "mode": effective_mode,
+                "decision": {
+                    "save": False,
+                    "reason": decision.reason,
+                    "salience": decision.salience,
+                },
+                "message": f"Skipped per capture mode {effective_mode!r}: {decision.reason}",
+            }
+
+        # Honor readonly even past the filter.
+        if getattr(self.server, "readonly", False):
+            logger.info("auto_hook_turn: readonly mode — skipping save")
+            return {
+                "success": True,
+                "saved": False,
+                "readonly": True,
+                "mode": effective_mode,
+                "decision": {
+                    "save": False,
+                    "reason": "readonly_server",
+                    "salience": decision.salience,
+                },
+                "message": "Server is in read-only mode; turn not saved.",
+            }
+
+        try:
+            title = f"Conversation: {user_query[:50]}..."
+            content = "**Saved By:** Layer 1 (auto_hook_turn — unified)\n\n"
+            content += f"**Capture Mode:** {effective_mode}\n"
+            content += f"**Decision:** {decision.reason} (salience={decision.salience:.2f})\n\n"
+            content += f"**User Query**\n\n{user_query}\n\n"
+            content += f"**AI Response**\n\n{ai_response}\n\n"
+
+            if sources_used:
+                content += "**Sources Used**\n\n"
+                for source in sources_used:
+                    content += (
+                        f"- [[{source.get('id', 'unknown')}]] "
+                        f"{source.get('title', 'Untitled')}\n"
+                    )
+                content += "\n"
+
+            if conversation_id:
+                content += f"**Conversation ID**: {conversation_id}\n"
+
+            content += f"\n**Timestamp**: {timestamp.isoformat()}"
+
+            tags = list(decision.tags) + ["layer1-explicit", "unified-turn"]
+
+            path = self.kernel.remember(
+                title=title,
+                content=content,
+                memory_type=MemoryType.EPISODIC,
+                tags=tags,
+                salience=decision.salience,
+            )
+
+            # Keep search results fresh for the next turn.
+            try:
+                self.kernel.ingest(force=False)
+            except Exception as ingest_error:
+                logger.warning(f"Failed to refresh graph after save: {ingest_error}")
+
+            self.successful_saves += 1
+            self._add_to_history(
+                {
+                    "timestamp": timestamp,
+                    "success": True,
+                    "title": title,
+                    "mode": effective_mode,
+                }
+            )
+
+            logger.info(f"auto_hook_turn saved conversation to: {path}")
+
+            return {
+                "success": True,
+                "saved": True,
+                "path": path,
+                "mode": effective_mode,
+                "decision": {
+                    "save": True,
+                    "reason": decision.reason,
+                    "salience": decision.salience,
+                    "tags": list(tags),
+                },
+                "message": f"Conversation saved (mode={effective_mode}).",
+            }
+
+        except Exception as e:
+            self.failed_saves += 1
+            self._add_to_history(
+                {"timestamp": timestamp, "success": False, "error": str(e)}
+            )
+            logger.error(f"Error in auto_hook_turn: {e}")
+            return {
+                "success": False,
+                "saved": False,
+                "error": str(e),
+                "mode": effective_mode,
             }
 
     async def configure(
@@ -730,19 +908,26 @@ class AutonomousHooks:
             return {"success": False, "error": str(e)}
 
     def _calculate_performance_grade(self, save_rate: float) -> dict[str, str]:
-        """Calculate performance grade based on save rate."""
+        """Bucket the save rate into a grade label.
+
+        Returns ``{grade, status}`` only — emoji output was removed in
+        0.4.1 after API consumers flagged it as noise leaking internal
+        UI into a developer-facing response. The grade letter is still
+        useful for at-a-glance health; format it however suits the
+        caller's UI.
+        """
         if save_rate >= 95:
-            return {"grade": "A+", "status": "Excellent", "emoji": "🌟"}
+            return {"grade": "A+", "status": "Excellent"}
         elif save_rate >= 90:
-            return {"grade": "A", "status": "Very Good", "emoji": "✅"}
+            return {"grade": "A", "status": "Very Good"}
         elif save_rate >= 80:
-            return {"grade": "B", "status": "Good", "emoji": "👍"}
+            return {"grade": "B", "status": "Good"}
         elif save_rate >= 70:
-            return {"grade": "C", "status": "Fair", "emoji": "⚠️"}
+            return {"grade": "C", "status": "Fair"}
         elif save_rate >= 50:
-            return {"grade": "D", "status": "Poor", "emoji": "❌"}
+            return {"grade": "D", "status": "Poor"}
         else:
-            return {"grade": "F", "status": "Critical", "emoji": "🚨"}
+            return {"grade": "F", "status": "Critical"}
 
     def _generate_analytics_recommendations(
         self, overall_rate: float, layer1_count: int, layer2_count: int, total: int

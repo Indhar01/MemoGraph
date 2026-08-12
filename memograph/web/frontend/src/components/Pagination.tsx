@@ -1,7 +1,5 @@
 /**
- * Pagination Component
- *
- * Reusable pagination controls with page numbers and navigation.
+ * Pagination — glass-styled with gradient active page.
  */
 
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
@@ -26,165 +24,108 @@ export function Pagination({
   className,
   showItemCount = true,
 }: PaginationProps) {
-  // Calculate the range of items being displayed
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
-  // Generate page numbers to display
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
-    const maxVisible = 5; // Maximum number of page buttons to show
-
+    const maxVisible = 5;
     if (totalPages <= maxVisible + 2) {
-      // Show all pages if total is small
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
     } else {
-      // Always show first page
       pages.push(1);
-
-      if (currentPage > 3) {
-        pages.push('...');
-      }
-
-      // Show pages around current page
+      if (currentPage > 3) pages.push('...');
       const start = Math.max(2, currentPage - 1);
       const end = Math.min(totalPages - 1, currentPage + 1);
-
-      for (let i = start; i <= end; i++) {
-        pages.push(i);
-      }
-
-      if (currentPage < totalPages - 2) {
-        pages.push('...');
-      }
-
-      // Always show last page
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (currentPage < totalPages - 2) pages.push('...');
       pages.push(totalPages);
     }
-
     return pages;
   };
 
+  if (totalPages <= 1) return null;
   const pageNumbers = getPageNumbers();
-
-  const handlePageChange = (page: number) => {
-    if (page >= 1 && page <= totalPages && page !== currentPage) {
-      onPageChange(page);
-    }
+  const go = (p: number) => {
+    if (p >= 1 && p <= totalPages && p !== currentPage) onPageChange(p);
   };
 
-  if (totalPages <= 1) {
-    return null; // Don't show pagination if there's only one page
-  }
-
   return (
-    <div className={cn('flex flex-col sm:flex-row items-center justify-between gap-4', className)}>
-      {/* Item count */}
+    <nav
+      aria-label="Pagination"
+      className={cn('flex flex-col sm:flex-row items-center justify-between gap-4', className)}
+    >
       {showItemCount && (
-        <div className="text-sm text-gray-600">
-          Showing <span className="font-medium">{startItem}</span> to{' '}
-          <span className="font-medium">{endItem}</span> of{' '}
-          <span className="font-medium">{totalItems}</span> results
-        </div>
+        <p className="text-sm text-muted-fg">
+          Showing <span className="font-mono text-fg">{startItem}</span>–
+          <span className="font-mono text-fg">{endItem}</span> of{' '}
+          <span className="font-mono text-fg">{totalItems}</span>
+        </p>
       )}
 
-      {/* Page controls */}
-      <div className="flex items-center space-x-2">
-        {/* First page */}
-        <button
-          onClick={() => handlePageChange(1)}
-          disabled={currentPage === 1}
-          className={cn(
-            'p-2 rounded-lg border transition-colors',
-            currentPage === 1
-              ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-          )}
-          aria-label="Go to first page"
-        >
+      <div className="flex items-center gap-1">
+        <PageBtn onClick={() => go(1)} disabled={currentPage === 1} label="First page">
           <ChevronsLeft className="w-4 h-4" />
-        </button>
-
-        {/* Previous page */}
-        <button
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className={cn(
-            'p-2 rounded-lg border transition-colors',
-            currentPage === 1
-              ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-          )}
-          aria-label="Go to previous page"
-        >
+        </PageBtn>
+        <PageBtn onClick={() => go(currentPage - 1)} disabled={currentPage === 1} label="Previous page">
           <ChevronLeft className="w-4 h-4" />
-        </button>
+        </PageBtn>
 
-        {/* Page numbers */}
-        <div className="flex items-center space-x-1">
-          {pageNumbers.map((page, index) => {
-            if (page === '...') {
-              return (
-                <span key={`ellipsis-${index}`} className="px-2 text-gray-400">
-                  ...
-                </span>
-              );
-            }
+        {pageNumbers.map((p, i) =>
+          p === '...' ? (
+            <span key={`e${i}`} className="px-2 text-muted-fg">
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => go(p as number)}
+              aria-current={p === currentPage ? 'page' : undefined}
+              aria-label={`Page ${p}`}
+              className={cn(
+                'min-w-[2.25rem] h-9 px-2 rounded-md font-medium text-sm transition-all',
+                p === currentPage
+                  ? 'bg-gradient-primary text-white shadow-glow-soft'
+                  : 'glass text-fg hover:bg-surface/70',
+              )}
+            >
+              {p}
+            </button>
+          ),
+        )}
 
-            const pageNum = page as number;
-            const isActive = pageNum === currentPage;
-
-            return (
-              <button
-                key={pageNum}
-                onClick={() => handlePageChange(pageNum)}
-                className={cn(
-                  'min-w-[2.5rem] h-10 px-3 rounded-lg border font-medium transition-colors',
-                  isActive
-                    ? 'border-primary-600 bg-primary-600 text-white'
-                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                )}
-                aria-label={`Go to page ${pageNum}`}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Next page */}
-        <button
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className={cn(
-            'p-2 rounded-lg border transition-colors',
-            currentPage === totalPages
-              ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-          )}
-          aria-label="Go to next page"
-        >
+        <PageBtn onClick={() => go(currentPage + 1)} disabled={currentPage === totalPages} label="Next page">
           <ChevronRight className="w-4 h-4" />
-        </button>
-
-        {/* Last page */}
-        <button
-          onClick={() => handlePageChange(totalPages)}
-          disabled={currentPage === totalPages}
-          className={cn(
-            'p-2 rounded-lg border transition-colors',
-            currentPage === totalPages
-              ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-          )}
-          aria-label="Go to last page"
-        >
+        </PageBtn>
+        <PageBtn onClick={() => go(totalPages)} disabled={currentPage === totalPages} label="Last page">
           <ChevronsRight className="w-4 h-4" />
-        </button>
+        </PageBtn>
       </div>
-    </div>
+    </nav>
+  );
+}
+
+function PageBtn({
+  children,
+  onClick,
+  disabled,
+  label,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="inline-flex items-center justify-center w-9 h-9 rounded-md glass text-fg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-surface/70 transition-colors"
+    >
+      {children}
+    </button>
   );
 }

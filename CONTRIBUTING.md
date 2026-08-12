@@ -2,6 +2,12 @@
 
 Thank you for your interest in contributing to MemoGraph! This guide will help you get started with developing and contributing to the project.
 
+> **Stability & deprecation policy (TL;DR):** from 1.0 onwards, anything
+> in `memograph.__all__`, any `/api/v1/...` HTTP route, any documented
+> env var, and any CLI subcommand listed in `--help` is covered by a
+> **2-minor-version deprecation window**. Pre-1.0 (0.x) does NOT make
+> this promise — see [Stability and deprecation policy](#stability-and-deprecation-policy) below for the full contract.
+
 ## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
@@ -12,6 +18,7 @@ Thank you for your interest in contributing to MemoGraph! This guide will help y
 - [Testing](#testing)
 - [Pull Request Process](#pull-request-process)
 - [Commit Message Guidelines](#commit-message-guidelines)
+- [Stability and deprecation policy](#stability-and-deprecation-policy)
 
 ## Code of Conduct
 

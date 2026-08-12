@@ -1,0 +1,125 @@
+site_name: MemoGraph
+site_description: Graph-based memory system for LLMs — persistent, navigable, attribution-friendly memory in plain markdown.
+site_url: https://indhar01.github.io/MemoGraph/
+repo_name: Indhar01/MemoGraph
+repo_url: https://github.com/Indhar01/MemoGraph
+edit_uri: edit/main/docs/
+
+# Build artifacts live in ./site/ (gitignored); GitHub Pages serves them
+# from the gh-pages branch via the docs.yml workflow.
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Indhar01/MemoGraph
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/memograph/
+  generator: false
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# Navigation: hand-curated to surface the user-facing docs first and
+# bury internal planning / status files. Files in `docs/` that aren't
+# listed here are still built and reachable via search but don't appear
+# in the sidebar.
+nav:
+  - Home: index.md
+  - Quickstart:
+      - Try it in 60 seconds: guides/QUICK_START.md
+      - CLI usage: MEMOGRAPH_CLI_USAGE_GUIDE.md
+      - Troubleshooting: TROUBLESHOOTING.md
+  - Architecture:
+      - Overview: ARCHITECTURE.md
+      - Concurrency: CONCURRENCY.md
+      - Known limitations: KNOWN_LIMITATIONS.md
+      - ADRs:
+          - Tenancy model: adr/0001-tenancy-model.md
+          - Storage adapter strategy: adr/0002-storage-adapter-strategy.md
+  - MCP integration:
+      - MCP clients: MCP_CLIENTS.md
+      - MCP server review: MCP_SERVER_REVIEW.md
+      - MCP automation setup: MCP_AUTOMATION_SETUP.md
+      - MCP registry: MCP_REGISTRY_GUIDE.md
+      - Troubleshooting Claude Desktop: guides/TROUBLESHOOTING_CLAUDE_DESKTOP.md
+      - MCP AI tools: guides/MCP_AI_TOOLS.md
+      - MCP setup troubleshooting: MCP_SETUP_TROUBLESHOOTING.md
+  - Web UI:
+      - Guide: guides/WEB_UI_GUIDE.md
+  - AI features:
+      - Overview: guides/AI_FEATURES.md
+      - AI assistant guide: guides/AI_ASSISTANT_GUIDE.md
+      - Agents: guides/AGENTS.md
+  - Enterprise:
+      - Install: INSTALL_ENTERPRISE.md
+      - RBAC: RBAC_GUIDE.md
+      - SSO: SSO_SETUP.md
+      - GDPR runbook: GDPR_RUNBOOK.md
+      - Backup & restore: BACKUP_RESTORE_RUNBOOK.md
+      - Observability: OBSERVABILITY_GUIDE.md
+      - Hosting: HOSTING_GUIDE.md
+      - Compliance roadmap: COMPLIANCE_ROADMAP.md
+      - Security audit checklist: SECURITY_AUDIT_CHECKLIST.md
+  - Releases:
+      - Release runbook: RELEASE_RUNBOOK.md
+      - Release checklist: RELEASE_CHECKLIST.md
+      - Migration 0.x → 1.0: MIGRATION_0.X_TO_1.0.md
+  - API review:
+      - Python API: PYTHON_API_REVIEW.md

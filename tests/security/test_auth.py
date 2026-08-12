@@ -145,6 +145,30 @@ class TestProviderNone:
         assert body["id"] == "anonymous"
         assert "anonymous" in body["scopes"]
 
+    def test_anonymous_has_no_admin_scope_by_default(self, auth_module, monkeypatch):
+        """Fail-closed: with auth 'none' the anonymous user must NOT get
+        the 'admin' scope, so admin-gated routes still 403. A forgotten
+        MEMOGRAPH_AUTH_PROVIDER must not silently expose admin surfaces."""
+        auth_mod, _ = auth_module
+        monkeypatch.delenv("MEMOGRAPH_ALLOW_INSECURE_ADMIN", raising=False)
+        scopes = auth_mod._anonymous_scopes()
+        assert "anonymous" in scopes
+        assert "admin" not in scopes
+
+    def test_anonymous_admin_via_explicit_escape_hatch(self, auth_module, monkeypatch):
+        """Only the explicit MEMOGRAPH_ALLOW_INSECURE_ADMIN escape hatch
+        grants admin to the anonymous user."""
+        auth_mod, _ = auth_module
+        monkeypatch.setenv("MEMOGRAPH_ALLOW_INSECURE_ADMIN", "1")
+        scopes = auth_mod._anonymous_scopes()
+        assert "admin" in scopes
+
+    def test_insecure_admin_falsey_values_do_not_grant(self, auth_module, monkeypatch):
+        auth_mod, _ = auth_module
+        for val in ("0", "false", "no", "", "off"):
+            monkeypatch.setenv("MEMOGRAPH_ALLOW_INSECURE_ADMIN", val)
+            assert "admin" not in auth_mod._anonymous_scopes()
+
 
 # ------------------------------------------------------------ provider=api_key
 

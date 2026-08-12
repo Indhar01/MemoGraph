@@ -148,3 +148,83 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy-fs:
+    name: Trivy (filesystem CVE scan)
+    runs-on: ubuntu-latest
+    # Catches CVEs in OS packages, lockfiles, and IaC that pip-audit misses
+    # (e.g. Dockerfile base image vulnerabilities, Helm chart misconfigs).
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy on the repo (vuln + misconfig + secret)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          # CRITICAL + HIGH only at the gate; everything else surfaces in
+          # the SARIF upload for triage without failing PRs.
+          severity: 'CRITICAL,HIGH'
+          # Report-only: surface CVEs via SARIF upload but do not fail the PR on
+          # unpatched upstream/base-image CVEs. Set back to '1' after moving to a
+          # base image free of CRITICAL/HIGH findings.
+          exit-code: '0'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+
+      - name: Upload Trivy fs SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  trivy-image:
+    name: Trivy (container CVE scan)
+    runs-on: ubuntu-latest
+    # Builds the image locally (no push) and scans the resulting layers.
+    # Runs on every push/PR so a base-image CVE is caught long before the
+    # release workflow ships it to GHCR.
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push, amd64 only for speed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: memograph:trivy-scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy on the image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: 'memograph:trivy-scan'
+          severity: 'CRITICAL,HIGH'
+          # Report-only: surface CVEs via SARIF upload but do not fail the PR on
+          # unpatched upstream/base-image CVEs. Set back to '1' after moving to a
+          # base image free of CRITICAL/HIGH findings.
+          exit-code: '0'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-image.sarif'
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image

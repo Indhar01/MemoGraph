@@ -26,9 +26,18 @@ def temp_vault(tmp_path):
 
 @pytest.fixture
 def mcp_server(temp_vault):
-    """Create an MCP server instance with a temp vault."""
+    """Create an MCP server instance with a temp vault.
+
+    Yields the server and ALWAYS closes it on teardown so the advisory vault
+    lock is released. Without this, the lock file / OS handle leaked between
+    tests and could block a subsequent server construction on the same vault
+    (a hang on Windows CI runners).
+    """
     server = MemoGraphMCPServer(vault_path=str(temp_vault))
-    return server
+    try:
+        yield server
+    finally:
+        server.close()
 
 
 @pytest.fixture
@@ -54,7 +63,10 @@ def populated_server(temp_vault):
         )
 
     server = MemoGraphMCPServer(vault_path=str(temp_vault))
-    return server
+    try:
+        yield server
+    finally:
+        server.close()
 
 
 class TestServerInitialization:
@@ -92,7 +104,9 @@ class TestToolSchema:
         """Test that get_tools_schema returns a list."""
         schemas = mcp_server.get_tools_schema()
         assert isinstance(schemas, list)
-        assert len(schemas) == 39  # Updated tool count
+        assert (
+            len(schemas) == 42
+        )  # +auto_hook_turn, configure_capture_mode, get_capture_mode
 
     def test_all_tools_have_required_fields(self, mcp_server):
         """Test that all tool schemas have name, description, inputSchema."""
@@ -384,7 +398,9 @@ class TestListAvailableTools:
         """Test listing available tools."""
         result = await mcp_server.list_available_tools()
         assert result["success"] is True
-        assert result["total_tools"] == 39  # Updated tool count
+        assert (
+            result["total_tools"] == 42
+        )  # +auto_hook_turn, configure_capture_mode, get_capture_mode
         assert "categories" in result
         assert "autonomous" in result["categories"]
         assert "graph" in result["categories"]
@@ -638,7 +654,8 @@ class TestPhase3Analytics:
         grade = result["performance_grade"]
         assert "grade" in grade
         assert "status" in grade
-        assert "emoji" in grade
+        # Emoji removed in 0.4.1 to drop UI noise from the API response.
+        assert "emoji" not in grade
         # With 10 saves, should have good grade
         assert grade["grade"] in ["A+", "A", "B"]
 
@@ -762,7 +779,7 @@ class TestPhase3ToolCount:
         """Test that tool count reflects all available tools."""
         schemas = mcp_server.get_tools_schema()
         # Updated to reflect current tool count
-        assert len(schemas) == 39
+        assert len(schemas) == 42
 
     def test_get_auto_save_analytics_tool_in_schema(self, mcp_server):
         """Test that get_auto_save_analytics is in tool schema."""
@@ -921,14 +938,17 @@ class TestVaultLock:
         # on Windows it's reserved). We fake host="not-our-host" so the PID
         # liveness check is bypassed and the file is treated as foreign+stale.
         import json
-        import socket
 
         lock_file = temp_vault / ".memograph.lock"
         lock_file.write_text(
             json.dumps(
                 {
                     "pid": 999999,  # almost certainly not alive
-                    "host": socket.gethostname(),  # same host so we hit the alive-check
+                    # Foreign host: acquire() treats a different host as stale
+                    # WITHOUT probing PID liveness (os.kill on a fabricated PID
+                    # is unreliable across OSes and, on some platforms, routes a
+                    # signal into this process). Matches the documented intent.
+                    "host": "not-our-host",
                     "role": "mcp-server",
                     "started_at": "1970-01-01T00:00:00+00:00",
                 }

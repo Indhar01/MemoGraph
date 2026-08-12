@@ -1,0 +1,44 @@
+title: "[Idea] "
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Propose an idea
+
+        Use this for shaping a direction before it's a concrete feature
+        request. If you already know exactly what should be built and how,
+        open a [Feature Request](https://github.com/Indhar01/MemoGraph/issues/new?template=feature_request.yml) instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: Whose problem is this, and what's painful about it today?
+      placeholder: "When I switch between Claude Desktop and Cursor, I lose…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What could MemoGraph do differently?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "do nothing" if relevant.
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Rough scope
+      description: Big? Small? Touches core kernel? MCP only? Web UI only?
+    validations:
+      required: false

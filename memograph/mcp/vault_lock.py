@@ -100,7 +100,10 @@ class VaultLock:
         if not self.lock_path.exists():
             return None
         try:
-            return json.loads(self.lock_path.read_text(encoding="utf-8"))
+            data: dict[str, Any] = json.loads(
+                self.lock_path.read_text(encoding="utf-8")
+            )
+            return data
         except (OSError, json.JSONDecodeError) as e:
             logger.warning(
                 "Vault lock file %s is unreadable (%s); reclaiming.",

@@ -11,8 +11,16 @@ from memograph.integrations.notion.client import NotionClient
 class NotionIntegration(IntegrationBase):
     """Notion integration for MemoGraph.
 
-    Provides bidirectional synchronization between MemoGraph and Notion,
-    handling pages, blocks, properties, and databases.
+    .. warning::
+        **Experimental / incomplete.** Connection, authentication, and
+        page *listing* work, but two-way synchronization is not yet
+        implemented: ``_sync_pull`` currently only counts pages and
+        ``_sync_push`` is a no-op. Do not rely on this for production
+        data movement. Tracked for a future release.
+
+    Intended to provide bidirectional synchronization between MemoGraph
+    and Notion (pages, blocks, properties, databases) once the sync
+    engine lands.
 
     Attributes:
         client: NotionClient instance for API access

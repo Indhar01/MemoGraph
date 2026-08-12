@@ -11,13 +11,24 @@ def analyzer(tmp_path):
 
 @pytest.fixture
 def analyzer_with_embeddings(tmp_path):
-    """Analyzer with embedding adapter configured."""
-    from memograph.adapters.embeddings.sentence_transformers import (
-        SentenceTransformerEmbeddings,
-    )
+    """Analyzer with a sentence-transformers embedding adapter.
+
+    Skips when the optional ``embeddings-local`` extra (sentence-transformers
+    + torch) is not installed — the default CI install is ``[dev,all]`` which
+    deliberately excludes it, so this fixture must degrade to a skip rather
+    than error the whole test session.
+    """
+    try:
+        from memograph.adapters.embeddings.sentence_transformers import (
+            SentenceTransformerEmbeddings,
+        )
+
+        adapter = SentenceTransformerEmbeddings()
+    except Exception as exc:  # ImportError or model-load failure
+        pytest.skip(f"sentence-transformers not available: {exc}")
 
     kernel = MemoryKernel(str(tmp_path / "test_vault"))
-    kernel.embedding_adapter = SentenceTransformerEmbeddings()
+    kernel.embedding_adapter = adapter
     return ContentAnalyzer(kernel)
 
 

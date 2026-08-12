@@ -1,0 +1,54 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Ask the community
+
+        Before posting, please check:
+        - [Quickstart](https://github.com/Indhar01/MemoGraph#-try-it-in-60-seconds)
+        - [Troubleshooting](https://github.com/Indhar01/MemoGraph/blob/main/docs/TROUBLESHOOTING.md)
+        - [Existing Q&A](https://github.com/Indhar01/MemoGraph/discussions/categories/q-a)
+
+        If this looks like a reproducible bug, open an [Issue](https://github.com/Indhar01/MemoGraph/issues/new/choose) instead.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+      description: One or two sentences on the goal, not the symptom.
+      placeholder: "I want to use MemoGraph from Cursor with a shared team vault on…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: Commands, config snippets, error messages. Code in triple backticks.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: MemoGraph version
+      placeholder: "`memograph --version` output, e.g. 0.4.1"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      multiple: true
+      options:
+        - Python API
+        - CLI
+        - MCP server (Claude Desktop / Cursor / Cline / …)
+        - Web UI / FastAPI backend
+        - Container / Helm / k8s
+        - Other
+    validations:
+      required: false
