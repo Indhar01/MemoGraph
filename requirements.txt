@@ -9,7 +9,7 @@
 # (or `uv pip compile pyproject.toml -o requirements.lock` if you prefer uv).
 PyYAML>=6.0,<7
 requests>=2.31.0,<3
-mcp>=1.0.0,<2
+mcp>=1.0.0,<3
 
 # Optional LLM Provider Dependencies (install as needed)
 # For OpenAI: pip install -e .[openai]
