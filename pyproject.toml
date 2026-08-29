@@ -102,7 +102,7 @@ web = [
     # MEMOGRAPH_RATELIMIT_STORAGE for multi-instance deployments).
     "slowapi>=0.1.9,<1",
     # Structured JSON logging output (env-toggled in server.py).
-    "python-json-logger>=2.0.7,<4",
+    "python-json-logger>=2.0.7,<5",
     # Provider-neutral OIDC verification (works with WorkOS, Auth0, Clerk,
     # Keycloak, etc. — picks JWKS URL + audience from env vars at startup).
     # 2.13.0 is the first release without PYSEC-2026-* findings.
